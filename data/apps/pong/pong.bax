@@ -1,0 +1,229 @@
+<app version="1.0" os="1.0" category="game">
+  <ui default="/game">
+    <page id="game" bgcolor="#000000">
+      <label class="title" align="center" y="2%">PONG</label>
+      <canvas id="gameCanvas" x="5%" y="10%" ontap="handleTap" w="350" h="280"/>
+
+      <!-- Game Over overlay -->
+      <label visible="{gameOver}" class="gameover" align="center" y="35%">{winner}</label>
+      <label visible="{gameOver}" class="finalScore" align="center" y="45%">{playerScore} : {aiScore}</label>
+
+      <label class="info" align="center" y="73%">{playerScore} : {aiScore}</label>
+      <label class="hint" align="center" y="78%">Tap top/bottom to move paddle</label>
+
+      <button class="btnStart" x="35%" y="86%" onclick="startGame" w="30%" h="60">{buttonText}</button>
+    </page>
+  </ui>
+
+  <state>
+    <int name="playerScore" default="0"/>
+    <int name="aiScore" default="0"/>
+    <string name="gameOver" default="false"/>
+    <string name="winner" default=""/>
+    <string name="isRunning" default="false"/>
+    <string name="isProcessing" default="false"/>
+    <string name="buttonText" default="START"/>
+
+    <!-- Позиции -->
+    <int name="playerY" default="120"/>
+    <int name="aiY" default="120"/>
+    <int name="ballX" default="175"/>
+    <int name="ballY" default="140"/>
+    <int name="ballVelX" default="4"/>
+    <int name="ballVelY" default="3"/>
+  </state>
+
+  <script language="lua">
+    -- Константы
+    local CANVAS_W = 350
+    local CANVAS_H = 280
+    local PADDLE_W = 10
+    local PADDLE_H = 60
+    local BALL_SIZE = 8
+    local PADDLE_SPEED = 15
+    local WIN_SCORE = 10
+
+    -- Цвета
+    local COLOR_BG = 0x000000
+    local COLOR_PADDLE = 0xffffff
+    local COLOR_BALL = 0xffffff
+    local COLOR_LINE = 0x444444
+
+    function render()
+      -- Фон
+      canvas.clear("gameCanvas", COLOR_BG)
+
+      -- Центральная линия
+      for i = 0, CANVAS_H, 20 do
+        canvas.rect("gameCanvas", CANVAS_W / 2 - 2, i, 4, 10, COLOR_LINE)
+      end
+
+      -- Игрок (левая ракетка)
+      canvas.rect("gameCanvas", 10, state.playerY, PADDLE_W, PADDLE_H, COLOR_PADDLE)
+
+      -- AI (правая ракетка)
+      canvas.rect("gameCanvas", CANVAS_W - 20, state.aiY, PADDLE_W, PADDLE_H, COLOR_PADDLE)
+
+      -- Мяч
+      canvas.rect("gameCanvas", state.ballX, state.ballY, BALL_SIZE, BALL_SIZE, COLOR_BALL)
+    end
+
+    function handleTap(x, y)
+      if state.gameOver == "true" or state.isRunning == "false" then
+        return
+      end
+
+      -- Верхняя половина - вверх, нижняя - вниз
+      if y < CANVAS_H / 2 then
+        state.playerY = state.playerY - PADDLE_SPEED
+      else
+        state.playerY = state.playerY + PADDLE_SPEED
+      end
+
+      -- Ограничения
+      if state.playerY < 0 then
+        state.playerY = 0
+      end
+      if state.playerY > CANVAS_H - PADDLE_H then
+        state.playerY = CANVAS_H - PADDLE_H
+      end
+
+      render()
+    end
+
+    function resetBall()
+      state.ballX = CANVAS_W / 2
+      state.ballY = CANVAS_H / 2
+
+      -- Случайное направление
+      state.ballVelX = (math.random() > 0.5) and 4 or -4
+      state.ballVelY = (math.random() * 6) - 3
+    end
+
+    function gameTick()
+      if state.isProcessing == "true" then
+        return
+      end
+
+      if state.isRunning == "false" or state.gameOver == "true" then
+        return
+      end
+
+      state.isProcessing = "true"
+
+      -- Движение мяча
+      state.ballX = state.ballX + state.ballVelX
+      state.ballY = state.ballY + state.ballVelY
+
+      -- Отскок от верха/низа
+      if state.ballY <= 0 or state.ballY >= CANVAS_H - BALL_SIZE then
+        state.ballVelY = -state.ballVelY
+      end
+
+      -- Столкновение с левой ракеткой (игрок)
+      if state.ballX <= 20 and 
+         state.ballY + BALL_SIZE >= state.playerY and 
+         state.ballY <= state.playerY + PADDLE_H then
+        state.ballVelX = -state.ballVelX
+        -- Изменяем угол в зависимости от места удара
+        local hitPos = (state.ballY - state.playerY) / PADDLE_H
+        state.ballVelY = (hitPos - 0.5) * 10
+      end
+
+      -- Столкновение с правой ракеткой (AI)
+      if state.ballX >= CANVAS_W - 30 and 
+         state.ballY + BALL_SIZE >= state.aiY and 
+         state.ballY <= state.aiY + PADDLE_H then
+        state.ballVelX = -state.ballVelX
+        local hitPos = (state.ballY - state.aiY) / PADDLE_H
+        state.ballVelY = (hitPos - 0.5) * 10
+      end
+
+      -- Гол слева (AI забил)
+      if state.ballX < 0 then
+        state.aiScore = state.aiScore + 1
+        if state.aiScore >= WIN_SCORE then
+          doGameOver("AI WINS!")
+        else
+          resetBall()
+        end
+      end
+
+      -- Гол справа (Игрок забил)
+      if state.ballX > CANVAS_W then
+        state.playerScore = state.playerScore + 1
+        if state.playerScore >= WIN_SCORE then
+          doGameOver("YOU WIN!")
+        else
+          resetBall()
+        end
+      end
+
+      -- AI логика (следует за мячом с небольшой задержкой)
+      local aiCenter = state.aiY + PADDLE_H / 2
+      local ballCenter = state.ballY + BALL_SIZE / 2
+
+      if ballCenter < aiCenter - 5 then
+        state.aiY = state.aiY - 3
+      elseif ballCenter > aiCenter + 5 then
+        state.aiY = state.aiY + 3
+      end
+
+      -- Ограничения для AI
+      if state.aiY < 0 then
+        state.aiY = 0
+      end
+      if state.aiY > CANVAS_H - PADDLE_H then
+        state.aiY = CANVAS_H - PADDLE_H
+      end
+
+      render()
+
+      state.isProcessing = "false"
+
+      if state.isRunning == "true" and state.gameOver == "false" then
+        timer.once("gameTick", 30)  -- ~33 FPS для плавности
+      end
+    end
+
+    function startGame()
+      if state.isRunning == "true" then
+        state.isRunning = "false"
+        state.buttonText = "START"
+      else
+        state.playerScore = 0
+        state.aiScore = 0
+        state.playerY = 120
+        state.aiY = 120
+        state.gameOver = "false"
+        state.winner = ""
+        state.isRunning = "true"
+        state.isProcessing = "false"
+        state.buttonText = "PAUSE"
+
+        resetBall()
+        render()
+        timer.once("gameTick", 30)
+      end
+    end
+
+    function doGameOver(winnerText)
+      state.gameOver = "true"
+      state.winner = winnerText
+      state.isRunning = "false"
+      state.buttonText = "START"
+      render()
+    end
+
+    render()
+  </script>
+
+  <style>
+    .title { color: #ffffff; font-size: 32; }
+    .info { color: #ffffff; font-size: 28; }
+    .hint { color: #888888; font-size: 14; }
+    .gameover { color: #00ff00; font-size: 40; }
+    .finalScore { color: #ffffff; font-size: 36; }
+    .btnStart { background: #ffffff; color: #000000; border-radius: 8; }
+  </style>
+</app>

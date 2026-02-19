@@ -1,0 +1,79 @@
+<app version="1.0" os="1.0">
+  <config>
+    <network/>
+  </config>
+
+  <ui default="/main">
+    <page id="main">
+      <label class="title" align="center" y="5%">Weather</label>
+
+      <label class="status" align="center" y="15%">{bleStatus}</label>
+
+      <label class="temp" align="center" y="35%">{temperature}</label>
+      <label class="desc" align="center" y="55%">{description}</label>
+      <label class="city" align="center" y="70%">{city}</label>
+
+      <button class="btn" x="10%" y="82%" onclick="refresh" w="35%" h="40">Refresh</button>
+      <button class="btn-back" x="55%" y="82%" onclick="goHome" w="35%" h="40">Home</button>
+    </page>
+  </ui>
+
+  <state>
+    <string name="bleStatus" default="Checking BLE..."/>
+    <string name="temperature" default="--°C"/>
+    <string name="description" default=""/>
+    <string name="city" default="Moscow"/>
+  </state>
+
+  <timer interval="5000" call="checkBLE"/>
+
+  <script language="lua">
+    local CITY = "Moscow"
+
+    function checkBLE()
+      if net.connected() then
+        state.bleStatus = "BLE: OK"
+      else
+        state.bleStatus = "BLE: ..."
+      end
+    end
+
+    function refresh()
+      if not net.connected() then
+        state.description = "No BLE!"
+        return
+      end
+
+      state.description = "Loading..."
+
+      net.fetch({
+        url = "https://api.openweathermap.org/data/2.5/weather?q=" .. CITY,
+        authorize = true,
+        format = "json",
+        fields = {"main.temp", "weather[0].description"}
+      }, function(resp)
+        if resp.status == 200 then
+          local body = resp.body
+          state.temperature = math.floor(body["main.temp"]) .. "°C"
+          state.description = body["weather[0].description"]
+        else
+          state.description = resp.error or ("Error " .. resp.status)
+        end
+      end)
+    end
+
+    function goHome()
+      exit()
+    end
+  </script>
+
+  <style>
+    .title { color: #ffffff; font-size: 32px; }
+    .status { color: #888888; font-size: 16px; }
+    .temp { color: #ffcc00; font-size: 72px; }
+    .desc { color: #aaaaaa; font-size: 32px; }
+    .city { color: #666666; font-size: 16px; }
+    .btn { background: #2196F3; color: #ffffff; border-radius: 8px; }
+    .btn-back { background: #555555; color: #ffffff; border-radius: 8px; }
+  </style>
+</app>

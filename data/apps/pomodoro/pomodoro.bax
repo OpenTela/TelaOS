@@ -1,0 +1,198 @@
+<app version="1.0" os="1.0">
+  <ui default="/main">
+    <group id="main" default="timer" orientation="horizontal" indicator="dots">
+
+      <!-- Timer Page -->
+      <page id="timer">
+        <label class="{modeClass}" align="center" y="8%">{mode}</label>
+        <label class="timer-display" align="center" y="25%">{timeDisplay}</label>
+        <label class="session-info" align="center" y="55%">{sessionDisplay}</label>
+
+        <button class="{startBtnClass}" x="10%" y="68%" onclick="toggleTimer" w="38%" h="45">{startBtnText}</button>
+        <button class="btn btn-stop" x="52%" y="68%" onclick="resetTimer" w="38%" h="45">Reset</button>
+      </page>
+
+      <!-- Settings Page -->
+      <page id="settings">
+        <label class="page-title" align="center" y="5%">Settings</label>
+
+        <label class="setting-label" x="5%" y="18%">Work: {workMins} min</label>
+        <slider x="5%" y="25%" min="1" max="60" bind="workMins" onchange="onSettingsChange"/>
+
+        <label class="setting-label" x="5%" y="38%">Break: {breakMins} min</label>
+        <slider x="5%" y="45%" min="1" max="30" bind="breakMins" onchange="onSettingsChange"/>
+
+        <label class="setting-label" x="5%" y="58%">Sessions: {totalSessions}</label>
+        <slider x="5%" y="65%" min="1" max="10" bind="totalSessions" onchange="onSettingsChange"/>
+
+        <label class="{settingsNote}" x="5%" y="82%">{settingsNoteText}</label>
+
+        <label class="setting-label" x="5%" y="90%">Debug (10x):</label>
+        <switch x="65%" y="89%" bind="debug"/>
+      </page>
+
+    </group>
+  </ui>
+
+  <state>
+    <string name="mode" default="РАБОТА"/>
+    <string name="modeClass" default="mode-work"/>
+    <string name="timeDisplay" default="25:00"/>
+    <string name="sessionDisplay" default="Session 1 of 4"/>
+    <string name="startBtnText" default="Start"/>
+    <string name="startBtnClass" default="btn btn-start"/>
+    <int name="session" default="1"/>
+    <int name="totalSessions" default="4"/>
+    <int name="workMins" default="25"/>
+    <int name="breakMins" default="5"/>
+    <bool name="running" default="false"/>
+    <int name="timeLeft" default="1500"/>
+    <bool name="debug" default="false"/>
+    <string name="settingsNote" default="note-hidden"/>
+    <string name="settingsNoteText" default=""/>
+  </state>
+
+  <timer interval="1000" call="tick"/>
+
+  <script language="lua">
+    -- Debug mode: set debug=true for 10x faster timer
+    local DEBUG_SPEED = 10
+
+    function formatTime(seconds)
+      local mins = math.floor(seconds / 60)
+      local secs = seconds % 60
+      return string.format('%02d:%02d', mins, secs)
+    end
+
+    function updateDisplay()
+      state.timeDisplay = formatTime(state.timeLeft)
+      state.sessionDisplay = 'Session ' .. state.session .. ' of ' .. state.totalSessions
+    end
+
+    function tick()
+      if not state.running then return end
+
+      local steps = state.debug and DEBUG_SPEED or 1
+      local left = state.timeLeft - steps
+
+      if left <= 0 then
+        switchMode()
+        return
+      end
+
+      state.timeLeft = left
+      updateDisplay()
+    end
+
+    function switchMode()
+      if state.mode == 'РАБОТА' then
+        state.mode = 'ОТДЫХ'
+        state.modeClass = 'mode-break'
+        state.timeLeft = state.breakMins * 60
+      else
+        if state.session >= state.totalSessions then
+          state.mode = 'ГОТОВО!'
+          state.modeClass = 'mode-done'
+          state.running = false
+          state.session = 1
+          state.startBtnText = 'Start'
+          state.startBtnClass = 'btn btn-start'
+          hideNote()
+          updateDisplay()
+          return
+        end
+
+        state.session = state.session + 1
+        state.mode = 'РАБОТА'
+        state.modeClass = 'mode-work'
+        state.timeLeft = state.workMins * 60
+      end
+
+      updateDisplay()
+    end
+
+    function toggleTimer()
+      if state.mode == 'ГОТОВО!' then
+        resetTimer()
+      end
+
+      if state.running then
+        state.running = false
+        state.startBtnText = 'Start'
+        state.startBtnClass = 'btn btn-start'
+        hideNote()
+      else
+        state.running = true
+        state.startBtnText = 'Pause'
+        state.startBtnClass = 'btn btn-pause'
+        showNote()
+      end
+    end
+
+    function resetTimer()
+      state.running = false
+      state.mode = 'РАБОТА'
+      state.modeClass = 'mode-work'
+      state.session = 1
+      state.timeLeft = state.workMins * 60
+      state.startBtnText = 'Start'
+      state.startBtnClass = 'btn btn-start'
+      hideNote()
+      updateDisplay()
+    end
+
+    -- Settings changed - update timer if not running
+    function onSettingsChange()
+      if state.running then
+        -- Show warning
+        showNote()
+        return
+      end
+
+      -- Reset to work mode with new settings
+      state.mode = 'РАБОТА'
+      state.modeClass = 'mode-work'
+      state.session = 1
+      state.timeLeft = state.workMins * 60
+      updateDisplay()
+    end
+
+    function showNote()
+      state.settingsNote = 'note-warning'
+      state.settingsNoteText = 'Pause timer to change'
+    end
+
+    function hideNote()
+      state.settingsNote = 'note-hidden'
+      state.settingsNoteText = ''
+    end
+  </script>
+
+  <style>
+  /* Auto-generated */
+
+    slider { width: 90%; }
+
+  /* Original */
+
+    /* Timer Page - Mode colors */
+    .mode-work { color: #e74c3c; font-size: 32px; }
+    .mode-break { color: #2ecc71; font-size: 32px; }
+    .mode-done { color: #3498db; font-size: 32px; }
+
+    .timer-display { color: #ffffff; font-size: 72px; }
+    .session-info { color: #555555; font-size: 16px; }
+
+    /* Buttons */
+    .btn { padding: 10px; border-radius: 8px; }
+    .btn-start { background: #2ecc71; color: #ffffff; }
+    .btn-pause { background: #f39c12; color: #000000; }
+    .btn-stop { background: #e74c3c; color: #ffffff; }
+
+    /* Settings Page */
+    .page-title { color: #ffffff; font-size: 32px; }
+    .setting-label { color: #888888; font-size: 16px; }
+    .note-hidden { color: #0a0a12; font-size: 16px; }
+    .note-warning { color: #f39c12; font-size: 16px; }
+  </style>
+</app>

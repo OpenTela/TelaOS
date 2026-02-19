@@ -1,0 +1,231 @@
+<app version="1.0" category="game" icon="system:puzzle-game">
+  <ui default="/main">
+    <page id="main" bgcolor="#000">
+      <!-- Классический сканворд 3x3 (магический квадрат!) -->
+
+      <!-- Row 0 -->
+      <button id="h0" x="3%" y="8%" onclick="sel0" class="text-muted">Питомец</button>
+      <button id="c01" x="27%" y="8%" onclick="tap01" class="cell">{v01}</button>
+      <button id="c02" x="51%" y="8%" onclick="tap02" class="cell">{v02}</button>
+      <button id="c03" x="75%" y="8%" onclick="tap03" class="cell">{v03}</button>
+
+      <!-- Row 1 -->
+      <button id="h1" x="3%" y="27%" onclick="sel1" class="text-muted">Жалит</button>
+      <button id="c11" x="27%" y="27%" onclick="tap11" class="cell">{v11}</button>
+      <button id="c12" x="51%" y="27%" onclick="tap12" class="cell">{v12}</button>
+      <button id="c13" x="75%" y="27%" onclick="tap13" class="cell">{v13}</button>
+
+      <!-- Row 2 -->
+      <button id="h2" x="3%" y="46%" onclick="sel2" class="text-muted">Так</button>
+      <button id="c21" x="27%" y="46%" onclick="tap21" class="cell">{v21}</button>
+      <button id="c22" x="51%" y="46%" onclick="tap22" class="cell">{v22}</button>
+      <button id="c23" x="75%" y="46%" onclick="tap23" class="cell">{v23}</button>
+
+      <!-- Вертикальные подсказки -->
+      <label x="27%" y="64%" align="center" class="text-muted-2">Питомец</label>
+      <label x="51%" y="64%" align="center" class="text-muted-2">Жалит</label>
+      <label x="75%" y="64%" align="center" class="text-muted-2">Так</label>
+
+      <!-- Клавиатура -->
+      <button x="3%" y="78%" onclick="kK" class="box-gray">К</button>
+      <button x="19%" y="78%" onclick="kO" class="box-gray">О</button>
+      <button x="35%" y="78%" onclick="kT" class="box-gray">Т</button>
+      <button x="51%" y="78%" onclick="kS" class="box-gray">С</button>
+      <button x="67%" y="78%" onclick="kA" class="box-gray">А</button>
+      <button x="83%" y="78%" onclick="kDel" w="14%" h="24" bgcolor="#a0a0a0" color="#000">←</button>
+
+      <button x="35%" y="88%" onclick="nextW" w="30%" h="32" bgcolor="#4caf50" color="#fff">Дальше</button>
+    </page>
+
+    <page id="win" bgcolor="#000">
+      <label align="center" y="35%" color="#4caf50" font="48">!</label>
+      <label align="center" y="55%" color="#fff" font="32">Ура!</label>
+      <button x="25%" y="75%" onclick="again" w="50%" h="44" bgcolor="#ff9500" color="#fff">Ещё</button>
+    </page>
+  </ui>
+
+  <style>
+    .box-gray { bgcolor: #505050; color: #fff; height: 24; width: 15%; }
+    .cell { bgcolor: #333; color: #fff; height: 44; radius: 0; width: 23%; }
+    .text-muted { bgcolor: #1c1c1c; color: #888; font: 16; height: 44; width: 23%; }
+    .text-muted-2 { color: #888; font: 16; width: 23%; }
+  </style>
+
+  <state>
+    <string name="v01" default=""/><string name="v02" default=""/><string name="v03" default=""/>
+    <string name="v11" default=""/><string name="v12" default=""/><string name="v13" default=""/>
+    <string name="v21" default=""/><string name="v22" default=""/><string name="v23" default=""/>
+  </state>
+
+  <script language="lua">
+    --[[
+      МАГИЧЕСКИЙ КВАДРАТ 3x3
+      Слова одинаковые по горизонтали и вертикали!
+
+      [Питомец→] К  О  Т   [↓Питомец]
+      [Жалит→  ] О  С  А   [↓Жалит]
+      [Так→    ] Т  А  К   [↓Так]
+    ]]
+
+    local words = {
+      {{{0,1},{0,2},{0,3}}, {"К","О","Т"}},
+      {{{1,1},{1,2},{1,3}}, {"О","С","А"}},
+      {{{2,1},{2,2},{2,3}}, {"Т","А","К"}},
+      {{{0,1},{1,1},{2,1}}, {"К","О","Т"}},
+      {{{0,2},{1,2},{2,2}}, {"О","С","А"}},
+      {{{0,3},{1,3},{2,3}}, {"Т","А","К"}},
+    }
+
+    local CELL = "#333"
+    local SEL = "#1a237e"
+    local PART = "#1b4332"
+    local OK = "#2e7d32"
+
+    local done = {}
+    for i = 1, 6 do done[i] = false end
+
+    local cur = 1
+    local pos = 1
+
+    local function vk(r,c) return "v"..r..c end
+    local function ci(r,c) return "c"..r..c end
+
+    local function cntDone(r,c)
+      local n = 0
+      for i = 1, 6 do
+        if done[i] then
+          local wc = words[i][1]
+          for j = 1, 3 do
+            if wc[j][1]==r and wc[j][2]==c then n=n+1 break end
+          end
+        end
+      end
+      return n
+    end
+
+    local function cntAll(r,c)
+      local n = 0
+      for i = 1, 6 do
+        local wc = words[i][1]
+        for j = 1, 3 do
+          if wc[j][1]==r and wc[j][2]==c then n=n+1 break end
+        end
+      end
+      return n
+    end
+
+    local function chkW(i)
+      local wc = words[i][1]
+      local wl = words[i][2]
+      for j = 1, 3 do
+        if state[vk(wc[j][1],wc[j][2])] ~= wl[j] then return false end
+      end
+      return true
+    end
+
+    local function color(r,c)
+      local d = cntDone(r,c)
+      local a = cntAll(r,c)
+      if d==0 then setAttr(ci(r,c),"bgcolor",CELL)
+      elseif d<a then setAttr(ci(r,c),"bgcolor",PART)
+      else setAttr(ci(r,c),"bgcolor",OK) end
+    end
+
+    local function chkAll()
+      local all = true
+      for i = 1, 6 do
+        if chkW(i) then done[i]=true else all=false end
+      end
+      for r = 0, 2 do
+        for c = 1, 3 do
+          color(r,c)
+        end
+      end
+      return all
+    end
+
+    local function clr()
+      for r = 0, 2 do
+        for c = 1, 3 do
+          if cntDone(r,c)==0 then setAttr(ci(r,c),"bgcolor",CELL) end
+        end
+      end
+    end
+
+    local function hl()
+      clr()
+      if not done[cur] then
+        local wc = words[cur][1]
+        setAttr(ci(wc[pos][1],wc[pos][2]),"bgcolor",SEL)
+      end
+    end
+
+    local function tap(r,c)
+      for i = 1, 6 do
+        if not done[i] then
+          local wc = words[i][1]
+          for j = 1, 3 do
+            if wc[j][1]==r and wc[j][2]==c then
+              cur=i pos=j hl() return
+            end
+          end
+        end
+      end
+    end
+
+    local function add(l)
+      if done[cur] then return end
+      local wc = words[cur][1]
+      if pos <= 3 then
+        state[vk(wc[pos][1],wc[pos][2])] = l
+        if pos < 3 then pos=pos+1 end
+        if chkAll() then ui.navigate("/win") return end
+        hl()
+      end
+    end
+
+    function kDel()
+      if done[cur] then return end
+      local wc = words[cur][1]
+      local r,c = wc[pos][1],wc[pos][2]
+      if state[vk(r,c)]=="" and pos>1 then pos=pos-1 r=wc[pos][1] c=wc[pos][2] end
+      state[vk(r,c)]="" hl()
+    end
+
+    function nextW()
+      local st = cur
+      repeat
+        cur = cur+1
+        if cur > 6 then cur=1 end
+        if not done[cur] then pos=1 hl() return end
+      until cur==st
+    end
+
+    function sel0() cur=1 pos=1 hl() end
+    function sel1() cur=2 pos=1 hl() end
+    function sel2() cur=3 pos=1 hl() end
+
+    function kK() add("К") end
+    function kO() add("О") end
+    function kT() add("Т") end
+    function kS() add("С") end
+    function kA() add("А") end
+
+    function tap01() tap(0,1) end function tap02() tap(0,2) end function tap03() tap(0,3) end
+    function tap11() tap(1,1) end function tap12() tap(1,2) end function tap13() tap(1,3) end
+    function tap21() tap(2,1) end function tap22() tap(2,2) end function tap23() tap(2,3) end
+
+    function again()
+      for i=1,6 do done[i]=false end
+      for r=0,2 do
+        for c=1,3 do
+          state[vk(r,c)]=""
+          setAttr(ci(r,c),"bgcolor",CELL)
+        end
+      end
+      cur=1 pos=1 ui.navigate("/main") hl()
+    end
+
+    hl()
+  </script>
+</app>

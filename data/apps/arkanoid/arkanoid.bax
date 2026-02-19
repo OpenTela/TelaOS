@@ -1,0 +1,293 @@
+<app version="1.0" os="1.0" category="game">
+  <ui default="/game">
+    <page id="game" bgcolor="#0a0a1a">
+      <label class="title" align="center" y="2%">ARKANOID</label>
+      <canvas id="gameCanvas" x="5%" y="10%" ontap="handleTap" w="350" h="320"/>
+
+      <!-- Game Over overlay -->
+      <label visible="{gameOver}" class="gameover" align="center" y="35%">{message}</label>
+      <label visible="{gameOver}" class="finalScore" align="center" y="45%">Score: {score}</label>
+
+      <label class="info" align="center" y="78%">Score: {score} | Lives: {lives}</label>
+
+      <button class="btnStart" x="35%" y="86%" onclick="startGame" w="30%" h="60">{buttonText}</button>
+    </page>
+  </ui>
+
+  <state>
+    <int name="score" default="0"/>
+    <int name="lives" default="3"/>
+    <string name="gameOver" default="false"/>
+    <string name="message" default=""/>
+    <string name="isRunning" default="false"/>
+    <string name="isProcessing" default="false"/>
+    <string name="buttonText" default="START"/>
+
+    <!-- Платформа -->
+    <int name="paddleX" default="155"/>
+
+    <!-- Мяч -->
+    <int name="ballX" default="175"/>
+    <int name="ballY" default="250"/>
+    <int name="ballVelX" default="3"/>
+    <int name="ballVelY" default="-4"/>
+
+    <!-- Кирпичи (строка: "1,1,1,1,1;2,2,2,2,2;..." где числа - цвет/тип) -->
+    <string name="bricks" default=""/>
+    <int name="bricksLeft" default="0"/>
+  </state>
+
+  <script language="lua">
+    -- Константы
+    local CANVAS_W = 350
+    local CANVAS_H = 320
+    local PADDLE_W = 60
+    local PADDLE_H = 10
+    local BALL_SIZE = 8
+    local BRICK_W = 35
+    local BRICK_H = 15
+    local BRICK_COLS = 10
+    local BRICK_ROWS = 5
+    local PADDLE_SPEED = 25
+
+    -- Цвета кирпичей
+    local BRICK_COLORS = {
+      0xff0000,  -- красный (1)
+      0xff8800,  -- оранжевый (2)
+      0xffff00,  -- жёлтый (3)
+      0x00ff00,  -- зелёный (4)
+      0x00ffff   -- голубой (5)
+    }
+
+    local COLOR_BG = 0x0a0a1a
+    local COLOR_PADDLE = 0xffffff
+    local COLOR_BALL = 0xffffff
+
+    -- Парсинг кирпичей
+    function parseBricks()
+      local bricks = {}
+      local str = state.bricks
+
+      for row in string.gmatch(str, "([^;]+)") do
+        local brickRow = {}
+        for brick in string.gmatch(row, "(%d+)") do
+          table.insert(brickRow, tonumber(brick))
+        end
+        table.insert(bricks, brickRow)
+      end
+
+      return bricks
+    end
+
+    -- Сохранение кирпичей
+    function saveBricks(bricks)
+      local rows = {}
+      for i, row in ipairs(bricks) do
+        table.insert(rows, table.concat(row, ","))
+      end
+      state.bricks = table.concat(rows, ";")
+    end
+
+    -- Генерация уровня
+    function generateLevel()
+      local bricks = {}
+      state.bricksLeft = 0
+
+      for row = 1, BRICK_ROWS do
+        local brickRow = {}
+        for col = 1, BRICK_COLS do
+          -- Цвет зависит от ряда
+          brickRow[col] = 6 - row  -- 5,4,3,2,1
+          state.bricksLeft = state.bricksLeft + 1
+        end
+        bricks[row] = brickRow
+      end
+
+      saveBricks(bricks)
+    end
+
+    function render()
+      canvas.clear("gameCanvas", COLOR_BG)
+
+      -- Кирпичи
+      local bricks = parseBricks()
+      for row = 1, #bricks do
+        for col = 1, #bricks[row] do
+          local value = bricks[row][col]
+          if value > 0 then
+            local x = (col - 1) * BRICK_W
+            local y = 30 + (row - 1) * BRICK_H
+            canvas.rect("gameCanvas", x + 1, y + 1, BRICK_W - 2, BRICK_H - 2, BRICK_COLORS[value])
+          end
+        end
+      end
+
+      -- Платформа
+      canvas.rect("gameCanvas", state.paddleX, 300, PADDLE_W, PADDLE_H, COLOR_PADDLE)
+
+      -- Мяч
+      canvas.rect("gameCanvas", state.ballX, state.ballY, BALL_SIZE, BALL_SIZE, COLOR_BALL)
+    end
+
+    function handleTap(x, y)
+      if state.gameOver == "true" or state.isRunning == "false" then
+        return
+      end
+
+      -- Перемещаем платформу к месту клика
+      state.paddleX = x - PADDLE_W / 2
+
+      -- Ограничения
+      if state.paddleX < 0 then
+        state.paddleX = 0
+      end
+      if state.paddleX > CANVAS_W - PADDLE_W then
+        state.paddleX = CANVAS_W - PADDLE_W
+      end
+
+      render()
+    end
+
+    function resetBall()
+      state.ballX = CANVAS_W / 2
+      state.ballY = 250
+      state.ballVelX = 3
+      state.ballVelY = -4
+    end
+
+    function gameTick()
+      if state.isProcessing == "true" then
+        return
+      end
+
+      if state.isRunning == "false" or state.gameOver == "true" then
+        return
+      end
+
+      state.isProcessing = "true"
+
+      -- Движение мяча
+      state.ballX = state.ballX + state.ballVelX
+      state.ballY = state.ballY + state.ballVelY
+
+      -- Отскок от стен
+      if state.ballX <= 0 or state.ballX >= CANVAS_W - BALL_SIZE then
+        state.ballVelX = -state.ballVelX
+      end
+
+      if state.ballY <= 0 then
+        state.ballVelY = -state.ballVelY
+      end
+
+      -- Проверка падения мяча
+      if state.ballY >= CANVAS_H then
+        state.lives = state.lives - 1
+        if state.lives <= 0 then
+          doGameOver("GAME OVER!")
+          state.isProcessing = "false"
+          return
+        else
+          resetBall()
+        end
+      end
+
+      -- Столкновение с платформой
+      if state.ballY + BALL_SIZE >= 300 and 
+         state.ballY <= 300 + PADDLE_H and
+         state.ballX + BALL_SIZE >= state.paddleX and 
+         state.ballX <= state.paddleX + PADDLE_W then
+        state.ballVelY = -math.abs(state.ballVelY)
+        -- Изменяем направление в зависимости от места удара
+        local hitPos = (state.ballX - state.paddleX) / PADDLE_W
+        state.ballVelX = (hitPos - 0.5) * 8
+      end
+
+      -- Столкновение с кирпичами
+      local bricks = parseBricks()
+      local hitBrick = false
+
+      for row = 1, #bricks do
+        for col = 1, #bricks[row] do
+          if bricks[row][col] > 0 then
+            local bx = (col - 1) * BRICK_W
+            local by = 30 + (row - 1) * BRICK_H
+
+            if state.ballX + BALL_SIZE >= bx and 
+               state.ballX <= bx + BRICK_W and
+               state.ballY + BALL_SIZE >= by and 
+               state.ballY <= by + BRICK_H then
+
+              -- Убираем кирпич
+              bricks[row][col] = 0
+              state.bricksLeft = state.bricksLeft - 1
+              state.score = state.score + 10
+              state.ballVelY = -state.ballVelY
+              hitBrick = true
+
+              -- Проверка победы
+              if state.bricksLeft <= 0 then
+                doGameOver("YOU WIN!")
+                state.isProcessing = "false"
+                return
+              end
+
+              break
+            end
+          end
+        end
+        if hitBrick then break end
+      end
+
+      if hitBrick then
+        saveBricks(bricks)
+      end
+
+      render()
+
+      state.isProcessing = "false"
+
+      if state.isRunning == "true" and state.gameOver == "false" then
+        timer.once("gameTick", 30)
+      end
+    end
+
+    function startGame()
+      if state.isRunning == "true" then
+        state.isRunning = "false"
+        state.buttonText = "START"
+      else
+        state.score = 0
+        state.lives = 3
+        state.paddleX = 155
+        state.gameOver = "false"
+        state.message = ""
+        state.isRunning = "true"
+        state.isProcessing = "false"
+        state.buttonText = "PAUSE"
+
+        generateLevel()
+        resetBall()
+        render()
+        timer.once("gameTick", 30)
+      end
+    end
+
+    function doGameOver(msg)
+      state.gameOver = "true"
+      state.message = msg
+      state.isRunning = "false"
+      state.buttonText = "START"
+      render()
+    end
+
+    render()
+  </script>
+
+  <style>
+    .title { color: #00ffff; font-size: 32; }
+    .info { color: #ffffff; font-size: 18; }
+    .gameover { color: #ffff00; font-size: 40; }
+    .finalScore { color: #ffffff; font-size: 32; }
+    .btnStart { background: #00ffff; color: #000000; border-radius: 8; }
+  </style>
+</app>

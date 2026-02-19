@@ -1,0 +1,313 @@
+<app>
+  <ui default="/main">
+    <page id="main">
+      <!-- Строка формул 0-10% -->
+      <label x="0" y="0" w="100%" h="10%" bgcolor="#1b5e20"/>
+      <label x="1%" y="2%" color="#a5d6a7" font="16">{cell}</label>
+      <label x="10%" y="1%" w="60%" h="8%" bgcolor="#2e7d32"/>
+      <label x="12%" y="2%" color="#fff" font="16">{val}</label>
+      <button x="75%" y="1%" onclick="delRow" w="8%" h="8%" bgcolor="#388e3c" font="32">-</button>
+      <label x="86%" y="3%" w="3%" color="#a5d6a7" font="16">{rows}</label>
+      <button x="90%" y="1%" onclick="addRow" w="8%" h="8%" bgcolor="#388e3c" font="32">+</button>
+
+      <input id="edit" x="200%" y="0" bind="val" onenter="apply" w="1" h="1"/>
+
+      <!-- Сетка 11-53% -->
+      <label x="0" y="11%" w="100%" h="43%" bgcolor="#000"/>
+
+      <!-- Заголовки -->
+      <label x="19%" y="10%" class="item-muted">A</label>
+      <label x="42%" y="10%" class="item-muted">B</label>
+      <label x="64%" y="10%" class="item-muted">C</label>
+      <label x="87%" y="10%" class="item-muted">D</label>
+
+      <!-- Row 1: y=14% h=7% -->
+      <label x="2%" y="16%" class="item-muted">1</label>
+      <button id="A1" x="9%" y="14%" onclick="tapA1" w="22%" h="7%" bgcolor="{bgA1}" radius="0">{vA1}</button>
+      <button id="B1" x="32%" y="14%" onclick="tapB1" w="22%" h="7%" bgcolor="{bgB1}" radius="0">{vB1}</button>
+      <button id="C1" x="54%" y="14%" onclick="tapC1" w="22%" h="7%" bgcolor="{bgC1}" radius="0">{vC1}</button>
+      <button id="D1" x="77%" y="14%" onclick="tapD1" w="22%" h="7%" bgcolor="{bgD1}" radius="0">{vD1}</button>
+
+      <!-- Row 2: y=22% h=7% -->
+      <label x="2%" y="24%" visible="{showR2}" class="item-muted">2</label>
+      <button id="A2" x="9%" y="22%" visible="{showR2}" onclick="tapA2" w="22%" h="7%" bgcolor="{bgA2}" radius="0">{vA2}</button>
+      <button id="B2" x="32%" y="22%" visible="{showR2}" onclick="tapB2" w="22%" h="7%" bgcolor="{bgB2}" radius="0">{vB2}</button>
+      <button id="C2" x="54%" y="22%" visible="{showR2}" onclick="tapC2" w="22%" h="7%" bgcolor="{bgC2}" radius="0">{vC2}</button>
+      <button id="D2" x="77%" y="22%" visible="{showR2}" onclick="tapD2" w="22%" h="7%" bgcolor="{bgD2}" radius="0">{vD2}</button>
+
+      <!-- Row 3: y=30% h=7% -->
+      <label x="2%" y="32%" visible="{showR3}" class="item-muted">3</label>
+      <button id="A3" x="9%" y="30%" visible="{showR3}" onclick="tapA3" w="22%" h="7%" bgcolor="{bgA3}" radius="0">{vA3}</button>
+      <button id="B3" x="32%" y="30%" visible="{showR3}" onclick="tapB3" w="22%" h="7%" bgcolor="{bgB3}" radius="0">{vB3}</button>
+      <button id="C3" x="54%" y="30%" visible="{showR3}" onclick="tapC3" w="22%" h="7%" bgcolor="{bgC3}" radius="0">{vC3}</button>
+      <button id="D3" x="77%" y="30%" visible="{showR3}" onclick="tapD3" w="22%" h="7%" bgcolor="{bgD3}" radius="0">{vD3}</button>
+
+      <!-- Row 4: y=38% h=7% -->
+      <label x="2%" y="40%" visible="{showR4}" class="item-muted">4</label>
+      <button id="A4" x="9%" y="38%" visible="{showR4}" onclick="tapA4" w="22%" h="7%" bgcolor="{bgA4}" radius="0">{vA4}</button>
+      <button id="B4" x="32%" y="38%" visible="{showR4}" onclick="tapB4" w="22%" h="7%" bgcolor="{bgB4}" radius="0">{vB4}</button>
+      <button id="C4" x="54%" y="38%" visible="{showR4}" onclick="tapC4" w="22%" h="7%" bgcolor="{bgC4}" radius="0">{vC4}</button>
+      <button id="D4" x="77%" y="38%" visible="{showR4}" onclick="tapD4" w="22%" h="7%" bgcolor="{bgD4}" radius="0">{vD4}</button>
+
+      <!-- Row 5: y=46% h=7% -->
+      <label x="2%" y="48%" visible="{showR5}" class="item-muted">5</label>
+      <button id="A5" x="9%" y="46%" visible="{showR5}" onclick="tapA5" w="22%" h="7%" bgcolor="{bgA5}" radius="0">{vA5}</button>
+      <button id="B5" x="32%" y="46%" visible="{showR5}" onclick="tapB5" w="22%" h="7%" bgcolor="{bgB5}" radius="0">{vB5}</button>
+      <button id="C5" x="54%" y="46%" visible="{showR5}" onclick="tapC5" w="22%" h="7%" bgcolor="{bgC5}" radius="0">{vC5}</button>
+      <button id="D5" x="77%" y="46%" visible="{showR5}" onclick="tapD5" w="22%" h="7%" bgcolor="{bgD5}" radius="0">{vD5}</button>
+
+      <!-- Row 6: y=54% h=7% (under keyboard) -->
+      <label x="2%" y="56%" visible="{showR6}" class="item-muted">6</label>
+      <button id="A6" x="9%" y="54%" visible="{showR6}" onclick="tapA6" w="22%" h="7%" bgcolor="{bgA6}" radius="0">{vA6}</button>
+      <button id="B6" x="32%" y="54%" visible="{showR6}" onclick="tapB6" w="22%" h="7%" bgcolor="{bgB6}" radius="0">{vB6}</button>
+      <button id="C6" x="54%" y="54%" visible="{showR6}" onclick="tapC6" w="22%" h="7%" bgcolor="{bgC6}" radius="0">{vC6}</button>
+      <button id="D6" x="77%" y="54%" visible="{showR6}" onclick="tapD6" w="22%" h="7%" bgcolor="{bgD6}" radius="0">{vD6}</button>
+
+      <!-- Row 7: y=62% h=7% (under keyboard) -->
+      <label x="2%" y="64%" visible="{showR7}" class="item-muted">7</label>
+      <button id="A7" x="9%" y="62%" visible="{showR7}" onclick="tapA7" w="22%" h="7%" bgcolor="{bgA7}" radius="0">{vA7}</button>
+      <button id="B7" x="32%" y="62%" visible="{showR7}" onclick="tapB7" w="22%" h="7%" bgcolor="{bgB7}" radius="0">{vB7}</button>
+      <button id="C7" x="54%" y="62%" visible="{showR7}" onclick="tapC7" w="22%" h="7%" bgcolor="{bgC7}" radius="0">{vC7}</button>
+      <button id="D7" x="77%" y="62%" visible="{showR7}" onclick="tapD7" w="22%" h="7%" bgcolor="{bgD7}" radius="0">{vD7}</button>
+
+      <!-- Row 8: y=70% h=7% (under keyboard) -->
+      <label x="2%" y="72%" visible="{showR8}" class="item-muted">8</label>
+      <button id="A8" x="9%" y="70%" visible="{showR8}" onclick="tapA8" w="22%" h="7%" bgcolor="{bgA8}" radius="0">{vA8}</button>
+      <button id="B8" x="32%" y="70%" visible="{showR8}" onclick="tapB8" w="22%" h="7%" bgcolor="{bgB8}" radius="0">{vB8}</button>
+      <button id="C8" x="54%" y="70%" visible="{showR8}" onclick="tapC8" w="22%" h="7%" bgcolor="{bgC8}" radius="0">{vC8}</button>
+      <button id="D8" x="77%" y="70%" visible="{showR8}" onclick="tapD8" w="22%" h="7%" bgcolor="{bgD8}" radius="0">{vD8}</button>
+
+      <!-- Клавиатура 54%+ -->
+      <button x="1%" y="54%" onclick="kA" class="btn-light">A</button>
+      <button x="21%" y="54%" onclick="kB" class="btn-light">B</button>
+      <button x="41%" y="54%" onclick="kC" class="btn-light">C</button>
+      <button x="61%" y="54%" onclick="kD" class="btn-light">D</button>
+      <button x="81%" y="54%" onclick="kEq" class="btn-orange">=</button>
+
+      <button x="1%" y="64%" onclick="k1" class="btn-gray">1</button>
+      <button x="21%" y="64%" onclick="k2" class="btn-gray">2</button>
+      <button x="41%" y="64%" onclick="k3" class="btn-gray">3</button>
+      <button x="61%" y="64%" onclick="kPlus" w="19%" h="9%" bgcolor="#ff9500">+</button>
+      <button x="81%" y="64%" onclick="kMinus" class="btn-orange">-</button>
+
+      <button x="1%" y="74%" onclick="k4" class="btn-gray">4</button>
+      <button x="21%" y="74%" onclick="k5" class="btn-gray">5</button>
+      <button x="41%" y="74%" onclick="k6" class="btn-gray">6</button>
+      <button x="61%" y="74%" onclick="kMul" w="19%" h="9%" bgcolor="#ff9500">*</button>
+      <button x="81%" y="74%" onclick="kDiv" class="btn-orange">/</button>
+
+      <button x="1%" y="84%" onclick="k7" class="btn-gray">7</button>
+      <button x="21%" y="84%" onclick="k8" class="btn-gray">8</button>
+      <button x="41%" y="84%" onclick="k9" class="btn-gray">9</button>
+      <button x="61%" y="84%" onclick="kLp" class="btn-gray">(</button>
+      <button x="81%" y="84%" onclick="kRp" w="18%" h="9%" bgcolor="#505050">)</button>
+
+      <button x="1%" y="94%" onclick="k0" w="24%" h="6%" bgcolor="#505050">0</button>
+      <button x="26%" y="94%" onclick="kDot" w="24%" h="6%" bgcolor="#505050">.</button>
+      <button x="51%" y="94%" onclick="kAbc" w="24%" h="6%" bgcolor="#a0a0a0" color="#000">Abc</button>
+      <button x="76%" y="94%" onclick="kDel" w="23%" h="6%" bgcolor="#d32f2f" font="16">&lt;-</button>
+    </page>
+  </ui>
+
+  <style>
+    button { color: #fff; }
+
+    .btn-gray { bgcolor: #505050; height: 9%; width: 19%; }
+    .btn-light { bgcolor: #a0a0a0; color: #000; height: 9%; width: 19%; }
+    .btn-orange { bgcolor: #ff9500; height: 9%; width: 18%; }
+    .item-muted { color: #666; }
+  </style>
+
+  <state>
+    <string name="vA1" default=""/><string name="vB1" default=""/><string name="vC1" default=""/><string name="vD1" default=""/>
+    <string name="vA2" default=""/><string name="vB2" default=""/><string name="vC2" default=""/><string name="vD2" default=""/>
+    <string name="vA3" default=""/><string name="vB3" default=""/><string name="vC3" default=""/><string name="vD3" default=""/>
+    <string name="vA4" default=""/><string name="vB4" default=""/><string name="vC4" default=""/><string name="vD4" default=""/>
+    <string name="vA5" default=""/><string name="vB5" default=""/><string name="vC5" default=""/><string name="vD5" default=""/>
+    <string name="vA6" default=""/><string name="vB6" default=""/><string name="vC6" default=""/><string name="vD6" default=""/>
+    <string name="vA7" default=""/><string name="vB7" default=""/><string name="vC7" default=""/><string name="vD7" default=""/>
+    <string name="vA8" default=""/><string name="vB8" default=""/><string name="vC8" default=""/><string name="vD8" default=""/>
+    <string name="bgA1" default="#1a237e"/><string name="bgB1" default="#000"/><string name="bgC1" default="#000"/><string name="bgD1" default="#000"/>
+    <string name="bgA2" default="#000"/><string name="bgB2" default="#000"/><string name="bgC2" default="#000"/><string name="bgD2" default="#000"/>
+    <string name="bgA3" default="#000"/><string name="bgB3" default="#000"/><string name="bgC3" default="#000"/><string name="bgD3" default="#000"/>
+    <string name="bgA4" default="#000"/><string name="bgB4" default="#000"/><string name="bgC4" default="#000"/><string name="bgD4" default="#000"/>
+    <string name="bgA5" default="#000"/><string name="bgB5" default="#000"/><string name="bgC5" default="#000"/><string name="bgD5" default="#000"/>
+    <string name="bgA6" default="#000"/><string name="bgB6" default="#000"/><string name="bgC6" default="#000"/><string name="bgD6" default="#000"/>
+    <string name="bgA7" default="#000"/><string name="bgB7" default="#000"/><string name="bgC7" default="#000"/><string name="bgD7" default="#000"/>
+    <string name="bgA8" default="#000"/><string name="bgB8" default="#000"/><string name="bgC8" default="#000"/><string name="bgD8" default="#000"/>
+    <string name="val" default=""/>
+    <string name="cell" default="A1"/>
+    <string name="rows" default="3"/>
+    <string name="showR2" default="true"/>
+    <string name="showR3" default="true"/>
+    <string name="showR4" default="false"/>
+    <string name="showR5" default="false"/>
+    <string name="showR6" default="false"/>
+    <string name="showR7" default="false"/>
+    <string name="showR8" default="false"/>
+  </state>
+
+  <script language="lua">
+    local D = {}
+    local maxRow = 3
+    local cells = {
+      "A1","B1","C1","D1",
+      "A2","B2","C2","D2",
+      "A3","B3","C3","D3",
+      "A4","B4","C4","D4",
+      "A5","B5","C5","D5",
+      "A6","B6","C6","D6",
+      "A7","B7","C7","D7",
+      "A8","B8","C8","D8"
+    }
+
+    local NORMAL = "#000"
+    local SELECTED = "#1a237e"
+
+    local function getN(id)
+      return tonumber(state["v"..id] or "") or 0
+    end
+
+    local function calc(expr, id)
+      local s = string.upper(expr)
+      if id and string.find(s, id) then return nil end
+      for _, c in ipairs(cells) do
+        s = string.gsub(s, c, tostring(getN(c)))
+      end
+      local total = 0
+      for _, c in ipairs(cells) do total = total + getN(c) end
+      s = string.gsub(s, "SUM", tostring(total))
+      if string.match(s, "[A-Z]") then return nil end
+      local fn = load("return " .. s)
+      if fn then
+        local ok, r = pcall(fn)
+        if ok then return r end
+      end
+      return nil
+    end
+
+    local function refreshCell(id)
+      local raw = D[id] or ""
+      if raw == "" then
+        state["v"..id] = ""
+      elseif string.sub(raw,1,1) == "=" then
+        local r = calc(string.sub(raw,2), id)
+        if r then
+          if r == math.floor(r) then
+            state["v"..id] = tostring(math.floor(r))
+          else
+            state["v"..id] = string.format("%.1f", r)
+          end
+        else
+          state["v"..id] = "#REF"
+        end
+      else
+        state["v"..id] = raw
+      end
+    end
+
+    local function refresh()
+      for _, id in ipairs(cells) do
+        refreshCell(id)
+      end
+    end
+
+    local function key(k)
+      state.val = (state.val or "") .. k
+      if state.cell ~= "" then
+        D[state.cell] = string.upper(state.val)
+        refreshCell(state.cell)
+      end
+    end
+
+    function kA() key("A") end
+    function kB() key("B") end
+    function kC() key("C") end
+    function kD() key("D") end
+    function k0() key("0") end
+    function k1() key("1") end
+    function k2() key("2") end
+    function k3() key("3") end
+    function k4() key("4") end
+    function k5() key("5") end
+    function k6() key("6") end
+    function k7() key("7") end
+    function k8() key("8") end
+    function k9() key("9") end
+    function kDot() key(".") end
+    function kPlus() key("+") end
+    function kMinus() key("-") end
+    function kMul() key("*") end
+    function kDiv() key("/") end
+    function kEq() key("=") end
+    function kLp() key("(") end
+    function kRp() key(")") end
+
+    function kDel()
+      local v = state.val or ""
+      if #v > 0 then
+        state.val = string.sub(v, 1, -2)
+        if state.cell ~= "" then
+          D[state.cell] = string.upper(state.val)
+          refreshCell(state.cell)
+        end
+      end
+    end
+
+    function kAbc() focus("edit") end
+
+    function tap(id)
+      if state.cell ~= "" then
+        D[state.cell] = string.upper(state.val or "")
+        refresh()
+      end
+      if state.cell ~= "" then
+        state["bg"..state.cell] = NORMAL
+      end
+      state.cell = id
+      state["bg"..id] = SELECTED
+      state.val = D[id] or ""
+    end
+
+    function tapA1() tap("A1") end function tapB1() tap("B1") end function tapC1() tap("C1") end function tapD1() tap("D1") end
+    function tapA2() tap("A2") end function tapB2() tap("B2") end function tapC2() tap("C2") end function tapD2() tap("D2") end
+    function tapA3() tap("A3") end function tapB3() tap("B3") end function tapC3() tap("C3") end function tapD3() tap("D3") end
+    function tapA4() tap("A4") end function tapB4() tap("B4") end function tapC4() tap("C4") end function tapD4() tap("D4") end
+    function tapA5() tap("A5") end function tapB5() tap("B5") end function tapC5() tap("C5") end function tapD5() tap("D5") end
+    function tapA6() tap("A6") end function tapB6() tap("B6") end function tapC6() tap("C6") end function tapD6() tap("D6") end
+    function tapA7() tap("A7") end function tapB7() tap("B7") end function tapC7() tap("C7") end function tapD7() tap("D7") end
+    function tapA8() tap("A8") end function tapB8() tap("B8") end function tapC8() tap("C8") end function tapD8() tap("D8") end
+
+    function apply()
+      if state.cell ~= "" then
+        D[state.cell] = string.upper(state.val or "")
+        refresh()
+      end
+    end
+
+    function addRow()
+      if maxRow < 8 then
+        maxRow = maxRow + 1
+        state["showR" .. maxRow] = "true"
+        state.rows = tostring(maxRow)
+      end
+    end
+
+    function delRow()
+      if maxRow > 1 then
+        for _, col in ipairs({"A","B","C","D"}) do
+          local id = col .. maxRow
+          D[id] = ""
+          state["v"..id] = ""
+          state["bg"..id] = NORMAL
+        end
+        state["showR" .. maxRow] = "false"
+        maxRow = maxRow - 1
+        state.rows = tostring(maxRow)
+        refresh()
+      end
+    end
+
+    state["bgA1"] = SELECTED
+  </script>
+</app>

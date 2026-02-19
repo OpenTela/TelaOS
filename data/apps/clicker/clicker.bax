@@ -1,0 +1,58 @@
+<app version="1.0" os="1.0" category="game">
+  <ui default="/main">
+    <page id="main" bgcolor="#1a1a2e">
+      <label align="center" y="8%" color="#ffffff" font="24">КЛИКЕР</label>
+
+      <label align="center" y="35%" color="#00ff88" font="72">{count}</label>
+
+      <!-- Минус: кнопка с крупным шрифтом через CSS -->
+      <button x="10%" y="55%" class="btn-minus" onclick="decrement" w="35%" h="80">-</button>
+
+      <!-- Плюс: кнопка с иконкой -->
+      <button x="55%" y="55%" class="btn-plus" icon="plus.png" iconsize="48" onclick="increment" w="35%" h="80"/>
+
+      <button align="center" y="78%" class="btn-reset" onclick="reset" w="60%" h="45">СБРОС</button>
+
+      <label align="center" y="92%" color="#666666" font="16">Всего кликов: {total}</label>
+    </page>
+  </ui>
+
+  <state>
+    <int name="count" default="0"/>
+    <int name="total" default="0"/>
+  </state>
+
+  <script language="lua">
+    function increment()
+      state.count = state.count + 1
+      state.total = state.total + 1
+    end
+
+    function decrement()
+      state.count = state.count - 1
+      state.total = state.total + 1
+    end
+
+    function reset()
+      state.count = 0
+    end
+  </script>
+
+  <style>
+    .btn-minus { 
+      background: #e74c3c; 
+      color: #ffffff; 
+      font-size: 48;
+      border-radius: 16; 
+    }
+    .btn-plus { 
+      background: #27ae60; 
+      border-radius: 16; 
+    }
+    .btn-reset { 
+      background: #3498db; 
+      color: #ffffff; 
+      border-radius: 12; 
+    }
+  </style>
+</app>

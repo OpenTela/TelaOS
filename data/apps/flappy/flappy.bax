@@ -1,0 +1,189 @@
+<app version="1.0" os="1.0" category="game">
+  <ui default="/game">
+    <page id="game" bgcolor="#222222">
+      <label class="title" align="center" y="2%">Flappy Test</label>
+      <canvas id="c" x="5%" y="10%" w="350" h="250"/>
+
+      <!-- Game Over overlay -->
+      <label visible="{gameOver}" class="gameover" align="center" y="35%">GAME OVER!</label>
+      <label visible="{gameOver}" class="score" align="center" y="50%">Score: {score}</label>
+
+      <label class="info" align="center" y="78%">Score={score} | Status: {isRunning}</label>
+
+      <button class="btn" x="5%" y="88%" onclick="moveUp">UP</button>
+      <button class="btn" x="36%" y="88%" onclick="moveDown">DOWN</button>
+      <button class="btn2" x="67%" y="88%" onclick="startGame">START</button>
+    </page>
+  </ui>
+
+  <state>
+    <int name="birdY" default="125"/>
+    <int name="pipeX" default="250"/>
+    <int name="score" default="0"/>
+    <string name="gameOver" default="false"/>
+    <string name="isRunning" default="false"/>
+  </state>
+
+  <script language="lua">
+    -- Константы для коллизий
+    local BIRD_X = 50
+    local BIRD_SIZE = 30
+    local PIPE_WIDTH = 50
+    local GAP_TOP = 80
+    local GAP_BOTTOM = 170
+    local GROUND_Y = 220
+
+    function render()
+      canvas.clear("c", 0x88CCFF)
+      canvas.rect("c", 0, GROUND_Y, 350, 30, 0x664422)
+      canvas.rect("c", state.pipeX, 0, PIPE_WIDTH, GAP_TOP, 0x22AA22)
+      canvas.rect("c", state.pipeX, GAP_BOTTOM, PIPE_WIDTH, 80, 0x22AA22)
+      canvas.rect("c", BIRD_X, state.birdY, BIRD_SIZE, BIRD_SIZE, 0xFFCC00)
+    end
+
+    function checkCollision()
+      -- Проверка земли
+      if state.birdY + BIRD_SIZE >= GROUND_Y then
+        return true
+      end
+
+      -- Проверка потолка
+      if state.birdY <= 0 then
+        return true
+      end
+
+      -- Проверка труб (только если птичка в зоне трубы по X)
+      if state.pipeX < BIRD_X + BIRD_SIZE and state.pipeX + PIPE_WIDTH > BIRD_X then
+        -- Столкновение с верхней трубой
+        if state.birdY < GAP_TOP then
+          return true
+        end
+        -- Столкновение с нижней трубой
+        if state.birdY + BIRD_SIZE > GAP_BOTTOM then
+          return true
+        end
+      end
+
+      return false
+    end
+
+    function moveUp()
+      if state.gameOver == "true" then return end
+
+      ui.freeze()
+      state.birdY = state.birdY - 12
+      if state.birdY < 0 then state.birdY = 0 end
+
+      if checkCollision() then
+        ui.unfreeze()
+        doGameOver()
+      else
+        render()
+        ui.unfreeze()
+      end
+    end
+
+    function moveDown()
+      if state.gameOver == "true" then return end
+
+      ui.freeze()
+      state.birdY = state.birdY + 12
+      if state.birdY > 190 then state.birdY = 190 end
+
+      if checkCollision() then
+        ui.unfreeze()
+        doGameOver()
+      else
+        render()
+        ui.unfreeze()
+      end
+    end
+
+    function doGameOver()
+      ui.freeze()
+      state.gameOver = "true"
+      state.isRunning = "false"
+      render()
+      ui.unfreeze()
+    end
+
+    function startGame()
+      if state.isRunning == "true" then
+        -- Если игра идёт - это кнопка STOP
+        state.isRunning = "false"
+      else
+        -- Запускаем новую игру
+        ui.freeze()
+        state.birdY = 125
+        state.pipeX = 250
+        state.score = 0
+        state.gameOver = "false"
+        state.isRunning = "true"
+        render()
+        ui.unfreeze()
+        -- Запускаем первый тик
+        timer.once("gameTick", 200)
+      end
+    end
+
+    function gameTick()
+      -- Проверяем что игра всё ещё идёт
+      if state.isRunning == "false" or state.gameOver == "true" then
+        return
+      end
+
+      -- Замораживаем UI для batch-обновления
+      ui.freeze()
+
+      -- Движение трубы
+      state.pipeX = state.pipeX - 6
+
+      -- Подсчёт очков
+      if state.pipeX < BIRD_X and state.pipeX > BIRD_X - 10 then
+        state.score = state.score + 1
+      end
+
+      -- Респавн трубы
+      if state.pipeX < -PIPE_WIDTH then 
+        state.pipeX = 350 
+      end
+
+      -- Проверка коллизий
+      if checkCollision() then
+        ui.unfreeze()
+        doGameOver()
+        return
+      end
+
+      -- Рендеринг
+      render()
+
+      -- Размораживаем UI - один рефреш после всех изменений
+      ui.unfreeze()
+
+      -- Запускаем следующий тик (только если игра продолжается)
+      if state.isRunning == "true" and state.gameOver == "false" then
+        timer.once("gameTick", 200)
+      end
+    end
+
+    render()
+  </script>
+
+  <style>
+  /* Auto-generated */
+
+    button { height: 45; width: 28%; }
+
+  /* Original */
+
+    .title { color: #ffffff; font-size: 24; }
+    .info { color: #ffff00; font-size: 16; }
+    .status { color: #00ff00; font-size: 14; }
+    .gameover { color: #ff0000; font-size: 48; }
+    .score { color: #ffffff; font-size: 32; }
+    .btn { background: #ff6600; color: #ffffff; border-radius: 8; }
+    .btn2 { background: #22cc22; color: #ffffff; border-radius: 8; }
+    .btn3 { background: #2266ff; color: #ffffff; border-radius: 8; }
+  </style>
+</app>

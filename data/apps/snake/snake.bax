@@ -1,0 +1,286 @@
+<app version="1.0" os="1.0" category="game">
+  <ui default="/game">
+    <page id="game" bgcolor="#1a1a1a">
+      <label class="title" align="center" y="2%">Snake Game</label>
+      <canvas id="gameCanvas" x="5%" y="10%" ontap="handleTap" w="350" h="350"/>
+
+      <!-- Game Over overlay -->
+      <label visible="{gameOver}" class="gameover" align="center" y="35%">GAME OVER!</label>
+      <label visible="{gameOver}" class="finalScore" align="center" y="45%">Score: {score}</label>
+      <label visible="{gameOver}" class="hint" align="center" y="52%">Tap START to play again</label>
+
+      <label class="info" align="center" y="78%">Score: {score} | Speed: {speed}</label>
+
+      <button class="btnStart" x="35%" y="86%" onclick="startGame" w="30%" h="60">{buttonText}</button>
+    </page>
+  </ui>
+
+  <state>
+    <int name="score" default="0"/>
+    <int name="speed" default="200"/>
+    <string name="gameOver" default="false"/>
+    <string name="isRunning" default="false"/>
+    <string name="isProcessing" default="false"/>
+    <string name="buttonText" default="START"/>
+
+    <!-- Змейка - храним как строку координат "x1,y1;x2,y2;x3,y3" -->
+    <string name="snake" default="10,10;10,11;10,12"/>
+    <string name="direction" default="up"/>
+    <string name="nextDirection" default="up"/>
+
+    <!-- Еда -->
+    <int name="foodX" default="15"/>
+    <int name="foodY" default="15"/>
+  </state>
+
+  <script language="lua">
+    -- Константы
+    local GRID_SIZE = 20  -- сетка 20x20
+    local CELL_SIZE = 17  -- 350px / 20 = 17.5, используем 17
+    local CANVAS_SIZE = 350
+
+    -- Цвета
+    local COLOR_BG = 0x1a1a1a
+    local COLOR_GRID = 0x2a2a2a
+    local COLOR_SNAKE_HEAD = 0x00ff00
+    local COLOR_SNAKE_BODY = 0x00aa00
+    local COLOR_FOOD = 0xff0000
+
+    -- Направления
+    local DIR_UP = "up"
+    local DIR_DOWN = "down"
+    local DIR_LEFT = "left"
+    local DIR_RIGHT = "right"
+
+    -- Парсинг змейки из строки в массив
+    function parseSnake()
+      local snake = {}
+      local str = state.snake
+
+      for segment in string.gmatch(str, "([^;]+)") do
+        local x, y = string.match(segment, "(%d+),(%d+)")
+        table.insert(snake, {x = tonumber(x), y = tonumber(y)})
+      end
+
+      return snake
+    end
+
+    -- Сохранение змейки в строку
+    function saveSnake(snake)
+      local parts = {}
+      for i, segment in ipairs(snake) do
+        table.insert(parts, segment.x .. "," .. segment.y)
+      end
+      state.snake = table.concat(parts, ";")
+    end
+
+    -- Рендеринг
+    function render()
+      -- Фон
+      canvas.clear("gameCanvas", COLOR_BG)
+
+      -- Сетка (опционально, для красоты)
+      for i = 0, GRID_SIZE do
+        local pos = i * CELL_SIZE
+        -- Вертикальные линии
+        canvas.rect("gameCanvas", pos, 0, 1, CANVAS_SIZE, COLOR_GRID)
+        -- Горизонтальные линии
+        canvas.rect("gameCanvas", 0, pos, CANVAS_SIZE, 1, COLOR_GRID)
+      end
+
+      -- Еда
+      canvas.rect("gameCanvas", 
+        state.foodX * CELL_SIZE + 2, 
+        state.foodY * CELL_SIZE + 2, 
+        CELL_SIZE - 4, 
+        CELL_SIZE - 4, 
+        COLOR_FOOD)
+
+      -- Змейка
+      local snake = parseSnake()
+      for i, segment in ipairs(snake) do
+        local color = (i == 1) and COLOR_SNAKE_HEAD or COLOR_SNAKE_BODY
+        canvas.rect("gameCanvas", 
+          segment.x * CELL_SIZE + 1, 
+          segment.y * CELL_SIZE + 1, 
+          CELL_SIZE - 2, 
+          CELL_SIZE - 2, 
+          color)
+      end
+    end
+
+    -- Генерация случайной позиции для еды
+    function spawnFood()
+      local snake = parseSnake()
+      local maxAttempts = 100
+      local attempt = 0
+
+      while attempt < maxAttempts do
+        local x = math.floor(math.random() * GRID_SIZE)
+        local y = math.floor(math.random() * GRID_SIZE)
+
+        -- Проверяем что еда не на змейке
+        local onSnake = false
+        for i, segment in ipairs(snake) do
+          if segment.x == x and segment.y == y then
+            onSnake = true
+            break
+          end
+        end
+
+        if not onSnake then
+          state.foodX = x
+          state.foodY = y
+          return
+        end
+
+        attempt = attempt + 1
+      end
+
+      -- Если не нашли место (маловероятно), ставим в угол
+      state.foodX = 0
+      state.foodY = 0
+    end
+
+    -- Обработка клика по canvas
+    function handleTap(x, y)
+      if state.gameOver == "true" or state.isRunning == "false" then
+        return
+      end
+
+      -- Определяем зону клика
+      local edgeSize = 80  -- размер краевой зоны
+
+      -- Верхний край
+      if y < edgeSize and state.direction ~= DIR_DOWN then
+        state.nextDirection = DIR_UP
+      -- Нижний край
+      elseif y > CANVAS_SIZE - edgeSize and state.direction ~= DIR_UP then
+        state.nextDirection = DIR_DOWN
+      -- Левый край
+      elseif x < edgeSize and state.direction ~= DIR_RIGHT then
+        state.nextDirection = DIR_LEFT
+      -- Правый край
+      elseif x > CANVAS_SIZE - edgeSize and state.direction ~= DIR_LEFT then
+        state.nextDirection = DIR_RIGHT
+      end
+    end
+
+    -- Игровой тик
+    function gameTick()
+      if state.isProcessing == "true" then
+        return
+      end
+
+      if state.isRunning == "false" or state.gameOver == "true" then
+        return
+      end
+
+      state.isProcessing = "true"
+
+      -- Применяем запланированное направление
+      state.direction = state.nextDirection
+
+      local snake = parseSnake()
+      local head = snake[1]
+
+      -- Вычисляем новую позицию головы
+      local newHead = {x = head.x, y = head.y}
+
+      if state.direction == DIR_UP then
+        newHead.y = newHead.y - 1
+      elseif state.direction == DIR_DOWN then
+        newHead.y = newHead.y + 1
+      elseif state.direction == DIR_LEFT then
+        newHead.x = newHead.x - 1
+      elseif state.direction == DIR_RIGHT then
+        newHead.x = newHead.x + 1
+      end
+
+      -- Проверка столкновения со стенами
+      if newHead.x < 0 or newHead.x >= GRID_SIZE or 
+         newHead.y < 0 or newHead.y >= GRID_SIZE then
+        doGameOver()
+        return
+      end
+
+      -- Проверка столкновения с собой
+      for i, segment in ipairs(snake) do
+        if newHead.x == segment.x and newHead.y == segment.y then
+          doGameOver()
+          return
+        end
+      end
+
+      -- Добавляем новую голову
+      table.insert(snake, 1, newHead)
+
+      -- Проверка поедания еды
+      if newHead.x == state.foodX and newHead.y == state.foodY then
+        state.score = state.score + 10
+        spawnFood()
+
+        -- Ускоряемся каждые 50 очков
+        if state.score % 50 == 0 and state.speed > 80 then
+          state.speed = state.speed - 20
+        end
+      else
+        -- Убираем хвост (если не съели еду)
+        table.remove(snake)
+      end
+
+      saveSnake(snake)
+      render()
+
+      state.isProcessing = "false"
+
+      if state.isRunning == "true" and state.gameOver == "false" then
+        timer.once("gameTick", state.speed)
+      end
+    end
+
+    -- Запуск игры
+    function startGame()
+      if state.isRunning == "true" then
+        -- Пауза
+        state.isRunning = "false"
+        state.buttonText = "START"
+      else
+        -- Новая игра
+        state.snake = "10,10;10,11;10,12"
+        state.direction = DIR_UP
+        state.nextDirection = DIR_UP
+        state.score = 0
+        state.speed = 200
+        state.gameOver = "false"
+        state.isRunning = "true"
+        state.isProcessing = "false"
+        state.buttonText = "PAUSE"
+
+        spawnFood()
+        render()
+        timer.once("gameTick", state.speed)
+      end
+    end
+
+    -- Game Over
+    function doGameOver()
+      state.gameOver = "true"
+      state.isRunning = "false"
+      state.buttonText = "START"
+      render()
+    end
+
+    -- Инициализация при загрузке
+    render()
+  </script>
+
+  <style>
+    .title { color: #00ff00; font-size: 28; }
+    .info { color: #ffffff; font-size: 16; }
+    .gameover { color: #ff0000; font-size: 48; }
+    .finalScore { color: #ffffff; font-size: 32; }
+    .hint { color: #888888; font-size: 14; }
+    .btnStart { background: #00aa00; color: #ffffff; border-radius: 8; }
+  </style>
+</app>

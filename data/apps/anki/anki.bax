@@ -1,0 +1,153 @@
+<app version="1.0" category="study" icon="system:puzzle-game">
+  <ui default="/main">
+    <page id="main" bgcolor="#000">
+      <!-- Прогресс -->
+      <label x="5%" y="2%" color="#666" font="16">{progress}</label>
+
+      <!-- Карточка -->
+      <label x="0" y="12%" w="100%" h="45%" bgcolor="#1c1c1c"/>
+      <label align="center" x="5%" y="15%" w="90%" color="#fff" font="32">{front}</label>
+      <label align="center" x="5%" y="35%" w="90%" color="#a0a0a0" font="16">{back}</label>
+
+      <!-- Кнопка "Показать ответ" -->
+      <button id="btnShow" x="10%" y="60%" visible="{vShow}" onclick="showAnswer" w="80%" bgcolor="#505050">Показать</button>
+
+      <!-- Кнопки оценки (скрыты пока не показан ответ) -->
+      <button id="btnAgain" x="5%" y="60%" visible="{vRate}" onclick="again" w="29%" bgcolor="#ff5722">Снова</button>
+      <button id="btnGood" x="36%" y="60%" visible="{vRate}" onclick="good" w="29%" bgcolor="#ff9500">Хорошо</button>
+      <button id="btnEasy" x="67%" y="60%" visible="{vRate}" onclick="easy" w="28%" bgcolor="#4caf50">Легко</button>
+
+      <!-- Статистика внизу -->
+      <label align="center" x="0" y="92%" w="100%" color="#666" font="16">{stats}</label>
+    </page>
+
+    <page id="done" bgcolor="#000">
+      <label align="center" y="30%" color="#4caf50" font="48">✓</label>
+      <label align="center" y="50%" color="#fff" font="32">Готово!</label>
+      <label align="center" y="65%" color="#666">{doneStats}</label>
+      <button x="20%" y="80%" onclick="restart" w="60%" bgcolor="#ff9500">Заново</button>
+    </page>
+  </ui>
+
+  <style>
+    button { color: #fff; height: 50; }
+  </style>
+
+  <state>
+    <string name="front" default=""/>
+    <string name="back" default=""/>
+    <string name="vShow" default="true"/>
+    <string name="vRate" default="false"/>
+    <string name="progress" default=""/>
+    <string name="stats" default=""/>
+    <string name="doneStats" default=""/>
+  </state>
+
+  <script language="lua">
+    -- Колода карточек (английский -> русский)
+    local cards = {
+      {"cat", "кошка"},
+      {"dog", "собака"},
+      {"water", "вода"},
+      {"fire", "огонь"},
+      {"sun", "солнце"},
+      {"moon", "луна"},
+      {"tree", "дерево"},
+      {"river", "река"},
+      {"house", "дом"},
+      {"book", "книга"},
+    }
+
+    local queue = {}      -- очередь на повторение
+    local current = nil   -- текущая карточка
+    local revealed = false
+    local done = 0        -- выучено
+    local total = #cards
+
+    local function initQueue()
+      queue = {}
+      for i = 1, #cards do
+        queue[i] = i
+      end
+    end
+
+    local function updateUI()
+      if not current then
+        state.front = ""
+        state.back = ""
+        state.vShow = "false"
+        state.vRate = "false"
+        return
+      end
+
+      local card = cards[current]
+      state.front = card[1]
+      state.progress = done .. " / " .. total
+
+      if revealed then
+        state.back = card[2]
+        state.vShow = "false"
+        state.vRate = "true"
+      else
+        state.back = ""
+        state.vShow = "true"
+        state.vRate = "false"
+      end
+
+      state.stats = #queue .. " в очереди"
+    end
+
+    local function nextCard()
+      revealed = false
+      if #queue == 0 then
+        state.doneStats = "Выучено: " .. done .. " карточек"
+        ui.navigate("/done")
+        return
+      end
+      current = table.remove(queue, 1)
+      updateUI()
+    end
+
+    function showAnswer()
+      if current and not revealed then
+        revealed = true
+        updateUI()
+      end
+    end
+
+    function again()
+      if current and revealed then
+        -- Вернуть в конец очереди
+        table.insert(queue, current)
+        nextCard()
+      end
+    end
+
+    function good()
+      if current and revealed then
+        -- Убрать из очереди (выучено)
+        done = done + 1
+        nextCard()
+      end
+    end
+
+    function easy()
+      if current and revealed then
+        -- Убрать из очереди (выучено)
+        done = done + 1
+        nextCard()
+      end
+    end
+
+    function restart()
+      done = 0
+      initQueue()
+      ui.navigate("/main")
+      nextCard()
+    end
+
+    -- Старт
+    initQueue()
+    nextCard()
+  </script>
+</app>

@@ -1,0 +1,194 @@
+<app version="1.0" os="1.0">
+  <ui default="/calc">
+    <page id="calc" bgcolor="#000000">
+      <!-- Дисплей -->
+      <label class="display" align="right" x="12%" y="7%" w="76%" h="10%">{display}</label>
+
+      <!-- Ряд 1: C, +/-, %, / -->
+      <button class="btn btn-func" x="5%" y="21%" onclick="clear">C</button>
+      <button class="btn btn-func" x="28%" y="21%" onclick="negate">+/-</button>
+      <button class="btn btn-func" x="51%" y="21%" onclick="percent">%</button>
+      <button class="btn" x="74%" y="21%" onclick="opDiv" bgcolor="{bgDiv}" color="#fff">/</button>
+
+      <!-- Ряд 2: 7, 8, 9, * -->
+      <button class="btn btn-num" x="5%" y="35%" onclick="digit7">7</button>
+      <button class="btn btn-num" x="28%" y="35%" onclick="digit8">8</button>
+      <button class="btn btn-num" x="51%" y="35%" onclick="digit9">9</button>
+      <button class="btn" x="74%" y="35%" onclick="opMul" bgcolor="{bgMul}" color="#fff">x</button>
+
+      <!-- Ряд 3: 4, 5, 6, - -->
+      <button class="btn btn-num" x="5%" y="49%" onclick="digit4">4</button>
+      <button class="btn btn-num" x="28%" y="49%" onclick="digit5">5</button>
+      <button class="btn btn-num" x="51%" y="49%" onclick="digit6">6</button>
+      <button class="btn" x="74%" y="49%" onclick="opSub" bgcolor="{bgSub}" color="#fff">-</button>
+
+      <!-- Ряд 4: 1, 2, 3, + -->
+      <button class="btn btn-num" x="5%" y="63%" onclick="digit1">1</button>
+      <button class="btn btn-num" x="28%" y="63%" onclick="digit2">2</button>
+      <button class="btn btn-num" x="51%" y="63%" onclick="digit3">3</button>
+      <button class="btn" x="74%" y="63%" onclick="opAdd" bgcolor="{bgAdd}" color="#fff">+</button>
+
+      <!-- Ряд 5: DEL, 0, ., = -->
+      <button class="btn btn-func" x="5%" y="77%" onclick="backspace">DEL</button>
+      <button class="btn btn-num" x="28%" y="77%" onclick="digit0">0</button>
+      <button class="btn btn-num" x="51%" y="77%" onclick="dot">.</button>
+      <button class="btn btn-eq" x="74%" y="77%" onclick="equals">=</button>
+    </page>
+  </ui>
+
+  <state>
+    <string name="display" default="0"/>
+    <string name="op" default=""/>
+    <float name="prev" default="0"/>
+    <bool name="newInput" default="true"/>
+    <string name="bgAdd" default="#ff9500"/>
+    <string name="bgSub" default="#ff9500"/>
+    <string name="bgMul" default="#ff9500"/>
+    <string name="bgDiv" default="#ff9500"/>
+  </state>
+
+  <script language="lua">
+    local OP_NORMAL = "#ff9500"
+    local OP_ACTIVE = "#ffc966"
+
+    local function resetOpBtns()
+      state.bgAdd = OP_NORMAL
+      state.bgSub = OP_NORMAL
+      state.bgMul = OP_NORMAL
+      state.bgDiv = OP_NORMAL
+    end
+
+    function appendDigit(d)
+      if state.newInput then
+        state.display = d
+        state.newInput = false
+        resetOpBtns()
+      else
+        if state.display == '0' then
+          state.display = d
+        else
+          state.display = state.display .. d
+        end
+      end
+    end
+
+    function digit0() appendDigit('0') end
+    function digit1() appendDigit('1') end
+    function digit2() appendDigit('2') end
+    function digit3() appendDigit('3') end
+    function digit4() appendDigit('4') end
+    function digit5() appendDigit('5') end
+    function digit6() appendDigit('6') end
+    function digit7() appendDigit('7') end
+    function digit8() appendDigit('8') end
+    function digit9() appendDigit('9') end
+
+    function dot()
+      if state.newInput then
+        state.display = '0.'
+        state.newInput = false
+        resetOpBtns()
+      elseif not string.find(state.display, '%.') then
+        state.display = state.display .. '.'
+      end
+    end
+
+    function clear()
+      state.display = '0'
+      state.op = ''
+      state.prev = 0
+      state.newInput = true
+      resetOpBtns()
+    end
+
+    function backspace()
+      if string.len(state.display) > 1 then
+        state.display = string.sub(state.display, 1, -2)
+      else
+        state.display = '0'
+      end
+    end
+
+    function negate()
+      local n = tonumber(state.display) or 0
+      state.display = tostring(-n)
+    end
+
+    function percent()
+      local n = tonumber(state.display) or 0
+      state.display = tostring(n / 100)
+    end
+
+    function setOp(newOp, bgVar)
+      if state.op ~= '' and not state.newInput then
+        equals()
+      end
+      state.prev = tonumber(state.display) or 0
+      state.op = newOp
+      state.newInput = true
+      resetOpBtns()
+      state[bgVar] = OP_ACTIVE
+    end
+
+    function opAdd() setOp('+', 'bgAdd') end
+    function opSub()
+      -- Если уже есть операция и ждём ввода — это минус числа
+      if state.op ~= '' and state.newInput then
+        state.display = '-'
+        state.newInput = false
+        -- НЕ сбрасываем подсветку - операция всё ещё активна
+      else
+        setOp('-', 'bgSub')
+      end
+    end
+    function opMul() setOp('*', 'bgMul') end
+    function opDiv() setOp('/', 'bgDiv') end
+
+    function equals()
+      local curr = tonumber(state.display) or 0
+      local result = curr
+
+      if state.op == '+' then
+        result = state.prev + curr
+      elseif state.op == '-' then
+        result = state.prev - curr
+      elseif state.op == '*' then
+        result = state.prev * curr
+      elseif state.op == '/' then
+        if curr ~= 0 then
+          result = state.prev / curr
+        else
+          state.display = 'Err'
+          state.op = ''
+          state.newInput = true
+          resetOpBtns()
+          return
+        end
+      end
+
+      if result == math.floor(result) then
+        state.display = tostring(math.floor(result))
+      else
+        state.display = string.format('%.6g', result)
+      end
+
+      state.op = ''
+      state.newInput = true
+      resetOpBtns()
+    end
+  </script>
+
+  <style>
+  /* Auto-generated */
+
+    button { height: 12%; width: 21%; }
+
+  /* Original */
+
+    .display { background: #1c1c1c; color: #ffffff; font-size: 32; border-radius: 8; padding-left: 10; padding-right: 10; }
+    .btn { border-radius: 12px; }
+    .btn-num { background: #505050; color: #ffffff; }
+    .btn-func { background: #a0a0a0; color: #000000; }
+    .btn-eq { background: #ff9500; color: #ffffff; }
+  </style>
+</app>

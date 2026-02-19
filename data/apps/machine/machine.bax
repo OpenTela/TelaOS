@@ -1,0 +1,117 @@
+<app>
+  <ui default="/main">
+    <group id="main" default="status" orientation="horizontal" indicator="dots">
+      <page id="status" bgcolor="#000">
+        <!-- Индикатор статуса -->
+        <label x="15%" y="10%" w="70%" h="120" bgcolor="{bgColor}" color="{iconColor}" font="72" radius="16" text-align="center" text-valign="center">{icon}</label>
+
+        <!-- Информация -->
+        <label y="45%" align="center" color="#fff" font="32">{status}</label>
+        <label y="58%" align="center" color="#888" font="16">{time}</label>
+
+        <!-- Управление -->
+        <button x="5%" y="72%" onclick="good" w="43%" h="70" bgcolor="#2e7d32" color="#fff" font="32" radius="12">Хорошо</button>
+        <button x="52%" y="72%" onclick="bad" w="43%" h="70" bgcolor="#c62828" color="#fff" font="32" radius="12">Плохо</button>
+      </page>
+
+      <page id="log" bgcolor="#000">
+        <label align="center" y="3%" color="#888" font="16">Лог</label>
+        <label x="5%" y="12%" class="text">{log0}</label>
+        <label x="5%" y="20%" class="text">{log1}</label>
+        <label x="5%" y="28%" class="text">{log2}</label>
+        <label x="5%" y="36%" class="text">{log3}</label>
+        <label x="5%" y="44%" class="text">{log4}</label>
+        <label x="5%" y="52%" class="text">{log5}</label>
+        <label x="5%" y="60%" class="text">{log6}</label>
+        <label x="5%" y="68%" class="text">{log7}</label>
+      </page>
+    </group>
+  </ui>
+
+  <style>
+    .text { color: #fff; font: 16; width: 90%; }
+  </style>
+
+  <state>
+    <string name="bgColor" default="#333"/>
+    <string name="iconColor" default="#888"/>
+    <string name="icon" default="?"/>
+    <string name="status" default="Ожидание"/>
+    <string name="time" default=""/>
+    <string name="isGood" default="true"/>
+    <string name="log0" default=""/>
+    <string name="log1" default=""/>
+    <string name="log2" default=""/>
+    <string name="log3" default=""/>
+    <string name="log4" default=""/>
+    <string name="log5" default=""/>
+    <string name="log6" default=""/>
+    <string name="log7" default=""/>
+    <string name="mins" default="0"/>
+    <string name="secs" default="0"/>
+  </state>
+
+  <timer interval="1000" call="tick"/>
+
+  <script language="lua">
+    local function getTime()
+      local m = tonumber(state.mins) or 0
+      local s = tonumber(state.secs) or 0
+      return string.format("%02d:%02d", m, s)
+    end
+
+    local function addLog(msg)
+      state.log7 = state.log6
+      state.log6 = state.log5
+      state.log5 = state.log4
+      state.log4 = state.log3
+      state.log3 = state.log2
+      state.log2 = state.log1
+      state.log1 = state.log0
+      state.log0 = getTime() .. " " .. msg
+    end
+
+    function good()
+      state.isGood = "true"
+      state.bgColor = "#1b5e20"
+      state.iconColor = "#FFF"
+      state.icon = "OK"
+      state.status = "Хорошо"
+      state.time = getTime()
+      addLog("+ OK")
+    end
+
+    function bad()
+      state.isGood = "false"
+      state.bgColor = "#b71c1c"
+      state.iconColor = "#FFF"
+      state.icon = "!"
+      state.status = "Плохо"
+      state.time = getTime()
+      addLog("- ПЛОХО")
+    end
+
+    local blink = 0
+
+    function tick()
+      local s = tonumber(state.secs) or 0
+      local m = tonumber(state.mins) or 0
+      s = s + 1
+      if s >= 60 then
+        s = 0
+        m = m + 1
+      end
+      state.secs = tostring(s)
+      state.mins = tostring(m)
+
+      if state.isGood == "false" then
+        blink = 1 - blink
+        if blink == 1 then
+          state.bgColor = "#000"
+        else
+          state.bgColor = "#b71c1c"
+        end
+      end
+    end
+  </script>
+</app>

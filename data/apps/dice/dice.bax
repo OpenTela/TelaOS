@@ -1,0 +1,20 @@
+<app version="1.0" os="1.0" category="game">
+  <ui default="/main">
+    <page id="main" bgcolor="#1a1a2e">
+      <label align="center" y="8%" color="#ffffff" font="24">КУБИК</label>
+      <label align="center" y="40%" color="#f1c40f" font="72">{result}</label>
+      <button align="center" y="70%" class="btn" onclick="roll" w="70%" h="60">БРОСИТЬ</button>
+    </page>
+  </ui>
+  <state>
+    <string name="result" default="?"/>
+  </state>
+  <script language="lua">
+    function roll()
+      state.result = tostring(math.random(1, 6))
+    end
+  </script>
+  <style>
+    .btn { background: #e74c3c; color: #ffffff; border-radius: 16px; font-size: 24px; }
+  </style>
+</app>

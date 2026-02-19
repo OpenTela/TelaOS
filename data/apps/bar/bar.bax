@@ -1,0 +1,103 @@
+<app>
+  <ui default="/main">
+    <page id="main" bgcolor="#000">
+      <!-- Дисплей -->
+      <label x="5%" y="7%" w="90%" h="100" bgcolor="#1c1c1c" radius="8"/>
+
+      <label x="10%" y="10%" color="#ff9500" font="16">Пиво</label>
+      <label align="right" x="55%" y="9%" w="35%" color="#fff" font="32">{beer} л</label>
+
+      <label x="10%" y="24%" color="#722f37" font="16">Вино</label>
+      <label align="right" x="55%" y="23%" w="35%" color="#fff" font="32">{wine} л</label>
+
+      <!-- Итого -->
+      <label x="5%" y="50%" w="90%" h="60" bgcolor="#1c1c1c" radius="8"/>
+      <label align="center" x="5%" y="54%" w="90%" color="#4caf50" font="48">{total} л</label>
+
+      <!-- Пиво -->
+      <button x="5%" y="67%" onclick="b03" w="21%" h="55" bgcolor="#505050" color="#fff" font="32" radius="12">0.3</button>
+      <button x="28%" y="67%" onclick="b05" w="44%" h="55" bgcolor="#ff9500" color="#fff" font="32" radius="12">0.5</button>
+      <button x="74%" y="67%" onclick="b065" w="21%" h="55" bgcolor="#505050" color="#fff" font="32" radius="12">.65</button>
+
+      <!-- Вино -->
+      <button x="5%" y="81%" onclick="wHalf" w="44%" h="55" bgcolor="#722f37" color="#fff" font="32" radius="12">1/2</button>
+      <button x="51%" y="81%" onclick="wFull" w="44%" h="55" bgcolor="#722f37" color="#fff" font="32" radius="12">1</button>
+
+      <!-- Отмена мелко -->
+      <button x="74%" y="95%" onclick="undo" w="21%" h="28" bgcolor="#333" color="#666" font="16" radius="8">←</button>
+    </page>
+  </ui>
+
+  <state>
+    <string name="beer" default="0"/>
+    <string name="wine" default="0"/>
+    <string name="total" default="0"/>
+    <string name="lastType" default=""/>
+    <string name="lastAmt" default="0"/>
+  </state>
+
+  <script language="lua">
+    local function round(n)
+      return math.floor(n * 100 + 0.5) / 100
+    end
+
+    local function fmt(n)
+      if n == math.floor(n) then
+        return tostring(math.floor(n))
+      else
+        return tostring(n)
+      end
+    end
+
+    local function update()
+      local b = tonumber(state.beer) or 0
+      local w = tonumber(state.wine) or 0
+      state.total = fmt(round(b + w))
+    end
+
+    local function addBeer(amt)
+      local b = tonumber(state.beer) or 0
+      state.beer = fmt(round(b + amt))
+      state.lastType = "beer"
+      state.lastAmt = tostring(amt)
+      update()
+    end
+
+    local function addWine(amt)
+      local w = tonumber(state.wine) or 0
+      state.wine = fmt(round(w + amt))
+      state.lastType = "wine"
+      state.lastAmt = tostring(amt)
+      update()
+    end
+
+    function b03() addBeer(0.3) end
+    function b05() addBeer(0.5) end
+    function b065() addBeer(0.65) end
+
+    function wHalf() addWine(0.375) end  -- половина бутылки
+    function wFull() addWine(0.75) end   -- бутылка
+
+    function undo()
+      local amt = tonumber(state.lastAmt) or 0
+      if amt > 0 then
+        if state.lastType == "beer" then
+          local b = tonumber(state.beer) or 0
+          if b >= amt then
+            state.beer = fmt(round(b - amt))
+          end
+        elseif state.lastType == "wine" then
+          local w = tonumber(state.wine) or 0
+          if w >= amt then
+            state.wine = fmt(round(w - amt))
+          end
+        end
+        state.lastType = ""
+        state.lastAmt = "0"
+        update()
+      end
+    end
+
+    update()
+  </script>
+</app>

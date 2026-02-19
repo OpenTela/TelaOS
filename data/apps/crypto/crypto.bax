@@ -1,0 +1,86 @@
+<app version="1.0" os="1.0">
+  <config>
+    <network/>
+  </config>
+
+  <ui default="/main">
+    <page id="main">
+      <label align="center" y="10" color="#58a6ff" font="32">Crypto</label>
+
+      <label align="center" y="50" color="#888" font="16">{bleStatus}</label>
+
+      <label align="center" y="110" color="#f7931a" font="32">BTC: {btcPrice}</label>
+      <label align="center" y="180" color="#627eea" font="32">ETH: {ethPrice}</label>
+      <label align="center" y="250" color="#666" font="16">{lastUpdate}</label>
+
+      <button x="10%" y="300" onclick="refresh" w="35%" h="40" bgcolor="#238636" color="#fff" radius="8">Refresh</button>
+      <button x="55%" y="300" onclick="goHome" w="35%" h="40" bgcolor="#555" color="#fff" radius="8">Home</button>
+    </page>
+  </ui>
+
+  <state>
+    <string name="bleStatus" default="Checking BLE..."/>
+    <string name="btcPrice" default="$--,---"/>
+    <string name="ethPrice" default="$--,---"/>
+    <string name="lastUpdate" default="Tap Refresh"/>
+  </state>
+
+  <timer interval="5000" call="checkBLE"/>
+
+  <script language="lua">
+    function formatPrice(price)
+      local s = string.format("%.0f", price)
+      local result = ""
+      local len = #s
+      for i = 1, len do
+        if i > 1 and (len - i + 1) % 3 == 0 then
+          result = result .. " "
+        end
+        result = result .. string.sub(s, i, i)
+      end
+      return "$" .. result
+    end
+
+    function checkBLE()
+      if net.connected() then
+        state.bleStatus = "BLE: OK"
+      else
+        state.bleStatus = "BLE: ..."
+      end
+    end
+
+    function refresh()
+      if not net.connected() then
+        state.lastUpdate = "No BLE!"
+        return
+      end
+
+      state.lastUpdate = "Loading..."
+
+      net.fetch({
+        url = "https://api.coinlore.net/api/ticker/?id=90,80",
+        authorize = true,
+        format = "json",
+        fields = {"0.price_usd", "1.price_usd"}
+      }, function(resp)
+        if resp.status == 200 then
+          local body = resp.body
+          local btc = tonumber(body["0.price_usd"]) or 0
+          local eth = tonumber(body["1.price_usd"]) or 0
+          state.btcPrice = formatPrice(btc)
+          state.ethPrice = formatPrice(eth)
+          state.lastUpdate = "Updated"
+        else
+          state.lastUpdate = resp.error or ("Error " .. resp.status)
+        end
+      end)
+    end
+
+    function goHome()
+      exit()
+    end
+  </script>
+
+  <style>
+  </style>
+</app>

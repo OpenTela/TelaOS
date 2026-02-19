@@ -1,0 +1,293 @@
+<app version="1.0" os="1.0">
+  <ui default="/main">
+    <group id="main" default="stopwatch" orientation="horizontal" indicator="dots">
+
+      <!-- СТРАНИЦА 1: СЕКУНДОМЕР -->
+      <page id="stopwatch">
+        <label align="center" y="5%" class="text-md">СЕКУНДОМЕР</label>
+
+        <label align="center" y="18%" color="#00ffcc" font="72">{sw_time}</label>
+        <label align="center" y="34%" class="text-muted">Круг: {sw_lap}</label>
+
+        <button x="5%" y="44%" class="btn btn-green" onclick="swStart">Старт</button>
+        <button x="53%" y="44%" class="btn btn-orange" onclick="swLap">Круг</button>
+
+        <button x="5%" y="56%" class="btn btn-yellow" onclick="swPause">Пауза</button>
+        <button x="53%" y="56%" class="btn btn-red" onclick="swReset">Сброс</button>
+
+        <label x="8%" y="72%" class="text">История кругов:</label>
+        <label x="8%" y="78%" color="#dddddd" font="16">{sw_laps}</label>
+      </page>
+
+      <!-- СТРАНИЦА 2: ТАЙМЕР -->
+      <page id="timer">
+        <label align="center" y="5%" class="text-md">ТАЙМЕР</label>
+
+        <label align="center" y="18%" color="#ffff00" font="72">{tm_time}</label>
+        <label align="center" y="34%" class="text-muted">{tm_status}</label>
+
+        <label x="5%" y="42%" class="text">Минуты: {tm_minutes}</label>
+        <slider x="5%" y="48%" min="0" max="120" bind="tm_minutes" onchange="tmUpdateFromMinutes"/>
+
+        <button x="5%" y="60%" class="btn btn-green" onclick="tmStart">Старт</button>
+        <button x="53%" y="60%" class="btn btn-orange" onclick="tmPause">Пауза</button>
+
+        <button x="5%" y="72%" class="btn btn-blue" onclick="tmAdd1Min">+1 мин</button>
+        <button x="53%" y="72%" class="btn btn-red" onclick="tmReset">Сброс</button>
+      </page>
+
+      <!-- СТРАНИЦА 3: ИНТЕРВАЛЫ -->
+      <page id="intervals">
+        <label align="center" y="5%" class="text-md">ИНТЕРВАЛЫ</label>
+
+        <label align="center" y="16%" class="{iv_modeClass}" font="32">{iv_mode}</label>
+        <label align="center" y="26%" color="#ffffff" font="72">{iv_time}</label>
+        <label align="center" y="42%" class="text-muted">
+          Раунд {iv_round} из {iv_totalRounds}
+        </label>
+
+        <label x="5%" y="50%" class="text">
+          Работа: {iv_work} мин
+        </label>
+        <slider x="5%" y="56%" min="1" max="60" bind="iv_work" onchange="ivReset"/>
+
+        <label x="5%" y="65%" class="text">
+          Отдых: {iv_rest} мин
+        </label>
+        <slider x="5%" y="71%" min="1" max="30" bind="iv_rest" onchange="ivReset"/>
+
+        <button x="5%" y="83%" class="btn btn-green" onclick="ivStart">Старт</button>
+        <button x="53%" y="83%" class="btn btn-red" onclick="ivStop">Стоп</button>
+      </page>
+
+    </group>
+  </ui>
+
+  <state>
+    <!-- СЕКУНДОМЕР -->
+    <bool   name="sw_running" default="false"/>
+    <int    name="sw_ms" default="0"/>
+    <string name="sw_time" default="00:00.0"/>
+    <int    name="sw_lapCount" default="0"/>
+    <string name="sw_lap" default="--:--.-"/>
+    <string name="sw_laps" default="-"/>
+
+    <!-- ТАЙМЕР -->
+    <bool   name="tm_running" default="false"/>
+    <int    name="tm_left" default="300"/>
+    <int    name="tm_minutes" default="5"/>
+    <string name="tm_time" default="05:00"/>
+    <string name="tm_status" default="Готов"/>
+
+    <!-- ИНТЕРВАЛЫ -->
+    <bool   name="iv_running" default="false"/>
+    <int    name="iv_phase" default="0"/> <!-- 0 = работа, 1 = отдых -->
+    <int    name="iv_left" default="1500"/>
+    <int    name="iv_work" default="25"/>
+    <int    name="iv_rest" default="5"/>
+    <int    name="iv_round" default="1"/>
+    <int    name="iv_totalRounds" default="4"/>
+    <string name="iv_mode" default="РАБОТА"/>
+    <string name="iv_modeClass" default="mode-work"/>
+    <string name="iv_time" default="25:00"/>
+  </state>
+
+  <!-- Таймер 100 мс: секундомер -->
+  <timer interval="100" call="tick100"/>
+  <!-- Таймер 1 сек: таймер и интервалы -->
+  <timer interval="1000" call="tick1s"/>
+
+  <script language="lua">
+    -- Вспомогательные функции
+    function clamp(n, a, b)
+      if n < a then return a end
+      if n > b then return b end
+      return n
+    end
+
+    function fmt_mmss(seconds)
+      if seconds < 0 then seconds = 0 end
+      local m = math.floor(seconds / 60)
+      local s = seconds % 60
+      return string.format("%02d:%02d", m, s)
+    end
+
+    function fmt_stopwatch(ms)
+      if ms < 0 then ms = 0 end
+      local total = math.floor(ms / 1000)
+      local m = math.floor(total / 60)
+      local s = total % 60
+      local t = math.floor((ms % 1000) / 100)
+      return string.format("%02d:%02d.%d", m, s, t)
+    end
+
+    function syncTimerText()
+      state.tm_time = fmt_mmss(state.tm_left)
+      if state.tm_running then
+        state.tm_status = "Идёт"
+      else
+        if state.tm_left <= 0 then
+          state.tm_status = "Готово"
+        else
+          state.tm_status = "Готов"
+        end
+      end
+    end
+
+    function syncIntervalsText()
+      state.iv_time = fmt_mmss(state.iv_left)
+      if state.iv_phase == 0 then
+        state.iv_mode = "РАБОТА"
+        state.iv_modeClass = "mode-work"
+      else
+        state.iv_mode = "ОТДЫХ"
+        state.iv_modeClass = "mode-rest"
+      end
+    end
+
+    -- Управление секундомером
+    function swStart() state.sw_running = true end
+    function swPause() state.sw_running = false end
+
+    function swReset()
+      state.sw_running = false
+      state.sw_ms = 0
+      state.sw_time = fmt_stopwatch(0)
+      state.sw_lapCount = 0
+      state.sw_lap = "--:--.-"
+      state.sw_laps = "-"
+    end
+
+    function swLap()
+      local t = state.sw_time
+      state.sw_lap = t
+      state.sw_lapCount = state.sw_lapCount + 1
+      local line = string.format("%d) %s", state.sw_lapCount, t)
+
+      if state.sw_laps == "-" or state.sw_laps == "" then
+        state.sw_laps = line
+      else
+        state.sw_laps = line .. "\n" .. state.sw_laps
+      end
+    end
+
+    -- Управление таймером
+    function tmUpdateFromMinutes()
+      if state.tm_running then return end
+      state.tm_left = clamp(state.tm_minutes, 0, 120) * 60
+      syncTimerText()
+    end
+
+    function tmStart()
+      if state.tm_left <= 0 then
+        state.tm_left = state.tm_minutes * 60
+      end
+      state.tm_running = true
+      syncTimerText()
+    end
+
+    function tmPause()
+      state.tm_running = false
+      syncTimerText()
+    end
+
+    function tmReset()
+      state.tm_running = false
+      state.tm_left = state.tm_minutes * 60
+      syncTimerText()
+    end
+
+    function tmAdd1Min()
+      state.tm_left = clamp(state.tm_left + 60, 0, 7200)
+      state.tm_minutes = math.floor(state.tm_left / 60)
+      syncTimerText()
+    end
+
+    -- Интервалы
+    function ivReset()
+      state.iv_running = false
+      state.iv_phase = 0
+      state.iv_round = 1
+      state.iv_left = state.iv_work * 60
+      syncIntervalsText()
+    end
+
+    function ivStart()
+      if state.iv_left <= 0 then ivReset() end
+      state.iv_running = true
+    end
+
+    function ivStop()
+      state.iv_running = false
+      ivReset()
+    end
+
+    -- Тики
+    function tick100()
+      if state.sw_running then
+        state.sw_ms = state.sw_ms + 100
+        state.sw_time = fmt_stopwatch(state.sw_ms)
+      end
+    end
+
+    function tick1s()
+      if state.tm_running then
+        state.tm_left = state.tm_left - 1
+        if state.tm_left <= 0 then
+          state.tm_left = 0
+          state.tm_running = false
+        end
+        syncTimerText()
+      end
+
+      if state.iv_running then
+        state.iv_left = state.iv_left - 1
+        if state.iv_left <= 0 then
+          if state.iv_phase == 0 then
+            state.iv_phase = 1
+            state.iv_left = state.iv_rest * 60
+          else
+            if state.iv_round >= state.iv_totalRounds then
+              state.iv_running = false
+              state.iv_left = 0
+            else
+              state.iv_round = state.iv_round + 1
+              state.iv_phase = 0
+              state.iv_left = state.iv_work * 60
+            end
+          end
+        end
+        syncIntervalsText()
+      end
+    end
+
+    -- Инициализация
+    state.sw_time = fmt_stopwatch(state.sw_ms)
+    syncTimerText()
+    ivReset()
+  </script>
+
+  <style>
+  /* Auto-generated */
+
+    button { height: 45; width: 42%; }
+    page { bgcolor: #000000; }
+    slider { width: 90%; }
+
+    .text { color: #aaaaaa; font: 16; }
+    .text-md { color: #ffffff; font: 32; }
+    .text-muted { color: #666666; font: 16; }
+
+  /* Original */
+
+    .btn { border-radius: 12px; padding: 10px; }
+    .btn-green  { background: #2ecc71; color: #ffffff; }
+    .btn-orange { background: #f39c12; color: #000000; }
+    .btn-yellow { background: #f1c40f; color: #000000; }
+    .btn-red    { background: #e74c3c; color: #ffffff; }
+    .btn-blue   { background: #3498db; color: #ffffff; }
+
+    .mode-work { color: #e74c3c; font-size: 32px; }
+    .mode-rest { color: #2ecc71; font-size: 32px; }
+  </style>
+</app>

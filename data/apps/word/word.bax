@@ -1,0 +1,41 @@
+<app title="Word">
+  <ui default="/main">
+    <page id="main" bgcolor="#000000">
+      <label align="center" y="0" w="100%" h="44" bgcolor="#111111" 
+             color="#AAAAAA" text-align="center center" font="32">Word</label>
+      <tabs id="editor" x="0" y="48" w="100%" h="90%" barh="30">
+        <tab title="Edit">
+          <input id="text" x="2%" y="5" multiline="true" bind="text" placeholder="Type markdown here..." w="96%" h="80%"/>
+        </tab>
+        <tab title="Preview">
+          <markdown id="preview" x="3%" y="3%" w="94%" h="94%" color="#ffffff">{text}</markdown>
+        </tab>
+      </tabs>
+    </page>
+  </ui>
+
+  <state>
+    <string name="text" default="# My Notes
+
+This is **bold** and *italic* text.
+
+Use `code` for inline snippets.
+
+## Shopping List
+
+- Milk
+- Bread
+- Eggs
+
+## Steps
+
+1. Preheat oven to 180C
+2. Mix ingredients together
+3. Bake for 25 minutes
+4. Let it cool down
+
+### Tips
+
+Regular text with **bold** words."/>
+  </state>
+</app>

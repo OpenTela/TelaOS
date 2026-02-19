@@ -1,0 +1,300 @@
+<app version="1.0" os="1.0" category="game">
+  <ui default="/game">
+    <page id="game" bgcolor="#2a2a3a">
+      <label class="title" align="center" y="2%">MEMORY CARDS</label>
+      <canvas id="gameCanvas" x="5%" y="10%" ontap="handleTap" w="350" h="350"/>
+
+      <!-- Game Over overlay -->
+      <label visible="{gameOver}" class="gameover" align="center" y="35%">YOU WIN!</label>
+      <label visible="{gameOver}" class="finalScore" align="center" y="45%">Moves: {moves}</label>
+
+      <label class="info" align="center" y="78%">Moves: {moves} | Pairs: {pairsFound}/8</label>
+
+      <button class="btnStart" x="35%" y="86%" onclick="startGame" w="30%" h="60">{buttonText}</button>
+    </page>
+  </ui>
+
+  <state>
+    <int name="moves" default="0"/>
+    <int name="pairsFound" default="0"/>
+    <string name="gameOver" default="false"/>
+    <string name="isRunning" default="false"/>
+    <string name="buttonText" default="START"/>
+
+    <!-- Карты: "0,0,0,0;0,0,0,0;0,0,0,0;0,0,0,0" где 0=закрыта, число=открыта -->
+    <string name="cards" default=""/>
+    <string name="cardValues" default=""/>  -- Какое значение у каждой карты
+
+    <!-- Выбранные карты -->
+    <int name="firstCard" default="-1"/>
+    <int name="secondCard" default="-1"/>
+    <string name="waiting" default="false"/>
+  </state>
+
+  <script language="lua">
+    -- Константы
+    local CANVAS_SIZE = 350
+    local GRID_SIZE = 4
+    local CARD_SIZE = 80
+    local CARD_GAP = 5
+    local TOTAL_PAIRS = 8
+
+    -- Цвета для карт (8 цветов для 8 пар)
+    local CARD_COLORS = {
+      0xff0000,  -- красный
+      0x00ff00,  -- зелёный
+      0x0000ff,  -- синий
+      0xffff00,  -- жёлтый
+      0xff00ff,  -- пурпурный
+      0x00ffff,  -- голубой
+      0xff8800,  -- оранжевый
+      0x8800ff   -- фиолетовый
+    }
+
+    local COLOR_BG = 0x2a2a3a
+    local COLOR_CARD_BACK = 0x4a4a5a
+    local COLOR_CARD_MATCHED = 0x1a1a2a
+
+    -- Парсинг карт
+    function parseCards()
+      local cards = {}
+      local str = state.cards
+      local idx = 1
+
+      for row = 1, GRID_SIZE do
+        cards[row] = {}
+        for col = 1, GRID_SIZE do
+          local match = string.match(str, "(%d+)", idx)
+          cards[row][col] = tonumber(match)
+          idx = idx + #match + 1
+        end
+      end
+
+      return cards
+    end
+
+    -- Парсинг значений карт
+    function parseCardValues()
+      local values = {}
+      local str = state.cardValues
+      local idx = 1
+
+      for row = 1, GRID_SIZE do
+        values[row] = {}
+        for col = 1, GRID_SIZE do
+          local match = string.match(str, "(%d+)", idx)
+          values[row][col] = tonumber(match)
+          idx = idx + #match + 1
+        end
+      end
+
+      return values
+    end
+
+    -- Сохранение карт
+    function saveCards(cards)
+      local rows = {}
+      for i = 1, GRID_SIZE do
+        local cols = {}
+        for j = 1, GRID_SIZE do
+          table.insert(cols, tostring(cards[i][j]))
+        end
+        table.insert(rows, table.concat(cols, ","))
+      end
+      state.cards = table.concat(rows, ";")
+    end
+
+    -- Перемешивание карт
+    function shuffleCards()
+      local values = {}
+
+      -- Создаём пары (по 2 карты каждого цвета)
+      for i = 1, TOTAL_PAIRS do
+        table.insert(values, i)
+        table.insert(values, i)
+      end
+
+      -- Перемешиваем
+      for i = #values, 2, -1 do
+        local j = math.floor(math.random() * i) + 1
+        values[i], values[j] = values[j], values[i]
+      end
+
+      -- Раскладываем в сетку
+      local cardValues = {}
+      local idx = 1
+      for row = 1, GRID_SIZE do
+        cardValues[row] = {}
+        for col = 1, GRID_SIZE do
+          cardValues[row][col] = values[idx]
+          idx = idx + 1
+        end
+      end
+
+      -- Сохраняем значения
+      local rows = {}
+      for i = 1, GRID_SIZE do
+        local cols = {}
+        for j = 1, GRID_SIZE do
+          table.insert(cols, tostring(cardValues[i][j]))
+        end
+        table.insert(rows, table.concat(cols, ","))
+      end
+      state.cardValues = table.concat(rows, ";")
+
+      -- Все карты закрыты
+      local cards = {}
+      for row = 1, GRID_SIZE do
+        cards[row] = {}
+        for col = 1, GRID_SIZE do
+          cards[row][col] = 0  -- 0 = закрыта
+        end
+      end
+      saveCards(cards)
+    end
+
+    function render()
+      canvas.clear("gameCanvas", COLOR_BG)
+
+      local cards = parseCards()
+      local values = parseCardValues()
+
+      for row = 1, GRID_SIZE do
+        for col = 1, GRID_SIZE do
+          local x = (col - 1) * (CARD_SIZE + CARD_GAP) + 10
+          local y = (row - 1) * (CARD_SIZE + CARD_GAP) + 10
+
+          local state_val = cards[row][col]
+
+          if state_val == 0 then
+            -- Закрытая карта
+            canvas.rect("gameCanvas", x, y, CARD_SIZE, CARD_SIZE, COLOR_CARD_BACK)
+          elseif state_val == 1 then
+            -- Открытая карта
+            local color = CARD_COLORS[values[row][col]]
+            canvas.rect("gameCanvas", x, y, CARD_SIZE, CARD_SIZE, color)
+          elseif state_val == 2 then
+            -- Найденная пара
+            canvas.rect("gameCanvas", x, y, CARD_SIZE, CARD_SIZE, COLOR_CARD_MATCHED)
+          end
+        end
+      end
+    end
+
+    function handleTap(x, y)
+      if state.gameOver == "true" or state.isRunning == "false" or state.waiting == "true" then
+        return
+      end
+
+      -- Определяем карту
+      local col = math.floor((x - 10) / (CARD_SIZE + CARD_GAP)) + 1
+      local row = math.floor((y - 10) / (CARD_SIZE + CARD_GAP)) + 1
+
+      if row < 1 or row > GRID_SIZE or col < 1 or col > GRID_SIZE then
+        return
+      end
+
+      local cards = parseCards()
+
+      -- Карта уже открыта или найдена?
+      if cards[row][col] > 0 then
+        return
+      end
+
+      -- Открываем карту
+      cards[row][col] = 1
+      saveCards(cards)
+
+      local cardIndex = (row - 1) * GRID_SIZE + col
+
+      if state.firstCard == -1 then
+        -- Первая карта
+        state.firstCard = cardIndex
+      elseif state.secondCard == -1 then
+        -- Вторая карта
+        state.secondCard = cardIndex
+        state.moves = state.moves + 1
+        state.waiting = "true"
+
+        render()
+
+        -- Проверяем совпадение через задержку
+        timer.once("checkMatch", 500)
+        return
+      end
+
+      render()
+    end
+
+    function checkMatch()
+      local cards = parseCards()
+      local values = parseCardValues()
+
+      local r1 = math.floor((state.firstCard - 1) / GRID_SIZE) + 1
+      local c1 = ((state.firstCard - 1) % GRID_SIZE) + 1
+      local r2 = math.floor((state.secondCard - 1) / GRID_SIZE) + 1
+      local c2 = ((state.secondCard - 1) % GRID_SIZE) + 1
+
+      if values[r1][c1] == values[r2][c2] then
+        -- Совпадение!
+        cards[r1][c1] = 2
+        cards[r2][c2] = 2
+        state.pairsFound = state.pairsFound + 1
+
+        if state.pairsFound >= TOTAL_PAIRS then
+          saveCards(cards)
+          render()
+          doGameOver()
+          return
+        end
+      else
+        -- Не совпали - закрываем обратно
+        cards[r1][c1] = 0
+        cards[r2][c2] = 0
+      end
+
+      saveCards(cards)
+      state.firstCard = -1
+      state.secondCard = -1
+      state.waiting = "false"
+
+      render()
+    end
+
+    function startGame()
+      if state.isRunning == "true" then
+        state.isRunning = "false"
+        state.buttonText = "START"
+      else
+        state.moves = 0
+        state.pairsFound = 0
+        state.firstCard = -1
+        state.secondCard = -1
+        state.waiting = "false"
+        state.gameOver = "false"
+        state.isRunning = "true"
+        state.buttonText = "RESTART"
+
+        shuffleCards()
+        render()
+      end
+    end
+
+    function doGameOver()
+      state.gameOver = "true"
+      state.isRunning = "false"
+      state.buttonText = "START"
+    end
+
+    shuffleCards()
+    render()
+  </script>
+
+  <style>
+    .title { color: #ffaa00; font-size: 28; }
+    .info { color: #ffffff; font-size: 18; }
+    .gameover { color: #00ff00; font-size: 40; }
+    .finalScore { color: #ffffff; font-size: 28; }
+    .btnStart { background: #ffaa00; color: #000000; border-radius: 8; }
+  </style>
+</app>

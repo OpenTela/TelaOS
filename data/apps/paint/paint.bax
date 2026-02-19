@@ -1,0 +1,104 @@
+<app version="1.0" os="1.0" category="game">
+  <ui default="/main">
+    <page id="main" bgcolor="#333333">
+      <canvas id="canvas" x="5%" y="2%" ondraw="onDraw" w="350" h="300"/>
+
+      <button class="color-btn black item" x="5%" y="80%" onclick="setBlack"/>
+      <button class="color-btn red item" x="55" y="80%" onclick="setRed"/>
+      <button class="color-btn green item" x="100" y="80%" onclick="setGreen"/>
+      <button class="color-btn blue item" x="145" y="80%" onclick="setBlue"/>
+      <button class="color-btn yellow item" x="190" y="80%" onclick="setYellow"/>
+
+      <button class="clear-btn" x="65%" y="80%" onclick="clearCanvas" w="30%">CLEAR</button>
+
+      <label class="info" x="5%" y="92%">Color: {colorName}</label>
+    </page>
+  </ui>
+
+  <state>
+    <int name="_touchX" default="0"/>
+    <int name="_touchY" default="0"/>
+    <int name="brushColor" default="0"/>
+    <string name="colorName" default="Black"/>
+    <int name="lastX" default="-1"/>
+    <int name="lastY" default="-1"/>
+  </state>
+
+  <script language="lua">
+    function onDraw()
+      local x = tonumber(state._touchX) or 0
+      local y = tonumber(state._touchY) or 0
+      local lastX = tonumber(state.lastX) or -1
+      local lastY = tonumber(state.lastY) or -1
+      local color = state.brushColor
+
+      if lastX >= 0 and lastY >= 0 then
+        canvas.line("canvas", lastX, lastY, x, y, color, 6)
+      else
+        canvas.rect("canvas", x-3, y-3, 6, 6, color)
+      end
+
+      state.lastX = x
+      state.lastY = y
+    end
+
+    function setBlack()
+      state.brushColor = 0x000000
+      state.colorName = "Black"
+      resetLast()
+    end
+
+    function setRed()
+      state.brushColor = 0xFF0000
+      state.colorName = "Red"
+      resetLast()
+    end
+
+    function setGreen()
+      state.brushColor = 0x00AA00
+      state.colorName = "Green"
+      resetLast()
+    end
+
+    function setBlue()
+      state.brushColor = 0x0000FF
+      state.colorName = "Blue"
+      resetLast()
+    end
+
+    function setYellow()
+      state.brushColor = 0xFFCC00
+      state.colorName = "Yellow"
+      resetLast()
+    end
+
+    function clearCanvas()
+      canvas.clear("canvas", 0xFFFFFF)
+      resetLast()
+    end
+
+    function resetLast()
+      state.lastX = -1
+      state.lastY = -1
+    end
+  </script>
+
+  <style>
+  /* Auto-generated */
+
+    button { height: 40; }
+
+    .item { width: 40; }
+
+  /* Original */
+
+    .color-btn { border-radius: 8px; }
+    .black { background: #000000; }
+    .red { background: #ff0000; }
+    .green { background: #00aa00; }
+    .blue { background: #0000ff; }
+    .yellow { background: #ffcc00; }
+    .clear-btn { background: #666666; color: #ffffff; border-radius: 8px; }
+    .info { color: #ffffff; font-size: 16px; }
+  </style>
+</app>

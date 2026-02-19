@@ -1,0 +1,46 @@
+# PlatformIO
+.pio/
+.pioenvs/
+.piolibdeps/
+
+# VSCode
+.vscode/
+
+# Build
+build/
+cmake-build-*/
+
+# IDE
+.idea/
+*.swp
+*.swo
+*~
+
+# Project specific
+.checkpoints/
+.logs/
+
+# Compiled
+*.o
+*.obj
+*.elf
+*.bin
+*.hex
+*.map
+*.lst
+
+# Libraries
+lib_deps/
+
+# OS
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Logs
+*.log
+
+# Temporary
+*.tmp
+*.temp
+*.bak

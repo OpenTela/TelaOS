@@ -1,0 +1,27 @@
+<app>
+  <ui default="/main">
+    <page id="main" bgcolor="#000000">
+      <markdown id="preview" x="3%" y="3%" w="94%" h="94%" color="#ffffff">{mdSource}</markdown>
+    </page>
+  </ui>
+
+  <state>
+    <string name="mdSource" default="# Markdown
+
+This is **bold** and *italic* text.
+
+Use `code` for inline code.
+
+- Apple
+- Banana
+- Cherry
+
+1. First item
+2. Second item
+3. Third item
+
+### Notes
+
+Regular paragraph with **bold** and *italic*."/>
+  </state>
+</app>

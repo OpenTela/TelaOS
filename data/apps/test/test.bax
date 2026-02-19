@@ -1,0 +1,518 @@
+<app>
+  <ui default="/menu">
+
+    <!-- ========== МЕНЮ ========== -->
+    <page id="menu" class="bg-dark">
+      <label align="center" y="8%" color="#fff" font="32">TESTS</label>
+
+      <button x="10%" y="22%" href="/color" w="80%" h="48" bgcolor="#c62828" color="#fff" font="32" radius="12">Color</button>
+      <button x="10%" y="36%" href="/binding" w="80%" h="48" bgcolor="#1565c0" color="#fff" font="32" radius="12">Binding</button>
+      <button x="10%" y="50%" href="/canvas" w="80%" h="48" bgcolor="#2e7d32" color="#fff" font="32" radius="12">Canvas</button>
+      <button x="10%" y="64%" href="/stress" w="80%" h="48" bgcolor="#6a1b9a" color="#fff" font="32" radius="12">Stress</button>
+      <button x="10%" y="78%" href="/align" w="80%" h="48" bgcolor="#e65100" color="#fff" font="32" radius="12">Align</button>
+    </page>
+
+    <!-- ========== COLOR TEST ========== -->
+    <group id="color" default="rgb" orientation="horizontal" indicator="dots">
+
+      <page id="rgb">
+        <button x="88%" y="1%" href="/menu" class="text">X</button>
+        <label align="center" y="1%" class="text-2">PRIMARY + B/W</label>
+
+        <label x="2%" y="7%" w="30%" h="55" bgcolor="#ff0000" text-align="center center" font="16" color="#fff">RED</label>
+        <label x="35%" y="7%" w="30%" h="55" bgcolor="#00ff00" text-align="center center" font="16" color="#000">GREEN</label>
+        <label x="68%" y="7%" w="30%" h="55" bgcolor="#0000ff" text-align="center center" font="16" color="#fff">BLUE</label>
+
+        <label x="2%" y="21%" w="47%" h="55" bgcolor="#000000" text-align="center center" font="16" color="#fff">BLACK</label>
+        <label x="51%" y="21%" w="47%" h="55" bgcolor="#ffffff" text-align="center center" font="16" color="#000">WHITE</label>
+
+        <label x="2%" y="35%" w="30%" h="55" bgcolor="#00ffff" text-align="center center" font="16" color="#000">CYAN</label>
+        <label x="35%" y="35%" w="30%" h="55" bgcolor="#ff00ff" text-align="center center" font="16" color="#fff">MAGENTA</label>
+        <label x="68%" y="35%" w="30%" h="55" bgcolor="#ffff00" text-align="center center" font="16" color="#000">YELLOW</label>
+
+        <label x="2%" y="49%" w="22%" h="45" bgcolor="#ff8000" text-align="center center" font="16" color="#fff">ORNG</label>
+        <label x="26%" y="49%" w="22%" h="45" bgcolor="#8000ff" text-align="center center" font="16" color="#fff">PURPL</label>
+        <label x="52%" y="49%" w="22%" h="45" bgcolor="#80ff00" text-align="center center" font="16" color="#000">LIME</label>
+        <label x="76%" y="49%" w="22%" h="45" bgcolor="#008080" text-align="center center" font="16" color="#fff">TEAL</label>
+
+        <label x="2%" y="60%" w="22%" h="45" bgcolor="#ff69b4" text-align="center center" font="16" color="#000">PINK</label>
+        <label x="26%" y="60%" w="22%" h="45" bgcolor="#8b4513" text-align="center center" font="16" color="#fff">BRWN</label>
+        <label x="52%" y="60%" w="22%" h="45" bgcolor="#000080" text-align="center center" font="16" color="#fff">NAVY</label>
+        <label x="76%" y="60%" w="22%" h="45" bgcolor="#808000" text-align="center center" font="16" color="#fff">OLIVE</label>
+
+        <label align="center" y="72%" class="text-muted">HEX codes:</label>
+        <label x="2%" y="77%" w="47%" h="22" bgcolor="#000" text-align="center center" font="16" color="#f00">R #FF0000</label>
+        <label x="51%" y="77%" w="47%" h="22" bgcolor="#000" text-align="center center" font="16" color="#0f0">G #00FF00</label>
+        <label x="2%" y="82%" w="47%" h="22" bgcolor="#000" text-align="center center" font="16" color="#00f">B #0000FF</label>
+        <label x="51%" y="82%" w="47%" h="22" bgcolor="#000" text-align="center center" font="16" color="#ff0">Y #FFFF00</label>
+
+        <label align="center" y="90%" color="#666" font="16">Swipe →</label>
+      </page>
+
+      <page id="gray">
+        <button x="88%" y="1%" href="/menu" class="text">X</button>
+        <label align="center" y="1%" class="text-2">GRAYSCALE (16 steps)</label>
+
+        <label x="2%" y="7%" w="96%" h="26" bgcolor="#000000" text-align="center center" font="16" color="#fff">#000000</label>
+        <label x="2%" y="13%" w="96%" h="26" bgcolor="#111111" text-align="center center" font="16" color="#fff">#111111</label>
+        <label x="2%" y="19%" w="96%" h="26" bgcolor="#222222" text-align="center center" font="16" color="#fff">#222222</label>
+        <label x="2%" y="25%" w="96%" h="26" bgcolor="#333333" text-align="center center" font="16" color="#fff">#333333</label>
+        <label x="2%" y="31%" w="96%" h="26" bgcolor="#444444" text-align="center center" font="16" color="#fff">#444444</label>
+        <label x="2%" y="37%" w="96%" h="26" bgcolor="#555555" text-align="center center" font="16" color="#fff">#555555</label>
+        <label x="2%" y="43%" w="96%" h="26" bgcolor="#666666" text-align="center center" font="16" color="#fff">#666666</label>
+        <label x="2%" y="49%" w="96%" h="26" bgcolor="#777777" text-align="center center" font="16" color="#000">#777777</label>
+        <label x="2%" y="55%" w="96%" h="26" bgcolor="#888888" text-align="center center" font="16" color="#000">#888888</label>
+        <label x="2%" y="61%" w="96%" h="26" bgcolor="#999999" text-align="center center" font="16" color="#000">#999999</label>
+        <label x="2%" y="67%" w="96%" h="26" bgcolor="#aaaaaa" text-align="center center" font="16" color="#000">#AAAAAA</label>
+        <label x="2%" y="73%" w="96%" h="26" bgcolor="#bbbbbb" text-align="center center" font="16" color="#000">#BBBBBB</label>
+        <label x="2%" y="79%" w="96%" h="26" bgcolor="#cccccc" text-align="center center" font="16" color="#000">#CCCCCC</label>
+        <label x="2%" y="85%" w="96%" h="26" bgcolor="#dddddd" text-align="center center" font="16" color="#000">#DDDDDD</label>
+        <label x="2%" y="91%" w="96%" h="26" bgcolor="#eeeeee" text-align="center center" font="16" color="#000">#EEEEEE</label>
+      </page>
+
+      <page id="full">
+        <button x="88%" y="1%" href="/menu" class="text">X</button>
+        <button x="0" y="0" onclick="tapFull" w="100%" h="88%" bgcolor="{fullColor}" text-align="center center" font="32" color="{fullText}">{fullName}</button>
+      </page>
+
+    </group>
+
+    <!-- ========== BINDING TEST ========== -->
+    <page id="binding" bgcolor="#222">
+      <button x="88%" y="1%" href="/menu" class="text">X</button>
+      <label align="center" y="2%" class="text-2">Binding Test</label>
+
+      <label x="10%" y="10%" w="80%" h="50" bgcolor="{boxColor}" radius="8" text-align="center center" color="#fff" font="16">bgcolor: {boxColor}</label>
+
+      <label x="10%" y="25%" w="80%" color="{textColor}" font="32" text-align="center">Dynamic text</label>
+      <label x="10%" y="35%" w="80%" color="#888" text-align="center" font="16">color: {textColor}</label>
+
+      <button x="5%" y="45%" onclick="bindGreen" w="28%" h="40" bgcolor="#2e7d32" color="#fff">Green</button>
+      <button x="36%" y="45%" onclick="bindRed" w="28%" h="40" bgcolor="#c62828" color="#fff">Red</button>
+      <button x="67%" y="45%" onclick="bindBlue" w="28%" h="40" bgcolor="#1565c0" color="#fff">Blue</button>
+
+      <label x="10%" y="58%" w="80%" h="80" bgcolor="#444" radius="8" text-align="center center" color="#fff" font="32">center center</label>
+
+      <label id="hideable" x="10%" y="82%" visible="{showLabel}" w="80%" h="30" bgcolor="#ff6f00" text-align="center center" color="#fff" font="16">visible={showLabel}</label>
+
+      <button x="5%" y="90%" onclick="toggleVis" w="90%" h="30" bgcolor="#555" color="#fff">Toggle Visible</button>
+    </page>
+
+    <!-- ========== CANVAS TEST ========== -->
+    <page id="canvas" bgcolor="#333333">
+      <button x="88%" y="1%" href="/menu" w="40" h="30" bgcolor="#444" color="#fff" font="16">X</button>
+      <canvas id="cvs" x="5%" y="2%" ondraw="onDraw" w="350" h="300"/>
+
+      <button x="5%" y="80%" onclick="setBlack" w="40" h="40" bgcolor="#000"/>
+      <button x="55" y="80%" onclick="setCRed" w="40" h="40" bgcolor="#f00"/>
+      <button x="100" y="80%" onclick="setCGreen" w="40" h="40" bgcolor="#0a0"/>
+      <button x="145" y="80%" onclick="setCBlue" w="40" h="40" bgcolor="#00f"/>
+      <button x="190" y="80%" onclick="setCYellow" w="40" h="40" bgcolor="#fc0"/>
+
+      <button x="65%" y="80%" onclick="clearCvs" w="30%" h="40" bgcolor="#666" color="#fff">CLEAR</button>
+
+      <label x="5%" y="90%" class="text-2">Color: {cvsColorName}</label>
+    </page>
+
+    <!-- ========== STRESS TEST ========== -->
+    <group id="stress" default="timer" orientation="horizontal" indicator="dots">
+
+      <page id="timer" class="bg-dark">
+        <button x="88%" y="1%" href="/menu" class="text">X</button>
+        <label align="center" y="1%" class="text-muted">Timer Speed Test</label>
+
+        <label x="10%" y="10%" w="80%" h="50" bgcolor="#333" text-align="center center" color="#0f0" font="48">{ticks}</label>
+        <label x="10%" y="25%" class="text-muted">Ticks (100ms timer)</label>
+
+        <label x="10%" y="35%" w="80%" h="40" bgcolor="#333" text-align="center center" color="#ff0" font="32">{tps} TPS</label>
+        <label x="10%" y="47%" class="text-muted">Expected: 10 TPS</label>
+
+        <label x="10%" y="57%" w="80%" h="40" bgcolor="#333" text-align="center center" color="#f00" font="32">{drift}%</label>
+        <label x="10%" y="69%" class="text-muted">Drift (0% = perfect)</label>
+
+        <button x="5%" y="82%" onclick="resetTimer" w="90%" h="40" bgcolor="#c62828" color="#fff">Reset Timer</button>
+      </page>
+
+      <page id="flood" class="bg-dark">
+        <button x="88%" y="1%" href="/menu" class="text">X</button>
+        <label align="center" y="1%" class="text-muted">Binding Flood Test</label>
+
+        <label x="2%" y="8%" w="22%" h="30" bgcolor="{fc0}" text-align="center center" color="#fff" font="16">{fv0}</label>
+        <label x="26%" y="8%" w="22%" h="30" bgcolor="{fc1}" text-align="center center" color="#fff" font="16">{fv1}</label>
+        <label x="52%" y="8%" w="22%" h="30" bgcolor="{fc2}" text-align="center center" color="#fff" font="16">{fv2}</label>
+        <label x="76%" y="8%" w="22%" h="30" bgcolor="{fc3}" text-align="center center" color="#fff" font="16">{fv3}</label>
+
+        <label x="2%" y="17%" w="22%" h="30" bgcolor="{fc4}" text-align="center center" color="#fff" font="16">{fv4}</label>
+        <label x="26%" y="17%" w="22%" h="30" bgcolor="{fc5}" text-align="center center" color="#fff" font="16">{fv5}</label>
+        <label x="52%" y="17%" w="22%" h="30" bgcolor="{fc6}" text-align="center center" color="#fff" font="16">{fv6}</label>
+        <label x="76%" y="17%" w="22%" h="30" bgcolor="{fc7}" text-align="center center" color="#fff" font="16">{fv7}</label>
+
+        <label x="2%" y="26%" w="22%" h="30" bgcolor="{fc8}" text-align="center center" color="#fff" font="16">{fv8}</label>
+        <label x="26%" y="26%" w="22%" h="30" bgcolor="{fc9}" text-align="center center" color="#fff" font="16">{fv9}</label>
+        <label x="52%" y="26%" w="22%" h="30" bgcolor="{fc10}" text-align="center center" color="#fff" font="16">{fv10}</label>
+        <label x="76%" y="26%" w="22%" h="30" bgcolor="{fc11}" text-align="center center" color="#fff" font="16">{fv11}</label>
+
+        <label x="10%" y="38%" w="80%" h="30" bgcolor="#333" text-align="center center" color="#0f0" font="16">Updates: {floodCount}</label>
+        <label x="10%" y="47%" class="text-muted">12 x (text + bgcolor) = 24 bindings/tick</label>
+
+        <button x="5%" y="58%" onclick="toggleFlood" w="90%" h="40" bgcolor="#6a1b9a" color="#fff" font="16">{floodBtn}</button>
+
+        <button x="5%" y="75%" onclick="resetFlood" w="90%" h="40" bgcolor="#c62828" color="#fff">Reset</button>
+      </page>
+
+      <page id="bounce" bgcolor="#000">
+        <button x="88%" y="1%" href="/menu" class="text">X</button>
+        <label align="center" y="1%" class="text-muted">Bounce: {bounceInfo}</label>
+
+        <label id="f0" x="50" y="50" color="#f44" font="32">O</label>
+        <label id="f1" x="100" y="80" visible="false" color="#4f4" font="32">O</label>
+        <label id="f2" x="150" y="110" visible="false" color="#44f" font="32">O</label>
+        <label id="f3" x="200" y="140" visible="false" color="#ff4" font="32">O</label>
+        <label id="f4" x="80" y="200" visible="false" color="#f4f" font="32">O</label>
+        <label id="f5" x="120" y="250" visible="false" color="#4ff" font="32">O</label>
+        <label id="f6" x="250" y="100" visible="false" color="#fa4" font="32">O</label>
+        <label id="f7" x="300" y="300" visible="false" color="#4fa" font="32">O</label>
+        <label id="f8" x="50" y="350" visible="false" color="#a4f" font="32">O</label>
+        <label id="f9" x="180" y="180" visible="false" color="#fff" font="32">O</label>
+        <label id="f10" x="220" y="60" visible="false" color="#f84" font="32">O</label>
+        <label id="f11" x="320" y="220" visible="false" color="#84f" font="32">O</label>
+
+        <button x="5%" y="88%" onclick="toggleBounce" w="90%" h="35" bgcolor="#6a1b9a" color="#fff">{bounceBtn}</button>
+      </page>
+
+    </group>
+
+    <!-- ========== ALIGN TEST ========== -->
+    <group id="align" default="textalign" orientation="horizontal" indicator="dots">
+
+      <page id="textalign" class="bg-dark">
+        <button x="88%" y="1%" href="/menu" class="text">X</button>
+        <label align="center" y="1%" class="text-muted">text-align + text-valign</label>
+
+        <label x="2%" y="7%" w="30%" h="50" bgcolor="#333" text-align="left" color="#fff" font="16">left</label>
+        <label x="35%" y="7%" w="30%" h="50" bgcolor="#333" text-align="center" color="#fff" font="16">center</label>
+        <label x="68%" y="7%" w="30%" h="50" bgcolor="#333" text-align="right" color="#fff" font="16">right</label>
+
+        <label x="2%" y="20%" w="30%" h="70" bgcolor="#444" text-valign="top" color="#fff" font="16">top</label>
+        <label x="35%" y="20%" w="30%" h="70" bgcolor="#444" text-valign="center" color="#fff" font="16">center</label>
+        <label x="68%" y="20%" w="30%" h="70" bgcolor="#444" text-valign="bottom" color="#fff" font="16">bottom</label>
+
+        <label x="2%" y="42%" w="30%" h="70" bgcolor="#555" text-align="left top" color="#0f0" font="16">L T</label>
+        <label x="35%" y="42%" w="30%" h="70" bgcolor="#555" text-align="center center" color="#0f0" font="16">C C</label>
+        <label x="68%" y="42%" w="30%" h="70" bgcolor="#555" text-align="right bottom" color="#0f0" font="16">R B</label>
+
+        <label x="2%" y="64%" w="30%" h="70" bgcolor="#444" text-align="right" text-valign="top" color="#ff0" font="16">R+T</label>
+        <label x="35%" y="64%" w="30%" h="70" bgcolor="#444" text-align="center" text-valign="center" color="#ff0" font="16">C+C</label>
+        <label x="68%" y="64%" w="30%" h="70" bgcolor="#444" text-align="left" text-valign="bottom" color="#ff0" font="16">L+B</label>
+
+        <label align="center" y="91%" color="#666" font="16">Swipe for position test →</label>
+      </page>
+
+      <page id="pagealign" class="bg-dark">
+        <button x="88%" y="1%" href="/menu" class="text">X</button>
+        <label align="center" y="1%" class="text-muted">align + valign (position)</label>
+
+        <label align="center" y="10%" class="text-3"> align=center y=10%</label>
+        <label align="left" y="18%" class="text-3"> align=left</label>
+        <label align="right" y="26%" class="text-3">align=right </label>
+
+        <label align="center center" bgcolor="#c62828" color="#fff" font="16"> center center </label>
+
+        <label align="right" valign="bottom" bgcolor="#1565c0" color="#fff" font="16"> R+bottom </label>
+        <label align="left" valign="bottom" bgcolor="#2e7d32" color="#fff" font="16"> L+bottom </label>
+
+        <label x="5%" y="70%" align="center" bgcolor="#e65100" color="#fff" font="16"> x=5% overrides align</label>
+      </page>
+
+    </group>
+
+  </ui>
+
+  <style>
+    .bg-dark { bgcolor: #111; }
+    .text { bgcolor: #333; color: #fff; font: 16; height: 30; width: 40; }
+    .text-2 { color: #fff; font: 16; }
+    .text-3 { bgcolor: #333; color: #fff; font: 16; }
+    .text-muted { color: #888; font: 16; }
+  </style>
+
+  <state>
+    <!-- Color test -->
+    <string name="fullColor" default="#ff0000"/>
+    <string name="fullText" default="#ffffff"/>
+    <string name="fullName" default="RED (tap)"/>
+    <int name="colorIdx" default="0"/>
+
+    <!-- Binding test -->
+    <string name="boxColor" default="#555"/>
+    <string name="textColor" default="#FFF"/>
+    <string name="showLabel" default="true"/>
+
+    <!-- Canvas test -->
+    <int name="brushColor" default="0"/>
+    <string name="cvsColorName" default="Black"/>
+    <int name="lastX" default="-1"/>
+    <int name="lastY" default="-1"/>
+
+    <!-- Timer test -->
+    <string name="ticks" default="0"/>
+    <string name="tps" default="0"/>
+    <string name="drift" default="0"/>
+
+    <!-- Flood test -->
+    <string name="fv0" default="--"/>
+    <string name="fv1" default="--"/>
+    <string name="fv2" default="--"/>
+    <string name="fv3" default="--"/>
+    <string name="fv4" default="--"/>
+    <string name="fv5" default="--"/>
+    <string name="fv6" default="--"/>
+    <string name="fv7" default="--"/>
+    <string name="fv8" default="--"/>
+    <string name="fv9" default="--"/>
+    <string name="fv10" default="--"/>
+    <string name="fv11" default="--"/>
+    <string name="fc0" default="#333"/>
+    <string name="fc1" default="#333"/>
+    <string name="fc2" default="#333"/>
+    <string name="fc3" default="#333"/>
+    <string name="fc4" default="#333"/>
+    <string name="fc5" default="#333"/>
+    <string name="fc6" default="#333"/>
+    <string name="fc7" default="#333"/>
+    <string name="fc8" default="#333"/>
+    <string name="fc9" default="#333"/>
+    <string name="fc10" default="#333"/>
+    <string name="fc11" default="#333"/>
+    <string name="floodCount" default="0"/>
+    <string name="floodBtn" default="Start Flood"/>
+
+    <!-- Bounce test -->
+    <string name="bounceInfo" default="1 / 12"/>
+    <string name="bounceBtn" default="Start"/>
+  </state>
+
+  <timer interval="100" call="stressTick"/>
+
+  <script language="lua">
+    -- ===== COLOR TEST =====
+    local colors = {
+      {"#ff0000", "#fff", "RED"},
+      {"#00ff00", "#000", "GREEN"},
+      {"#0000ff", "#fff", "BLUE"},
+      {"#000000", "#fff", "BLACK"},
+      {"#ffffff", "#000", "WHITE"},
+      {"#00ffff", "#000", "CYAN"},
+      {"#ff00ff", "#fff", "MAGENTA"},
+      {"#ffff00", "#000", "YELLOW"},
+      {"#808080", "#fff", "GRAY 50%"},
+      {"#ff8000", "#fff", "ORANGE"},
+      {"#8000ff", "#fff", "PURPLE"},
+      {"#ff69b4", "#000", "PINK"},
+    }
+
+    function tapFull()
+      state.colorIdx = (state.colorIdx + 1) % #colors
+      local c = colors[state.colorIdx + 1]
+      state.fullColor = c[1]
+      state.fullText = c[2]
+      state.fullName = c[3] .. " (tap)"
+    end
+
+    -- ===== BINDING TEST =====
+    function bindGreen()
+      state.boxColor = "#2e7d32"
+      state.textColor = "#4caf50"
+    end
+
+    function bindRed()
+      state.boxColor = "#c62828"
+      state.textColor = "#f44336"
+    end
+
+    function bindBlue()
+      state.boxColor = "#1565c0"
+      state.textColor = "#2196f3"
+    end
+
+    function toggleVis()
+      if state.showLabel == "true" then
+        state.showLabel = "false"
+      else
+        state.showLabel = "true"
+      end
+    end
+
+    -- ===== ALL STRESS LOCALS FIRST =====
+    local timerTicks = 0
+    local timerSec = 0
+
+    local floodRunning = false
+    local floodN = 0
+    local floodColors = {"#c62828","#2e7d32","#1565c0","#6a1b9a","#e65100","#00695c","#ad1457","#283593","#ef6c00","#1b5e20","#4a148c","#bf360c"}
+
+    local bounceRunning = false
+    local bounceActive = 1
+    local bounceTN = 0
+    local bfigs = {}
+    for i = 1, 12 do
+      bfigs[i] = {
+        x = 30 + (i * 37) % 350,
+        y = 40 + (i * 53) % 380,
+        dx = 2 + (i % 4),
+        dy = 2 + ((i + 1) % 4),
+      }
+    end
+
+    -- ===== FLOOD FUNCTIONS =====
+    function floodTick()
+      floodN = floodN + 1
+      for i = 0, 11 do
+        local idx = (floodN + i) % 12 + 1
+        state["fv" .. i] = tostring(floodN + i)
+        state["fc" .. i] = floodColors[idx]
+      end
+      state.floodCount = tostring(floodN)
+    end
+
+    function toggleFlood()
+      floodRunning = not floodRunning
+      if floodRunning then
+        state.floodBtn = "Stop Flood"
+      else
+        state.floodBtn = "Start Flood"
+      end
+    end
+
+    function resetFlood()
+      floodRunning = false
+      floodN = 0
+      state.floodCount = "0"
+      state.floodBtn = "Start Flood"
+      for i = 0, 11 do
+        state["fv" .. i] = "--"
+        state["fc" .. i] = "#333"
+      end
+    end
+
+    -- ===== BOUNCE FUNCTIONS =====
+    function bounceTick()
+      bounceTN = bounceTN + 1
+
+      if bounceTN % 20 == 0 and bounceActive < 12 then
+        bounceActive = bounceActive + 1
+        setAttr("f" .. (bounceActive - 1), "visible", "true")
+      end
+
+      for i = 1, bounceActive do
+        local f = bfigs[i]
+        f.x = f.x + f.dx
+        f.y = f.y + f.dy
+
+        if f.x < 5 or f.x > 430 then f.dx = -f.dx end
+        if f.y < 30 or f.y > 420 then f.dy = -f.dy end
+
+        setAttr("f" .. (i - 1), "x", tostring(math.floor(f.x)))
+        setAttr("f" .. (i - 1), "y", tostring(math.floor(f.y)))
+      end
+
+      state.bounceInfo = tostring(bounceActive) .. " / 12"
+    end
+
+    function toggleBounce()
+      bounceRunning = not bounceRunning
+      if bounceRunning then
+        state.bounceBtn = "Stop"
+      else
+        state.bounceBtn = "Start"
+      end
+    end
+
+    -- ===== MAIN TICK (100ms) =====
+    function stressTick()
+      timerTicks = timerTicks + 1
+      timerSec = timerTicks / 10
+
+      if timerTicks % 10 == 0 then
+        state.ticks = tostring(timerTicks)
+        state.tps = tostring(math.floor(timerTicks / timerSec))
+        state.drift = "0"
+      end
+
+      if floodRunning then
+        floodTick()
+      end
+
+      if bounceRunning then
+        bounceTick()
+      end
+    end
+
+    -- ===== TIMER =====
+    function resetTimer()
+      timerTicks = 0
+      timerSec = 0
+      state.ticks = "0"
+      state.tps = "0"
+      state.drift = "0"
+    end
+
+    -- ===== CANVAS =====
+    function onDraw()
+      local x = tonumber(state._touchX) or 0
+      local y = tonumber(state._touchY) or 0
+      local lx = tonumber(state.lastX) or -1
+      local ly = tonumber(state.lastY) or -1
+
+      if lx >= 0 and ly >= 0 then
+        canvas.line("cvs", lx, ly, x, y, state.brushColor, 6)
+      else
+        canvas.rect("cvs", x-3, y-3, 6, 6, state.brushColor)
+      end
+
+      state.lastX = x
+      state.lastY = y
+    end
+
+    function setBlack()
+      state.brushColor = 0x000000
+      state.cvsColorName = "Black"
+      state.lastX = -1
+      state.lastY = -1
+    end
+
+    function setCRed()
+      state.brushColor = 0xFF0000
+      state.cvsColorName = "Red"
+      state.lastX = -1
+      state.lastY = -1
+    end
+
+    function setCGreen()
+      state.brushColor = 0x00AA00
+      state.cvsColorName = "Green"
+      state.lastX = -1
+      state.lastY = -1
+    end
+
+    function setCBlue()
+      state.brushColor = 0x0000FF
+      state.cvsColorName = "Blue"
+      state.lastX = -1
+      state.lastY = -1
+    end
+
+    function setCYellow()
+      state.brushColor = 0xFFCC00
+      state.cvsColorName = "Yellow"
+      state.lastX = -1
+      state.lastY = -1
+    end
+
+    function clearCvs()
+      canvas.clear("cvs", 0xFFFFFF)
+      state.lastX = -1
+      state.lastY = -1
+    end
+  </script>
+</app>

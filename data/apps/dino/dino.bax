@@ -1,0 +1,226 @@
+<app version="1.0" os="1.0" category="game">
+  <ui default="/game">
+    <page id="game" bgcolor="#f7f7f7">
+      <label class="title" align="center" y="2%">DINO RUN</label>
+      <canvas id="gameCanvas" x="5%" y="10%" ontap="jump" w="350" h="200"/>
+
+      <!-- Game Over overlay -->
+      <label visible="{gameOver}" class="gameover" align="center" y="30%">GAME OVER!</label>
+      <label visible="{gameOver}" class="finalScore" align="center" y="38%">Score: {score}</label>
+      <label visible="{gameOver}" class="bestScore" align="center" y="45%">Best: {bestScore}</label>
+
+      <label class="info" align="center" y="58%">Score: {score} | Best: {bestScore}</label>
+      <label class="hint" align="center" y="63%">Tap anywhere to jump!</label>
+
+      <button class="btnStart" x="35%" y="73%" onclick="startGame" w="30%" h="60">{buttonText}</button>
+    </page>
+  </ui>
+
+  <state>
+    <int name="score" default="0"/>
+    <int name="bestScore" default="0"/>
+    <string name="gameOver" default="false"/>
+    <string name="isRunning" default="false"/>
+    <string name="isProcessing" default="false"/>
+    <string name="buttonText" default="START"/>
+
+    <!-- Динозавр -->
+    <int name="dinoY" default="130"/>
+    <int name="dinoVelY" default="0"/>
+    <string name="isJumping" default="false"/>
+
+    <!-- Препятствия (позиция X) -->
+    <int name="obstacle1X" default="350"/>
+    <int name="obstacle2X" default="600"/>
+    <int name="obstacle3X" default="900"/>
+
+    <!-- Скорость игры -->
+    <int name="gameSpeed" default="6"/>
+  </state>
+
+  <script language="lua">
+    -- Константы
+    local CANVAS_W = 350
+    local CANVAS_H = 200
+    local GROUND_Y = 150
+    local DINO_SIZE = 20
+    local DINO_X = 40
+    local OBSTACLE_W = 15
+    local OBSTACLE_H = 30
+
+    -- Физика
+    local GRAVITY = 2
+    local JUMP_POWER = -18
+
+    -- Цвета
+    local COLOR_BG = 0xf7f7f7
+    local COLOR_DINO = 0x535353
+    local COLOR_OBSTACLE = 0x535353
+    local COLOR_GROUND = 0x535353
+
+    function render()
+      canvas.clear("gameCanvas", COLOR_BG)
+
+      -- Земля
+      canvas.rect("gameCanvas", 0, GROUND_Y + DINO_SIZE, CANVAS_W, 2, COLOR_GROUND)
+
+      -- Динозавр
+      canvas.rect("gameCanvas", DINO_X, state.dinoY, DINO_SIZE, DINO_SIZE, COLOR_DINO)
+
+      -- Препятствия (кактусы)
+      if state.obstacle1X > -OBSTACLE_W then
+        canvas.rect("gameCanvas", state.obstacle1X, GROUND_Y + DINO_SIZE - OBSTACLE_H, 
+                   OBSTACLE_W, OBSTACLE_H, COLOR_OBSTACLE)
+      end
+
+      if state.obstacle2X > -OBSTACLE_W then
+        canvas.rect("gameCanvas", state.obstacle2X, GROUND_Y + DINO_SIZE - OBSTACLE_H, 
+                   OBSTACLE_W, OBSTACLE_H, COLOR_OBSTACLE)
+      end
+
+      if state.obstacle3X > -OBSTACLE_W then
+        canvas.rect("gameCanvas", state.obstacle3X, GROUND_Y + DINO_SIZE - OBSTACLE_H, 
+                   OBSTACLE_W, OBSTACLE_H, COLOR_OBSTACLE)
+      end
+    end
+
+    function jump()
+      if state.gameOver == "true" or state.isRunning == "false" then
+        return
+      end
+
+      -- Можем прыгать только если на земле
+      if state.isJumping == "false" and state.dinoY >= GROUND_Y then
+        state.dinoVelY = JUMP_POWER
+        state.isJumping = "true"
+      end
+    end
+
+    function checkCollision(obstacleX)
+      -- AABB collision detection
+      if obstacleX < DINO_X + DINO_SIZE and 
+         obstacleX + OBSTACLE_W > DINO_X and
+         state.dinoY + DINO_SIZE > GROUND_Y + DINO_SIZE - OBSTACLE_H then
+        return true
+      end
+      return false
+    end
+
+    function gameTick()
+      if state.isProcessing == "true" then
+        return
+      end
+
+      if state.isRunning == "false" or state.gameOver == "true" then
+        return
+      end
+
+      state.isProcessing = "true"
+
+      -- Физика динозавра
+      if state.isJumping == "true" then
+        state.dinoVelY = state.dinoVelY + GRAVITY
+        state.dinoY = state.dinoY + state.dinoVelY
+
+        -- Приземление
+        if state.dinoY >= GROUND_Y then
+          state.dinoY = GROUND_Y
+          state.dinoVelY = 0
+          state.isJumping = "false"
+        end
+      end
+
+      -- Движение препятствий
+      state.obstacle1X = state.obstacle1X - state.gameSpeed
+      state.obstacle2X = state.obstacle2X - state.gameSpeed
+      state.obstacle3X = state.obstacle3X - state.gameSpeed
+
+      -- Респавн препятствий
+      if state.obstacle1X < -OBSTACLE_W then
+        state.obstacle1X = CANVAS_W + math.floor(math.random() * 200)
+        state.score = state.score + 10
+      end
+
+      if state.obstacle2X < -OBSTACLE_W then
+        state.obstacle2X = CANVAS_W + math.floor(math.random() * 200)
+        state.score = state.score + 10
+      end
+
+      if state.obstacle3X < -OBSTACLE_W then
+        state.obstacle3X = CANVAS_W + math.floor(math.random() * 200)
+        state.score = state.score + 10
+      end
+
+      -- Ускорение каждые 100 очков
+      if state.score % 100 == 0 and state.score > 0 then
+        if state.gameSpeed < 12 then
+          state.gameSpeed = state.gameSpeed + 1
+        end
+      end
+
+      -- Проверка столкновений
+      if checkCollision(state.obstacle1X) or 
+         checkCollision(state.obstacle2X) or 
+         checkCollision(state.obstacle3X) then
+        doGameOver()
+        state.isProcessing = "false"
+        return
+      end
+
+      render()
+
+      state.isProcessing = "false"
+
+      if state.isRunning == "true" and state.gameOver == "false" then
+        timer.once("gameTick", 30)
+      end
+    end
+
+    function startGame()
+      if state.isRunning == "true" then
+        state.isRunning = "false"
+        state.buttonText = "START"
+      else
+        state.score = 0
+        state.dinoY = GROUND_Y
+        state.dinoVelY = 0
+        state.isJumping = "false"
+        state.gameSpeed = 6
+        state.obstacle1X = 400
+        state.obstacle2X = 650
+        state.obstacle3X = 900
+        state.gameOver = "false"
+        state.isRunning = "true"
+        state.isProcessing = "false"
+        state.buttonText = "PAUSE"
+
+        render()
+        timer.once("gameTick", 30)
+      end
+    end
+
+    function doGameOver()
+      state.gameOver = "true"
+      state.isRunning = "false"
+      state.buttonText = "START"
+
+      if state.score > state.bestScore then
+        state.bestScore = state.score
+      end
+
+      render()
+    end
+
+    render()
+  </script>
+
+  <style>
+    .title { color: #535353; font-size: 32; }
+    .info { color: #535353; font-size: 18; }
+    .hint { color: #888888; font-size: 14; }
+    .gameover { color: #535353; font-size: 40; }
+    .finalScore { color: #535353; font-size: 28; }
+    .bestScore { color: #888888; font-size: 24; }
+    .btnStart { background: #535353; color: #ffffff; border-radius: 8; }
+  </style>
+</app>

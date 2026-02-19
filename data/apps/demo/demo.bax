@@ -1,0 +1,148 @@
+<app>
+  <ui default="/main">
+    <group id="main" default="widgets1" orientation="horizontal" indicator="dots">
+
+      <!-- Page 1: Basic Inputs -->
+      <page id="widgets1">
+        <label align="center" y="2%" class="text-muted">Inputs</label>
+
+        <label x="5%" y="12%" class="item-muted">Slider: {sliderVal}</label>
+        <slider x="5%" y="18%" min="0" max="100" bind="sliderVal" w="90%"/>
+
+        <label x="5%" y="28%" class="item-muted">Switch</label>
+        <switch x="75%" y="27%" bind="switchVal"/>
+
+        <label x="5%" y="38%" class="item-muted">Checkbox</label>
+        <checkbox x="5%" y="45%" bind="checkVal" color="#fff">Enable feature</checkbox>
+
+        <label x="5%" y="55%" class="item-muted">Input</label>
+        <input x="5%" y="62%" bind="inputVal" placeholder="Type here..." w="90%" h="32"/>
+
+        <line x1="5%" y1="80%" x2="95%" y2="80%" color="#333"/>
+        <label align="center" y="85%" color="#666">Swipe → for more</label>
+      </page>
+
+      <!-- Page 2: Selectors -->
+      <page id="widgets2">
+        <label align="center" y="2%" class="text-muted">Selectors</label>
+
+        <label x="5%" y="12%" class="item-muted">Dropdown</label>
+        <dropdown x="5%" y="18%" w="90%" options="Red,Green,Blue,Yellow" bind="dropVal"/>
+
+        <label x="5%" y="32%" class="item-muted">Roller</label>
+        <roller x="30%" y="38%" w="40%" options="00,01,02,03,04,05,06,07,08,09,10,11,12" bind="rollerVal" rows="3"/>
+
+        <line x1="5%" y1="65%" x2="95%" y2="65%" color="#333"/>
+
+        <label x="5%" y="70%" color="#fff">Selected:</label>
+        <label x="5%" y="78%" color="#0088ff">Drop: {dropVal}</label>
+        <label x="50%" y="78%" color="#00ff88">Roll: {rollerVal}</label>
+      </page>
+
+      <!-- Page 3: Progress -->
+      <page id="widgets3">
+        <label align="center" y="2%" class="text-muted">Progress</label>
+
+        <label x="5%" y="12%" class="item-muted">Arc: {arcVal}%</label>
+        <arc x="50%" y="35%" r="50" min="0" max="100" bind="arcVal" color="#00ff88"/>
+
+        <label x="5%" y="62%" class="item-muted">Bar: {barVal}%</label>
+        <bar x="5%" y="70%" w="90%" h="12" min="0" max="100" bind="barVal" color="#0088ff" bgcolor="#333"/>
+
+        <button x="5%" y="82%" onclick="incProgress" w="42%" h="32" bgcolor="#0066ff">+10</button>
+        <button x="53%" y="82%" onclick="decProgress" w="42%" h="32" bgcolor="#ff3300">-10</button>
+      </page>
+
+      <!-- Page 4: Spinner & Dynamic -->
+      <page id="widgets4">
+        <label align="center" y="2%" class="text-muted">Dynamic</label>
+
+        <spinner x="50%" y="25%" size="60" color="#0088ff" visible="{loading}"/>
+        <label align="center" y="25%" visible="{ready}" color="#00ff00">Loaded!</label>
+
+        <button x="20%" y="45%" onclick="toggleLoad" w="60%" h="36" bgcolor="{btnColor}">
+          {btnText}
+        </button>
+
+        <line x1="5%" y1="60%" x2="95%" y2="60%" color="#333"/>
+
+        <label x="5%" y="65%" class="item-muted">Dynamic bgcolor:</label>
+        <button x="5%" y="73%" onclick="setRed" w="28%" h="28" bgcolor="#ff0000">R</button>
+        <button x="36%" y="73%" onclick="setGreen" w="28%" h="28" bgcolor="#00ff00">G</button>
+        <button x="67%" y="73%" onclick="setBlue" w="28%" h="28" bgcolor="#0000ff">B</button>
+      </page>
+
+    </group>
+  </ui>
+
+  <style>
+    .item-muted { color: #aaa; }
+    .text-muted { color: #888; font: 16; }
+  </style>
+
+  <state>
+    <!-- Inputs -->
+    <string name="sliderVal" default="50"/>
+    <string name="switchVal" default="false"/>
+    <string name="checkVal" default="true"/>
+    <string name="inputVal" default=""/>
+
+    <!-- Selectors -->
+    <string name="dropVal" default="Green"/>
+    <string name="rollerVal" default="05"/>
+
+    <!-- Progress -->
+    <string name="arcVal" default="65"/>
+    <string name="barVal" default="40"/>
+
+    <!-- Dynamic -->
+    <string name="loading" default="false"/>
+    <string name="ready" default="true"/>
+    <string name="btnColor" default="#0066ff"/>
+    <string name="btnText" default="Start Loading"/>
+  </state>
+
+  <script language="lua">
+    function incProgress()
+      local arc = tonumber(state.arcVal) or 0
+      local bar = tonumber(state.barVal) or 0
+      arc = math.min(100, arc + 10)
+      bar = math.min(100, bar + 10)
+      state.arcVal = tostring(arc)
+      state.barVal = tostring(bar)
+    end
+
+    function decProgress()
+      local arc = tonumber(state.arcVal) or 0
+      local bar = tonumber(state.barVal) or 0
+      arc = math.max(0, arc - 10)
+      bar = math.max(0, bar - 10)
+      state.arcVal = tostring(arc)
+      state.barVal = tostring(bar)
+    end
+
+    function toggleLoad()
+      if state.loading == "true" then
+        state.loading = "false"
+        state.ready = "true"
+        state.btnText = "Start Loading"
+      else
+        state.loading = "true"
+        state.ready = "false"
+        state.btnText = "Stop Loading"
+      end
+    end
+
+    function setRed()
+      state.btnColor = "#ff0000"
+    end
+
+    function setGreen()
+      state.btnColor = "#00cc00"
+    end
+
+    function setBlue()
+      state.btnColor = "#0066ff"
+    end
+  </script>
+</app>

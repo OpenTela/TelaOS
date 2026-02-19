@@ -1,0 +1,423 @@
+<app version="1.0" os="1.0" category="game">
+  <ui default="/game">
+    <page id="game" bgcolor="#faf8ef">
+      <label class="title" align="center" y="2%">2048</label>
+      <canvas id="gameCanvas" x="5%" y="10%" ontap="handleTap" w="350" h="350"/>
+
+      <!-- Game Over overlay -->
+      <label visible="{gameOver}" class="gameover" align="center" y="35%">{message}</label>
+      <label visible="{gameOver}" class="finalScore" align="center" y="45%">Score: {score}</label>
+
+      <label class="info" align="center" y="78%">Score: {score} | Best: {bestScore}</label>
+      <label class="hint" align="center" y="82%">Tap edges to slide tiles</label>
+
+      <button class="btnStart" x="35%" y="86%" onclick="startGame" w="30%" h="60">{buttonText}</button>
+    </page>
+  </ui>
+
+  <state>
+    <int name="score" default="0"/>
+    <int name="bestScore" default="0"/>
+    <string name="gameOver" default="false"/>
+    <string name="message" default=""/>
+    <string name="isRunning" default="false"/>
+    <string name="buttonText" default="START"/>
+
+    <!-- Сетка 4x4: "0,0,0,0;0,0,0,0;0,0,0,0;0,0,0,0" -->
+    <string name="grid" default="0,0,0,0;0,0,0,0;0,0,0,0;0,0,0,0"/>
+  </state>
+
+  <script language="lua">
+    -- Константы
+    local CANVAS_SIZE = 350
+    local GRID_SIZE = 4
+    local CELL_SIZE = 80
+    local CELL_GAP = 10
+    local EDGE_ZONE = 60
+
+    -- Цвета плиток
+    local TILE_COLORS = {
+      [0] = 0xcdc1b4,
+      [2] = 0xeee4da,
+      [4] = 0xede0c8,
+      [8] = 0xf2b179,
+      [16] = 0xf59563,
+      [32] = 0xf67c5f,
+      [64] = 0xf65e3b,
+      [128] = 0xedcf72,
+      [256] = 0xedcc61,
+      [512] = 0xedc850,
+      [1024] = 0xedc53f,
+      [2048] = 0xedc22e
+    }
+
+    local COLOR_BG = 0xbbada0
+    local COLOR_TEXT_DARK = 0x776e65
+    local COLOR_TEXT_LIGHT = 0xf9f6f2
+
+    -- Парсинг сетки
+    function parseGrid()
+      local grid = {}
+      local str = state.grid
+      local idx = 1
+
+      for row = 1, GRID_SIZE do
+        grid[row] = {}
+        for col = 1, GRID_SIZE do
+          local match = string.match(str, "(%d+)", idx)
+          grid[row][col] = tonumber(match)
+          idx = idx + #match + 1
+        end
+      end
+
+      return grid
+    end
+
+    -- Сохранение сетки
+    function saveGrid(grid)
+      local rows = {}
+      for i = 1, GRID_SIZE do
+        local cols = {}
+        for j = 1, GRID_SIZE do
+          table.insert(cols, tostring(grid[i][j]))
+        end
+        table.insert(rows, table.concat(cols, ","))
+      end
+      state.grid = table.concat(rows, ";")
+    end
+
+    -- Добавление случайной плитки
+    function addRandomTile()
+      local grid = parseGrid()
+      local empty = {}
+
+      -- Находим пустые клетки
+      for row = 1, GRID_SIZE do
+        for col = 1, GRID_SIZE do
+          if grid[row][col] == 0 then
+            table.insert(empty, {row = row, col = col})
+          end
+        end
+      end
+
+      if #empty == 0 then
+        return false
+      end
+
+      -- Выбираем случайную пустую клетку
+      local idx = math.floor(math.random() * #empty) + 1
+      local cell = empty[idx]
+
+      -- 90% шанс на 2, 10% на 4
+      grid[cell.row][cell.col] = (math.random() > 0.9) and 4 or 2
+
+      saveGrid(grid)
+      return true
+    end
+
+    -- Проверка возможности хода
+    function canMove()
+      local grid = parseGrid()
+
+      -- Есть пустые клетки?
+      for row = 1, GRID_SIZE do
+        for col = 1, GRID_SIZE do
+          if grid[row][col] == 0 then
+            return true
+          end
+        end
+      end
+
+      -- Есть соседние одинаковые?
+      for row = 1, GRID_SIZE do
+        for col = 1, GRID_SIZE do
+          local val = grid[row][col]
+          if col < GRID_SIZE and grid[row][col + 1] == val then
+            return true
+          end
+          if row < GRID_SIZE and grid[row + 1][col] == val then
+            return true
+          end
+        end
+      end
+
+      return false
+    end
+
+    function render()
+      canvas.clear("gameCanvas", COLOR_BG)
+
+      local grid = parseGrid()
+
+      for row = 1, GRID_SIZE do
+        for col = 1, GRID_SIZE do
+          local x = (col - 1) * (CELL_SIZE + CELL_GAP) + 15
+          local y = (row - 1) * (CELL_SIZE + CELL_GAP) + 15
+
+          local value = grid[row][col]
+          local color = TILE_COLORS[value] or TILE_COLORS[2048]
+
+          canvas.rect("gameCanvas", x, y, CELL_SIZE, CELL_SIZE, color)
+
+          -- Рисуем число (упрощённо - просто цвет меняем для визуала)
+        end
+      end
+    end
+
+    -- Движение влево
+    function moveLeft()
+      local grid = parseGrid()
+      local moved = false
+
+      for row = 1, GRID_SIZE do
+        local merged = {}
+        for col = 1, GRID_SIZE do
+          merged[col] = false
+        end
+
+        for col = 2, GRID_SIZE do
+          if grid[row][col] ~= 0 then
+            local targetCol = col
+
+            -- Двигаем влево
+            while targetCol > 1 do
+              if grid[row][targetCol - 1] == 0 then
+                grid[row][targetCol - 1] = grid[row][targetCol]
+                grid[row][targetCol] = 0
+                targetCol = targetCol - 1
+                moved = true
+              elseif grid[row][targetCol - 1] == grid[row][targetCol] and not merged[targetCol - 1] then
+                grid[row][targetCol - 1] = grid[row][targetCol - 1] * 2
+                state.score = state.score + grid[row][targetCol - 1]
+                grid[row][targetCol] = 0
+                merged[targetCol - 1] = true
+                moved = true
+                break
+              else
+                break
+              end
+            end
+          end
+        end
+      end
+
+      saveGrid(grid)
+      return moved
+    end
+
+    -- Движение вправо
+    function moveRight()
+      local grid = parseGrid()
+      local moved = false
+
+      for row = 1, GRID_SIZE do
+        local merged = {}
+        for col = 1, GRID_SIZE do
+          merged[col] = false
+        end
+
+        for col = GRID_SIZE - 1, 1, -1 do
+          if grid[row][col] ~= 0 then
+            local targetCol = col
+
+            while targetCol < GRID_SIZE do
+              if grid[row][targetCol + 1] == 0 then
+                grid[row][targetCol + 1] = grid[row][targetCol]
+                grid[row][targetCol] = 0
+                targetCol = targetCol + 1
+                moved = true
+              elseif grid[row][targetCol + 1] == grid[row][targetCol] and not merged[targetCol + 1] then
+                grid[row][targetCol + 1] = grid[row][targetCol + 1] * 2
+                state.score = state.score + grid[row][targetCol + 1]
+                grid[row][targetCol] = 0
+                merged[targetCol + 1] = true
+                moved = true
+                break
+              else
+                break
+              end
+            end
+          end
+        end
+      end
+
+      saveGrid(grid)
+      return moved
+    end
+
+    -- Движение вверх
+    function moveUp()
+      local grid = parseGrid()
+      local moved = false
+
+      for col = 1, GRID_SIZE do
+        local merged = {}
+        for row = 1, GRID_SIZE do
+          merged[row] = false
+        end
+
+        for row = 2, GRID_SIZE do
+          if grid[row][col] ~= 0 then
+            local targetRow = row
+
+            while targetRow > 1 do
+              if grid[targetRow - 1][col] == 0 then
+                grid[targetRow - 1][col] = grid[targetRow][col]
+                grid[targetRow][col] = 0
+                targetRow = targetRow - 1
+                moved = true
+              elseif grid[targetRow - 1][col] == grid[targetRow][col] and not merged[targetRow - 1] then
+                grid[targetRow - 1][col] = grid[targetRow - 1][col] * 2
+                state.score = state.score + grid[targetRow - 1][col]
+                grid[targetRow][col] = 0
+                merged[targetRow - 1] = true
+                moved = true
+                break
+              else
+                break
+              end
+            end
+          end
+        end
+      end
+
+      saveGrid(grid)
+      return moved
+    end
+
+    -- Движение вниз
+    function moveDown()
+      local grid = parseGrid()
+      local moved = false
+
+      for col = 1, GRID_SIZE do
+        local merged = {}
+        for row = 1, GRID_SIZE do
+          merged[row] = false
+        end
+
+        for row = GRID_SIZE - 1, 1, -1 do
+          if grid[row][col] ~= 0 then
+            local targetRow = row
+
+            while targetRow < GRID_SIZE do
+              if grid[targetRow + 1][col] == 0 then
+                grid[targetRow + 1][col] = grid[targetRow][col]
+                grid[targetRow][col] = 0
+                targetRow = targetRow + 1
+                moved = true
+              elseif grid[targetRow + 1][col] == grid[targetRow][col] and not merged[targetRow + 1] then
+                grid[targetRow + 1][col] = grid[targetRow + 1][col] * 2
+                state.score = state.score + grid[targetRow + 1][col]
+                grid[targetRow][col] = 0
+                merged[targetRow + 1] = true
+                moved = true
+                break
+              else
+                break
+              end
+            end
+          end
+        end
+      end
+
+      saveGrid(grid)
+      return moved
+    end
+
+    function handleTap(x, y)
+      if state.gameOver == "true" or state.isRunning == "false" then
+        return
+      end
+
+      local moved = false
+      local midX = CANVAS_SIZE / 2
+      local midY = CANVAS_SIZE / 2
+
+      -- Определяем направление свайпа по краям
+      if x < EDGE_ZONE then
+        moved = moveLeft()
+      elseif x > CANVAS_SIZE - EDGE_ZONE then
+        moved = moveRight()
+      elseif y < EDGE_ZONE then
+        moved = moveUp()
+      elseif y > CANVAS_SIZE - EDGE_ZONE then
+        moved = moveDown()
+      end
+
+      if moved then
+        addRandomTile()
+        render()
+
+        -- Проверка победы
+        local grid = parseGrid()
+        for row = 1, GRID_SIZE do
+          for col = 1, GRID_SIZE do
+            if grid[row][col] >= 2048 then
+              doGameOver("YOU WIN!")
+              return
+            end
+          end
+        end
+
+        -- Проверка game over
+        if not canMove() then
+          doGameOver("GAME OVER!")
+        end
+      end
+    end
+
+    function startGame()
+      if state.isRunning == "true" then
+        state.isRunning = "false"
+        state.buttonText = "START"
+      else
+        state.score = 0
+        state.gameOver = "false"
+        state.message = ""
+        state.isRunning = "true"
+        state.buttonText = "RESTART"
+
+        -- Пустая сетка
+        local grid = {}
+        for row = 1, GRID_SIZE do
+          grid[row] = {}
+          for col = 1, GRID_SIZE do
+            grid[row][col] = 0
+          end
+        end
+        saveGrid(grid)
+
+        -- Добавляем 2 начальные плитки
+        addRandomTile()
+        addRandomTile()
+
+        render()
+      end
+    end
+
+    function doGameOver(msg)
+      state.gameOver = "true"
+      state.message = msg
+      state.isRunning = "false"
+      state.buttonText = "START"
+
+      if state.score > state.bestScore then
+        state.bestScore = state.score
+      end
+
+      render()
+    end
+
+    render()
+  </script>
+
+  <style>
+    .title { color: #776e65; font-size: 48; }
+    .info { color: #776e65; font-size: 18; }
+    .hint { color: #888888; font-size: 14; }
+    .gameover { color: #f67c5f; font-size: 40; }
+    .finalScore { color: #776e65; font-size: 32; }
+    .btnStart { background: #8f7a66; color: #ffffff; border-radius: 8; }
+  </style>
+</app>
