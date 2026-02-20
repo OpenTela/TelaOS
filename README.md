@@ -367,15 +367,12 @@ lib_deps =
 
 ### Спецификации
 
-- [UI HTML Spec v0.3](docs/ui_html_spec_v0_3.md) - Декларативный UI язык
-- [Frontend Spec](docs/FRONTEND_SPEC.md) - Новые возможности (focus, onenter, biндинг атрибутов)
+- [UI HTML Spec v0.3](docs/ui_html_spec.md) - Декларативный UI язык
 - [Console Protocol v2.7](docs/CONSOLE_PROTOCOL_SPEC_v2_7.md) - BLE/Serial протокол
-- [CSV Lua API](docs/CSV_LUA_API_SPEC.md) - Работа с табличными данными
-- [YAML Lua API](docs/YAML_LUA_API_SPEC.md) - Конфигурационные файлы
 - [Project Rules](docs/PROJECT_RULES.md) - Структура и соглашения
 
 ### Гайды
-
+(TODO)
 - [Getting Started](docs/GETTING_STARTED.md) - Первое приложение за 5 минут
 - [API Reference](docs/API_REFERENCE.md) - Полный справочник Lua API
 - [BLE Bridge](docs/BLE_BRIDGE.md) - Интернет через телефон
@@ -398,8 +395,8 @@ lib_deps =
 ### v1.1 (Планируется)
 
 - [ ] OTA обновления
-- [ ] Магазин приложений
-- [ ] Больше виджетов (charts, lists)
+- [ ] Возможность делиться приложениями друг с другом
+- [ ] Больше виджетов
 - [ ] Анимации и переходы
 - [ ] WebSocket поддержка
 
@@ -435,7 +432,7 @@ lib_deps =
 
 ## 📄 Лицензия
 
-MIT License - см. [LICENSE](LICENSE)
+LGPL License - см. [LICENSE](LICENSE.txt)
 
 ---
 
