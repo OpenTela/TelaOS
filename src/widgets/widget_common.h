@@ -68,7 +68,7 @@ struct Widget {
     }
 
     void applyRadius(int radius) {
-        if (!handle || radius <= 0) return;
+        if (!handle || radius < 0) return;
         lv_obj_set_style_radius(handle, radius, 0);
     }
 

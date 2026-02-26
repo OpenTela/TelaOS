@@ -896,8 +896,8 @@ void create_switch(const char *astart, const char *aend, lv_obj_t *parent) {
     set_pos(sw, x, y);
     lv_obj_set_ext_click_area(sw, ClickArea::SWITCH);
     
-    // Apply CSS
-    if (!attrs.cssClass.empty()) {
+    // Apply CSS (always — tag/id selectors don't need class)
+    {
         P::String renderedClass = attrs.hasDynamicClass ? render_template(attrs.cssClass.c_str()) : attrs.cssClass;
         Widget{sw}.applyCss("switch", attrs.id.c_str(), renderedClass.c_str());
     }
@@ -948,8 +948,8 @@ void create_slider(const char *astart, const char *aend, lv_obj_t *parent) {
     set_pos(slider, x, y);
     lv_obj_set_ext_click_area(slider, ClickArea::SLIDER);
     
-    // Apply CSS
-    if (!attrs.cssClass.empty()) {
+    // Apply CSS (always — tag/id selectors don't need class)
+    {
         P::String renderedClass = attrs.hasDynamicClass ? render_template(attrs.cssClass.c_str()) : attrs.cssClass;
         Widget{slider}.applyCss("slider", attrs.id.c_str(), renderedClass.c_str());
     }
@@ -1025,8 +1025,8 @@ void create_input(const char *astart, const char *aend, const char *content, lv_
     set_pos(ta, x, y);
     set_size(ta, w, h);
     
-    // Apply CSS
-    if (!attrs.cssClass.empty()) {
+    // Apply CSS (always — tag/id selectors don't need class)
+    {
         P::String renderedClass = attrs.hasDynamicClass ? render_template(attrs.cssClass.c_str()) : attrs.cssClass;
         Widget{ta}.applyCss("input", attrs.id.c_str(), renderedClass.c_str());
     }
