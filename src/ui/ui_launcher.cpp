@@ -149,7 +149,12 @@ lv_obj_t* Launcher::loadIcon(lv_obj_t* cell, const LauncherAppInfo& app, size_t 
                 if (fsPath.size() > 2 && fsPath[0] == 'C' && fsPath[1] == ':')
                     fsPath = fsPath.substr(2);
                 File f = LittleFS.open(fsPath.c_str(), "r");
-                if (f) { stale = ((uint32_t)f.size() != entry->png_size); f.close(); }
+                if (f) {
+                    uint32_t fsSize = (uint32_t)f.size();
+                    stale = (fsSize != entry->png_size);
+                    f.close();
+                    if (stale) LOG_I(Log::UI, "Icon stale: %s (fs=%u, embed=%u)", app.name.c_str(), fsSize, entry->png_size);
+                }
             }
             if (!stale) iconSrc = entry->icon;
         }
@@ -171,7 +176,12 @@ lv_obj_t* Launcher::loadIcon(lv_obj_t* cell, const LauncherAppInfo& app, size_t 
                 if (fsPath.size() > 2 && fsPath[0] == 'C' && fsPath[1] == ':')
                     fsPath = fsPath.substr(2);
                 File f = LittleFS.open(fsPath.c_str(), "r");
-                if (f) { stale = ((uint32_t)f.size() != entry->png_size); f.close(); }
+                if (f) {
+                    uint32_t fsSize = (uint32_t)f.size();
+                    stale = (fsSize != entry->png_size);
+                    f.close();
+                    if (stale) LOG_I(Log::UI, "System icon stale: %s (fs=%u, embed=%u)", iconName.c_str(), fsSize, entry->png_size);
+                }
                 if (!stale) iconSrc = entry->icon;
             }
         }

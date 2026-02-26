@@ -1,10 +1,10 @@
 # Evolution OS
 
-Декларативная платформа для создания приложений на ESP32-S3 с HTML-подобным синтаксисом и Lua скриптами.
+Декларативная платформа для создания приложений на ESP32 с HTML-подобным синтаксисом и Lua скриптами.
 
 ## Концепция
 
-Evolution OS — операционная система для умных часов и носимых устройств на базе ESP32-S3. Главная идея — **простота создания приложений**. Разработчик описывает интерфейс в декларативном XML-подобном формате, логику на Lua, а система автоматически:
+Evolution OS — операционная система для умных часов и носимых устройств на базе ESP32. Главная идея — **простота создания приложений**. Разработчик описывает интерфейс в декларативном XML-подобном формате, логику на Lua, а система автоматически:
 
 - Парсит разметку и создаёт виджеты LVGL
 - Связывает данные (state) с UI элементами
@@ -30,7 +30,7 @@ Evolution OS — операционная система для умных ча�
                               ▼
 ┌─────────────────────────────────────────────────────────────┐
 │                    Application                               │
-│                     (app.html)                               │
+│                    ({name}.bax)                               │
 ├──────────┬──────────┬──────────┬──────────┬─────────────────┤
 │   <ui>   │ <state>  │ <script> │ <style>  │    <timer>      │
 └──────────┴──────────┴──────────┴──────────┴─────────────────┘
@@ -42,45 +42,54 @@ Evolution OS — операционная система для умных ча�
                               │
                               ▼
 ┌─────────────────────────────────────────────────────────────┐
-│                    ESP-IDF 5.5 / ESP32-S3                    │
-│               512KB RAM + 8MB PSRAM | AMOLED 412x412        │
+│                    ESP-IDF 5.x / ESP32(-S3)                    │
+│              HAL: мультиплатформенная абстракция              │
 └─────────────────────────────────────────────────────────────┘
 ```
 
 ## Структура проекта
 
 ```
-evolution-os/
-├── hal/                      # HAL — абстракция платы
-│   ├── device.h/cpp          # Абстрактный класс
-│   ├── display_hal.h/cpp     # Общий LVGL setup
-│   └── boards/               # Конкретные платы
+TelaOS/
 ├── src/
 │   ├── main.cpp              # Точка входа
 │   ├── core/                 # Ядро: app_manager, state_store, script_manager
-│   ├── ui/                   # UI движок: html_parser, css_parser, ui_html
-│   ├── lua/                  # Lua: engine, timer, fetch, system, ui
-│   ├── ble/                  # BLE bridge, binary transfer
-│   └── utils/                # Утилиты: log, strings, fonts
+│   ├── ui/                   # UI движок: html_parser, css_parser, launcher
+│   ├── widgets/              # Виджеты LVGL
+│   ├── engines/lua/          # Lua: engine, timer, fetch, system, ui
+│   ├── console/              # Протокол команд (Serial + BLE транспорт)
+│   ├── ble/                  # BLE bridge, binary transfer/receive
+│   ├── hal/                  # HAL абстракция
+│   │   ├── device.h/cpp      # Абстрактный класс
+│   │   ├── display_hal.h/cpp # Общий LVGL setup
+│   │   └── boards/           # esp4848s040, esp8048w550, twatch2020
+│   ├── native/               # Нативные компоненты (shade, etc.)
+│   ├── utils/                # Утилиты: log, strings, fonts, screenshot
+│   └── font/                 # Шрифты Ubuntu 16/32/48/72px
 ├── data/
-│   └── apps/                 # Приложения на LittleFS
-│       ├── calculator/
-│       │   ├── app.html
-│       │   └── icon.png
-│       └── weather/
+│   ├── apps/                 # 27 приложений на LittleFS
+│   │   ├── calculator/
+│   │   │   ├── calculator.bax
+│   │   │   └── icon.png
+│   │   └── weather/
+│   └── system/               # Системные ресурсы (иконки категорий)
+├── include/                  # Конфиги: lv_conf.h, ui_layout.h
+├── docs/                     # Документация
+├── scripts/                  # Build-скрипты (resize_icons, embedded_icons)
+├── tools/                    # BLE assistant (Python)
 └── platformio.ini
 ```
 
 ## Формат приложения
 
-Каждое приложение — файл `app.html` в папке `/data/apps/{name}/`.
+Каждое приложение — файл `{name}.bax` в папке `/data/apps/{name}/`.
 
 ```xml
 <app>
-  <configuration>
+  <config>
     <network/>              <!-- опционально: доступ в сеть через BLE bridge -->
     <display buffer="small"/>
-  </configuration>
+  </config>
   
   <ui default="/main">
     <!-- страницы и виджеты -->
@@ -106,9 +115,9 @@ evolution-os/
 
 Полная спецификация виджетов, state, биндингов, событий и Lua API — в **ui_html_spec.md**.
 
-### Секция `<configuration>`
+### Секция `<config>`
 
-Системные настройки. Legacy: `<system>` (поддерживается как fallback).
+Системные настройки.
 
 **`<network/>`** — включить доступ в интернет (HTTP запросы через BLE bridge к телефону).
 
@@ -119,7 +128,6 @@ evolution-os/
 | `<network mode="always"/>` | То же самое |
 | `<network mode="ondemand"/>` | Включится при первом `fetch()` |
 
-Legacy: `<bluetooth/>` поддерживается как синоним `<network/>`.
 
 **`<display buffer="..."/>`** — размер буфера отрисовки.
 
@@ -294,11 +302,11 @@ Legacy: `<bluetooth/>` поддерживается как синоним `<netw
 
 Каждое приложение может иметь иконку `icon.png`:
 
-- **Размер:** 48×48 пикселей
+- **Размер:** 64×64 пикселей (авторесайз build-скриптом)
 - **Формат:** PNG с прозрачностью
 - **Расположение:** `{app_folder}/icon.png`
 
-Если иконка отсутствует — отображается первая буква названия. Подробнее — в **BUILD_ICONS.md**.
+Иконки встраиваются в прошивку при сборке (flash). Подробнее — в **BUILD_ICONS.md**.
 
 ## Ограничения
 
@@ -321,9 +329,9 @@ pio device monitor         # Serial монитор
 | Документ | Описание |
 |----------|----------|
 | **ui_html_spec.md** | Полная спецификация UI: виджеты, state, биндинги, Lua API |
-| **CONSOLE_PROTOCOL_SPEC_v2.4.md** | BLE/Serial протокол команд |
+| **CONSOLE_PROTOCOL_SPEC_v2.7.md** | BLE/Serial протокол команд |
 | **native_app_spec_v0.2.md** | Система виджетов для нативных приложений |
-| **BUILD_ICONS.md** | Система иконок и build flags |
+| **BUILD_ICONS.md** | Система иконок и build-скрипты |
 | **COMPILER_README.md** | Компилятор и тесты без ESP32 |
 | **AI_DEBUG_METHODOLOGY.md** | Методология отладки |
 | **RULE_versioning.md** | Версионирование модулей |

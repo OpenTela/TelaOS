@@ -13,7 +13,7 @@ Usage:
   Debug mode: python create_embedded_icons.py -d icon.png
 """
 
-SCRIPT_VERSION = "3.0"
+SCRIPT_VERSION = "3.1"
 
 import os
 import sys
@@ -143,7 +143,8 @@ def sanitize_name(name):
 
 
 def generate_header(icons_data, output_path, icon_size=DEFAULT_SIZE):
-    """Generate C header with embedded icons and PNG sizes for staleness check"""
+    """Generate C header with embedded icons and PNG sizes for staleness check.
+    Uses C++17 inline variables — one copy in flash regardless of how many .cpp include it."""
     
     has_icons = len(icons_data) > 0
     
@@ -168,13 +169,13 @@ def generate_header(icons_data, output_path, icon_size=DEFAULT_SIZE):
         lines.append("")
         lines.append("#ifdef USE_BUILTIN_ICONS")
         lines.append("")
-    
+        
         for app_name, (width, height, data, png_size) in icons_data.items():
             safe_name = sanitize_name(app_name)
             data_size = len(data)
             
             lines.append(f"// {app_name}: {width}x{height} RGB565 ({data_size}B, png={png_size}B)")
-            lines.append(f"static const uint8_t _icon_{safe_name}_data[] PROGMEM = {{")
+            lines.append(f"inline const uint8_t _icon_{safe_name}_data[] PROGMEM = {{")
             
             for i in range(0, len(data), 16):
                 chunk = data[i:i+16]
@@ -183,7 +184,7 @@ def generate_header(icons_data, output_path, icon_size=DEFAULT_SIZE):
             
             lines.append("};")
             lines.append("")
-            lines.append(f"static const lv_image_dsc_t _icon_{safe_name} = {{")
+            lines.append(f"inline const lv_image_dsc_t _icon_{safe_name} = {{")
             lines.append(f"    .header = {{ .cf = LV_COLOR_FORMAT_RGB565, .w = {width}, .h = {height} }},")
             lines.append(f"    .data_size = {data_size},")
             lines.append(f"    .data = _icon_{safe_name}_data")
@@ -197,7 +198,7 @@ def generate_header(icons_data, output_path, icon_size=DEFAULT_SIZE):
         lines.append("    uint32_t png_size;  // original PNG file size — if FS differs, icon was updated")
         lines.append("};")
         lines.append("")
-        lines.append("static const BuiltinIcon _builtin_icons[] = {")
+        lines.append("inline const BuiltinIcon _builtin_icons[] = {")
         
         for app_name, (width, height, data, png_size) in icons_data.items():
             safe_name = sanitize_name(app_name)
@@ -207,8 +208,7 @@ def generate_header(icons_data, output_path, icon_size=DEFAULT_SIZE):
         lines.append("};")
         lines.append("")
         
-        # Entry lookup (returns full struct for size check)
-        lines.append("// Returns full entry with png_size for staleness check")
+        # Lookup functions
         lines.append("static inline const BuiltinIcon* findBuiltinEntry(const char* name) {")
         lines.append("    for (const auto& entry : _builtin_icons) {")
         lines.append("        if (entry.name && strcmp(entry.name, name) == 0) {")
@@ -219,7 +219,6 @@ def generate_header(icons_data, output_path, icon_size=DEFAULT_SIZE):
         lines.append("}")
         lines.append("")
         
-        # Legacy compat — returns just the descriptor
         lines.append("static inline const lv_image_dsc_t* findBuiltinIcon(const char* name) {")
         lines.append("    auto* e = findBuiltinEntry(name);")
         lines.append("    return e ? e->icon : nullptr;")
@@ -249,7 +248,7 @@ def generate_header(icons_data, output_path, icon_size=DEFAULT_SIZE):
         lines.append("#endif // USE_BUILTIN_ICONS")
         lines.append("")
     
-    # Stubs when no builtin icons (proper LVGL types for compilation safety)
+    # Stubs when no builtin icons
     lines.append("#ifndef USE_BUILTIN_ICONS")
     lines.append("struct BuiltinIcon { const char* name; const lv_image_dsc_t* icon; uint32_t png_size; };")
     lines.append("static inline const BuiltinIcon* findBuiltinEntry(const char*) { return nullptr; }")
