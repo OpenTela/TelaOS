@@ -9,6 +9,7 @@
 #define LV_CONF_H
 
 #include <stdint.h>
+#include <stddef.h>
 
 /*====================
    COLOR SETTINGS
@@ -20,25 +21,20 @@
    MEMORY SETTINGS
  *====================*/
 
-#define LV_USE_STDLIB_MALLOC    LV_STDLIB_BUILTIN
+#define LV_USE_STDLIB_MALLOC    LV_STDLIB_CUSTOM
 #define LV_USE_STDLIB_STRING    LV_STDLIB_CLIB
 #define LV_USE_STDLIB_SPRINTF   LV_STDLIB_CLIB
 
-#ifndef LV_MEM_SIZE
-  #define LV_MEM_SIZE (200 * 1024U)
-#endif
+/* Custom allocator: small allocs → DRAM (fast), large → PSRAM (unlimited)
+ * LVGL 9.2 LV_STDLIB_CUSTOM expects: lv_mem_init, lv_malloc_core, lv_realloc_core, lv_free_core
+ * Implemented in src/utils/lv_custom_alloc.cpp */
 
 /* Image cache - crucial for performance! */
 #ifndef LV_CACHE_DEF_SIZE
-  #define LV_CACHE_DEF_SIZE       (42 * 1024U)
+  #define LV_CACHE_DEF_SIZE       (48 * 1024U)
 #endif
 
 #define LV_IMAGE_HEADER_CACHE_DEF_CNT 32
-
-#ifdef LV_USE_PSRAM
-  #define LV_MEM_POOL_INCLUDE "esp_heap_caps.h"
-  #define LV_MEM_POOL_ALLOC(size) heap_caps_malloc(size, MALLOC_CAP_SPIRAM)
-#endif
 
 /*====================
    HAL SETTINGS

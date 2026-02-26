@@ -250,11 +250,6 @@ static void parse_system(const UI::ParsedElement& root) {
                 display_set_buffer(BufferSmall);
                 freeDram = heap_caps_get_free_size(MALLOC_CAP_INTERNAL);
                 Serial.printf("[system] After buffer reduction: %u bytes free\n", freeDram);
-            } else if (!hasDisplayTag) {
-                targetBuffer = BufferOptimal;
-                if (display_get_buffer_lines() > targetBuffer) {
-                    display_set_buffer(targetBuffer);
-                }
             }
             
             freeDram = heap_caps_get_free_size(MALLOC_CAP_INTERNAL);

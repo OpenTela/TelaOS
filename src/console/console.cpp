@@ -277,8 +277,10 @@ static Result execSys(const char* cmd, JsonArray args) {
     // sys info
     if (strcmp(cmd, "info") == 0) {
         auto r = Result::ok();
-        r.data["heap"] = ESP.getFreeHeap();
-        r.data["psram"] = ESP.getFreePsram();
+        r.data["heap_free"] = ESP.getFreeHeap();
+        r.data["heap_min"] = ESP.getMinFreeHeap();
+        r.data["psram_free"] = ESP.getFreePsram();
+        r.data["psram_total"] = ESP.getPsramSize();
         r.data["chip"] = ESP.getChipModel();
         r.data["freq"] = ESP.getCpuFreqMHz();
         r.data["buf_lines"] = display_get_buffer_lines();

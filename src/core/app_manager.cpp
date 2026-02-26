@@ -692,10 +692,6 @@ bool Manager::launchNative(NativeApp* app) {
     ui_engine().clear();
     lv_image_cache_drop(NULL);
     
-    // Shrink display buffer if possible — app doesn't need smooth swipe rendering
-    if (display_get_buffer_lines() > BufferSmall) {
-        display_set_buffer(BufferSmall);
-    }
     LOG_I(Log::APP, "Heap after cleanup: %d bytes", (int)ESP.getFreeHeap());
     
     display_unlock();
@@ -729,10 +725,6 @@ bool Manager::loadApp(const P::String& path) {
     ui_engine().clear();
     lv_image_cache_drop(NULL);
     
-    // Shrink display buffer if possible — app doesn't need smooth swipe rendering
-    if (display_get_buffer_lines() > BufferSmall) {
-        display_set_buffer(BufferSmall);
-    }
     LOG_I(Log::APP, "Heap after cleanup: %d bytes", (int)ESP.getFreeHeap());
     
     display_unlock();
@@ -891,10 +883,10 @@ bool Manager::loadApp(const P::String& path) {
     s_appState = AppState::APP_RUNNING;
     LOG_I(Log::APP, "State: APP_RUNNING | App loaded!");
     
-    lv_mem_monitor_t mon;
-    lv_mem_monitor(&mon);
-    uint32_t freePct = mon.free_size * 100 / mon.total_size;
     uint32_t dramFree = heap_caps_get_free_size(MALLOC_CAP_INTERNAL);
+    uint32_t psramFree = heap_caps_get_free_size(MALLOC_CAP_SPIRAM);
+    uint32_t psramTotal = heap_caps_get_total_size(MALLOC_CAP_SPIRAM);
+    uint32_t psramUsed = psramTotal - psramFree;
     
     Serial.println("========== APP STATUS ==========");
 #ifndef NO_BLE
@@ -904,17 +896,12 @@ bool Manager::loadApp(const P::String& path) {
 #endif
     Serial.printf("[Status] Display buffer: %d lines\n", display_get_buffer_lines());
     Serial.printf("[Status] DRAM free: %u bytes\n", dramFree);
-    Serial.printf("[Status] PSRAM free: %u bytes\n", heap_caps_get_free_size(MALLOC_CAP_SPIRAM));
-    Serial.printf("[Status] LVGL: %u/%u used (%u%% free, frag %u%%)\n",
-        mon.total_size - mon.free_size, mon.total_size,
-        freePct, mon.frag_pct);
+    Serial.printf("[Status] PSRAM: %u/%u used (%u free)\n", psramUsed, psramTotal, psramFree);
     
-    if (freePct < 20)
-        LOG_W(Log::APP, "⚠ LVGL MEMORY LOW! Only %u%% free (%u bytes)", freePct, mon.free_size);
-    if (mon.frag_pct > 50)
-        LOG_W(Log::APP, "⚠ LVGL FRAGMENTATION HIGH: %u%% - app switches may fail", mon.frag_pct);
     if (dramFree < 15000)
         LOG_W(Log::APP, "⚠ DRAM CRITICALLY LOW: %u bytes free", dramFree);
+    if (psramFree < 100000)
+        LOG_W(Log::APP, "⚠ PSRAM LOW: %u bytes free", psramFree);
     
     Serial.println("================================");
     
