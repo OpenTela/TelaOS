@@ -30,7 +30,7 @@
 
 /* Image cache - crucial for performance! */
 #ifndef LV_CACHE_DEF_SIZE
-  #define LV_CACHE_DEF_SIZE       (48 * 1024U)
+  #define LV_CACHE_DEF_SIZE       (42 * 1024U)
 #endif
 
 #define LV_IMAGE_HEADER_CACHE_DEF_CNT 32

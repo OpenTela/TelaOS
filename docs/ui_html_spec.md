@@ -6,7 +6,7 @@
 
 - **v0.5**: z-index (HTML атрибут, CSS, setAttr)
 
-- **v0.4**: Тег `<configuration>` (legacy: `<system>`). Тег `<network/>` (legacy: `<bluetooth/>`)
+- **v0.4**: Тег `<config>`. Тег `<network/>`
 - **v0.3**: focus(), onenter, onblur, биндинг bgcolor/color, setAttr/getAttr
 - **v0.2**: canvas, image, ресурсы, иконки на кнопках
 - **v0.1**: Начальная версия
@@ -56,9 +56,9 @@ myapp/
 
 ```html
 <app>
-  <system>
+  <config>
     <network/>  <!-- опционально: включить BLE -->
-  </system>
+  </config>
   
   <ui default="/main">
     <!-- страницы и группы -->
@@ -548,16 +548,16 @@ end
 
 <!-- Включен сразу -->
 <app>
-  <system>
+  <config>
     <network/>
-  </system>
+  </config>
 </app>
 
 <!-- Включится при первом fetch() -->
 <app>
-  <system>
+  <config>
     <network mode="ondemand"/>
-  </system>
+  </config>
 </app>
 ```
 

@@ -53,7 +53,7 @@ void setup() {
         Serial.println("[PSRAM] Allocation test: FAILED!");
     }
     
-    // BLE is initialized on-demand when app requires it (via <bluetooth/> tag)
+    // BLE is initialized on-demand when app requires it (via <network/> tag in <config>)
     Serial.printf("[Heap] Before Display: %d bytes free\n", ESP.getFreeHeap());
     
     if (!display_init()) {

@@ -127,7 +127,7 @@ static void handleIncoming(const P::String& data) {
             }
         }
         
-        LOG_D(Log::BLE, "v2: %s %s (id=%d)", subsystem, cmd, id);
+        LOG_I(Log::BLE, "v2: %s %s (id=%d)", subsystem, cmd, id);
         
         auto result = Console::exec(subsystem, cmd, args);
         

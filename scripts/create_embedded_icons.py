@@ -5,12 +5,15 @@ create_embedded_icons.py - Pre-build script for embedding app icons
 Scans data/apps/*/icon.png and generates _generated_icons.h
 with RGB565 pixel data for use in launcher without PNG decoding.
 
+Hybrid system: embedded icons used at runtime, FS fallback for new/changed icons.
+Each icon stores original PNG file size for staleness detection.
+
 Usage:
   PlatformIO: extra_scripts = pre:scripts/create_embedded_icons.py
   Debug mode: python create_embedded_icons.py -d icon.png
 """
 
-SCRIPT_VERSION = "2.0"
+SCRIPT_VERSION = "3.0"
 
 import os
 import sys
@@ -140,7 +143,10 @@ def sanitize_name(name):
 
 
 def generate_header(icons_data, output_path, icon_size=DEFAULT_SIZE):
-    """Generate C header with embedded icons"""
+    """Generate C header with embedded icons and PNG sizes for staleness check"""
+    
+    has_icons = len(icons_data) > 0
+    
     lines = [
         "// === AUTO-GENERATED FILE - DO NOT EDIT! ===",
         f"// SCRIPT_VERSION: {SCRIPT_VERSION}",
@@ -152,81 +158,106 @@ def generate_header(icons_data, output_path, icon_size=DEFAULT_SIZE):
         "#include <cstring>",
         "#include <cstdio>",
         "",
-        "// Auto-enable USE_BUILTIN_ICONS when embedding all",
-        "#ifdef EMBED_ALL_ICONS",
-        "#ifndef USE_BUILTIN_ICONS",
-        "#define USE_BUILTIN_ICONS",
-        "#endif",
-        "#endif",
-        "",
-        "#ifdef USE_BUILTIN_ICONS",
-        "",
     ]
     
-    for app_name, (width, height, data) in icons_data.items():
-        safe_name = sanitize_name(app_name)
-        data_size = len(data)
-        
-        lines.append(f"// {app_name}: {width}x{height} RGB565 ({data_size} bytes)")
-        lines.append(f"static const uint8_t _icon_{safe_name}_data[] PROGMEM = {{")
-        
-        for i in range(0, len(data), 16):
-            chunk = data[i:i+16]
-            hex_str = ", ".join(f"0x{b:02X}" for b in chunk)
-            lines.append(f"    {hex_str},")
-        
-        lines.append("};")
+    if has_icons:
+        lines.append("// Icons found at build time — always active")
+        lines.append("#ifndef NO_BUILTIN_ICONS")
+        lines.append("#define USE_BUILTIN_ICONS")
+        lines.append("#endif")
         lines.append("")
-        lines.append(f"static const lv_image_dsc_t _icon_{safe_name} = {{")
-        lines.append(f"    .header = {{ .cf = LV_COLOR_FORMAT_RGB565, .w = {width}, .h = {height} }},")
-        lines.append(f"    .data_size = {data_size},")
-        lines.append(f"    .data = _icon_{safe_name}_data")
-        lines.append("};")
+        lines.append("#ifdef USE_BUILTIN_ICONS")
         lines.append("")
     
-    # Lookup table
-    lines.append("struct BuiltinIcon {")
-    lines.append("    const char* name;")
-    lines.append("    const lv_image_dsc_t* icon;")
-    lines.append("};")
-    lines.append("")
-    lines.append("static const BuiltinIcon _builtin_icons[] = {")
+        for app_name, (width, height, data, png_size) in icons_data.items():
+            safe_name = sanitize_name(app_name)
+            data_size = len(data)
+            
+            lines.append(f"// {app_name}: {width}x{height} RGB565 ({data_size}B, png={png_size}B)")
+            lines.append(f"static const uint8_t _icon_{safe_name}_data[] PROGMEM = {{")
+            
+            for i in range(0, len(data), 16):
+                chunk = data[i:i+16]
+                hex_str = ", ".join(f"0x{b:02X}" for b in chunk)
+                lines.append(f"    {hex_str},")
+            
+            lines.append("};")
+            lines.append("")
+            lines.append(f"static const lv_image_dsc_t _icon_{safe_name} = {{")
+            lines.append(f"    .header = {{ .cf = LV_COLOR_FORMAT_RGB565, .w = {width}, .h = {height} }},")
+            lines.append(f"    .data_size = {data_size},")
+            lines.append(f"    .data = _icon_{safe_name}_data")
+            lines.append("};")
+            lines.append("")
+        
+        # Lookup table with png_size for staleness detection
+        lines.append("struct BuiltinIcon {")
+        lines.append("    const char* name;")
+        lines.append("    const lv_image_dsc_t* icon;")
+        lines.append("    uint32_t png_size;  // original PNG file size — if FS differs, icon was updated")
+        lines.append("};")
+        lines.append("")
+        lines.append("static const BuiltinIcon _builtin_icons[] = {")
+        
+        for app_name, (width, height, data, png_size) in icons_data.items():
+            safe_name = sanitize_name(app_name)
+            lines.append(f'    {{ "{app_name}", &_icon_{safe_name}, {png_size} }},')
+        
+        lines.append("    { nullptr, nullptr, 0 }")
+        lines.append("};")
+        lines.append("")
+        
+        # Entry lookup (returns full struct for size check)
+        lines.append("// Returns full entry with png_size for staleness check")
+        lines.append("static inline const BuiltinIcon* findBuiltinEntry(const char* name) {")
+        lines.append("    for (const auto& entry : _builtin_icons) {")
+        lines.append("        if (entry.name && strcmp(entry.name, name) == 0) {")
+        lines.append("            return &entry;")
+        lines.append("        }")
+        lines.append("    }")
+        lines.append("    return nullptr;")
+        lines.append("}")
+        lines.append("")
+        
+        # Legacy compat — returns just the descriptor
+        lines.append("static inline const lv_image_dsc_t* findBuiltinIcon(const char* name) {")
+        lines.append("    auto* e = findBuiltinEntry(name);")
+        lines.append("    return e ? e->icon : nullptr;")
+        lines.append("}")
+        lines.append("")
+        lines.append("static inline const lv_image_dsc_t* findCategoryIcon(const char* category) {")
+        lines.append("    if (!category || !category[0]) return nullptr;")
+        lines.append("    char buf[64];")
+        lines.append('    snprintf(buf, sizeof(buf), "_category_%s", category);')
+        lines.append("    return findBuiltinIcon(buf);")
+        lines.append("}")
+        lines.append("")
+        lines.append("static inline const lv_image_dsc_t* findSystemIcon(const char* name) {")
+        lines.append("    if (!name || !name[0]) return nullptr;")
+        lines.append("    char buf[64];")
+        lines.append('    snprintf(buf, sizeof(buf), "_system_%s", name);')
+        lines.append("    return findBuiltinIcon(buf);")
+        lines.append("}")
+        lines.append("")
+        lines.append("static inline const BuiltinIcon* findSystemEntry(const char* name) {")
+        lines.append("    if (!name || !name[0]) return nullptr;")
+        lines.append("    char buf[64];")
+        lines.append('    snprintf(buf, sizeof(buf), "_system_%s", name);')
+        lines.append("    return findBuiltinEntry(buf);")
+        lines.append("}")
+        lines.append("")
+        lines.append("#endif // USE_BUILTIN_ICONS")
+        lines.append("")
     
-    for app_name in icons_data.keys():
-        safe_name = sanitize_name(app_name)
-        lines.append(f'    {{ "{app_name}", &_icon_{safe_name} }},')
-    
-    lines.append("    { nullptr, nullptr }")
-    lines.append("};")
-    lines.append("")
-    lines.append("static inline const lv_image_dsc_t* findBuiltinIcon(const char* name) {")
-    lines.append("    for (const auto& entry : _builtin_icons) {")
-    lines.append("        if (entry.name && strcmp(entry.name, name) == 0) {")
-    lines.append("            return entry.icon;")
-    lines.append("        }")
-    lines.append("    }")
-    lines.append("    return nullptr;")
-    lines.append("}")
-    lines.append("")
-    lines.append("static inline const lv_image_dsc_t* findCategoryIcon(const char* category) {")
-    lines.append("    if (!category || !category[0]) return nullptr;")
-    lines.append("    char buf[64];")
-    lines.append('    snprintf(buf, sizeof(buf), "_category_%s", category);')
-    lines.append("    return findBuiltinIcon(buf);")
-    lines.append("}")
-    lines.append("")
-    lines.append("static inline const lv_image_dsc_t* findSystemIcon(const char* name) {")
-    lines.append("    if (!name || !name[0]) return nullptr;")
-    lines.append("    char buf[64];")
-    lines.append('    snprintf(buf, sizeof(buf), "_system_%s", name);')
-    lines.append("    return findBuiltinIcon(buf);")
-    lines.append("}")
-    lines.append("")
-    lines.append("#else")
+    # Stubs when no builtin icons (proper LVGL types for compilation safety)
+    lines.append("#ifndef USE_BUILTIN_ICONS")
+    lines.append("struct BuiltinIcon { const char* name; const lv_image_dsc_t* icon; uint32_t png_size; };")
+    lines.append("static inline const BuiltinIcon* findBuiltinEntry(const char*) { return nullptr; }")
     lines.append("static inline const lv_image_dsc_t* findBuiltinIcon(const char*) { return nullptr; }")
     lines.append("static inline const lv_image_dsc_t* findCategoryIcon(const char*) { return nullptr; }")
     lines.append("static inline const lv_image_dsc_t* findSystemIcon(const char*) { return nullptr; }")
-    lines.append("#endif // USE_BUILTIN_ICONS")
+    lines.append("static inline const BuiltinIcon* findSystemEntry(const char*) { return nullptr; }")
+    lines.append("#endif // !USE_BUILTIN_ICONS")
     lines.append("")
     
     output_path.parent.mkdir(parents=True, exist_ok=True)
@@ -323,33 +354,34 @@ def main():
             continue
         
         app_name = app_dir.name
+        png_size = icon_path.stat().st_size
         try:
             width, height, data, transparent = process_icon(icon_path, icon_size)
-            icons_data[app_name] = (width, height, data)
+            icons_data[app_name] = (width, height, data, png_size)
             total_bytes += len(data)
             total_transparent += transparent
-            print(f"  {app_name}: {width}x{height}, {transparent} transparent px")
+            print(f"  {app_name}: {width}x{height}, {png_size}B png, {transparent} transparent px")
         except Exception as e:
             print(f"  {app_name}: FAILED - {e}")
     
     # Process system icons (with _system_ prefix)
-    # Used via icon="system:puzzle-game" in app.html
     for icon_path in sorted(system_icon_paths):
         icon_name = icon_path.stem
         system_name = f"_system_{icon_name}"
+        png_size = icon_path.stat().st_size
         try:
             width, height, data, transparent = process_icon(icon_path, icon_size)
-            icons_data[system_name] = (width, height, data)
+            icons_data[system_name] = (width, height, data, png_size)
             total_bytes += len(data)
             total_transparent += transparent
-            print(f"  system:{icon_name}: {width}x{height}, {transparent} transparent px")
+            print(f"  system:{icon_name}: {width}x{height}, {png_size}B png, {transparent} transparent px")
         except Exception as e:
             print(f"  system:{icon_name}: FAILED - {e}")
     
     count = generate_header(icons_data, output_path, icon_size)
     
     if count > 0:
-        print(f"  Total: {count} icons, {total_bytes//1024}KB, {total_transparent} blended px")
+        print(f"  Total: {count} icons, {total_bytes//1024}KB flash, {total_transparent} blended px")
     else:
         print("  No icons found")
 

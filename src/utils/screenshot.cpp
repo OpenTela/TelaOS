@@ -22,8 +22,18 @@ static ColorFormat parseColorFormat(const char* color) {
     return COLOR_RGB16;
 }
 
+// Bayer 4x4 ordered dithering matrix (normalized to 0-255)
+static const uint8_t bayer4[4][4] = {
+    {   0, 136,  34, 170 },
+    { 204,  68, 238, 102 },
+    {  51, 187,  17, 153 },
+    { 255, 119, 221,  85 }
+};
+
 // Convert RGB565 pixels to target format
-static uint32_t convertPixels(uint16_t* src, uint8_t* dst, uint32_t pixelCount, ColorFormat format) {
+// imageWidth needed for BW dithering (x,y from pixel index)
+static uint32_t convertPixels(uint16_t* src, uint8_t* dst, uint32_t pixelCount, 
+                               ColorFormat format, uint32_t imageWidth = 0) {
     switch (format) {
         case COLOR_RGB16:
             memcpy(dst, src, pixelCount * 2);
@@ -49,20 +59,38 @@ static uint32_t convertPixels(uint16_t* src, uint8_t* dst, uint32_t pixelCount, 
             }
             return pixelCount;
             
-        case COLOR_BW:
+        case COLOR_BW: {
+            // Adaptive Bayer dithering:
+            //   dark pixels (< 40)   → always black  (clean for LZ4)
+            //   light pixels (> 215) → always white   (clean for LZ4)
+            //   midtones (40-215)    → Bayer dithered (preserves detail)
+            uint32_t w = imageWidth ? imageWidth : pixelCount;
             for (uint32_t i = 0; i < pixelCount; i += 8) {
                 uint8_t byte = 0;
                 for (int bit = 0; bit < 8 && (i + bit) < pixelCount; bit++) {
-                    uint16_t p = src[i + bit];
+                    uint32_t idx = i + bit;
+                    uint16_t p = src[idx];
                     uint8_t r = ((p >> 11) & 0x1F) << 3;
                     uint8_t g = ((p >> 5) & 0x3F) << 2;
                     uint8_t b = (p & 0x1F) << 3;
                     uint8_t gray = (r * 77 + g * 150 + b * 29) >> 8;
-                    if (gray > 127) byte |= (1 << (7 - bit));
+                    
+                    bool white;
+                    if (gray < 40) {
+                        white = false;
+                    } else if (gray > 215) {
+                        white = true;
+                    } else {
+                        uint32_t x = idx % w;
+                        uint32_t y = idx / w;
+                        white = gray > bayer4[y & 3][x & 3];
+                    }
+                    if (white) byte |= (1 << (7 - bit));
                 }
                 dst[i / 8] = byte;
             }
             return (pixelCount + 7) / 8;
+        }
             
         case COLOR_PALETTE:
             break;  // handled by convertPalette()
@@ -240,7 +268,7 @@ bool capture(CaptureResult& out, const char* mode, int scale, const char* color)
     const char* actualColor = color;  // may change on palette fallback
     
     // Helper lambda: convert pixels with palette fallback
-    auto doConvert = [&](uint16_t* pixels, uint32_t count) -> uint32_t {
+    auto doConvert = [&](uint16_t* pixels, uint32_t count, uint32_t w) -> uint32_t {
         if (colorFmt == COLOR_PALETTE) {
             uint32_t palSize = convertPalette(pixels, colorBuffer, count);
             if (palSize > 0) {
@@ -250,9 +278,9 @@ bool capture(CaptureResult& out, const char* mode, int scale, const char* color)
             // Fallback: too many colors
             LOG_D(Log::UI, "Palette fallback -> rgb16");
             actualColor = "rgb16";
-            return convertPixels(pixels, colorBuffer, count, COLOR_RGB16);
+            return convertPixels(pixels, colorBuffer, count, COLOR_RGB16, w);
         }
-        return convertPixels(pixels, colorBuffer, count, colorFmt);
+        return convertPixels(pixels, colorBuffer, count, colorFmt, w);
     };
     
     // Select downscale: nearest for palette (preserves exact colors), averaging for others
@@ -266,7 +294,7 @@ bool capture(CaptureResult& out, const char* mode, int scale, const char* color)
             downscale((uint16_t*)fullBuffer, (uint16_t*)downscaledBuffer,
                           SCREEN_WIDTH, SCREEN_HEIGHT, s);
             
-            colorSize = doConvert((uint16_t*)downscaledBuffer, outW * outH);
+            colorSize = doConvert((uint16_t*)downscaledBuffer, outW * outH, outW);
             
             compressedSize = LZ4_compress_fast_extState(
                 lz4State,
@@ -289,7 +317,7 @@ bool capture(CaptureResult& out, const char* mode, int scale, const char* color)
         if (scale <= 1) {
             outW = SCREEN_WIDTH;
             outH = SCREEN_HEIGHT;
-            colorSize = doConvert((uint16_t*)fullBuffer, outW * outH);
+            colorSize = doConvert((uint16_t*)fullBuffer, outW * outH, outW);
         } else {
             outW = SCREEN_WIDTH / scale;
             outH = SCREEN_HEIGHT / scale;
@@ -297,7 +325,7 @@ bool capture(CaptureResult& out, const char* mode, int scale, const char* color)
             downscale((uint16_t*)fullBuffer, (uint16_t*)downscaledBuffer,
                           SCREEN_WIDTH, SCREEN_HEIGHT, scale);
             
-            colorSize = doConvert((uint16_t*)downscaledBuffer, outW * outH);
+            colorSize = doConvert((uint16_t*)downscaledBuffer, outW * outH, outW);
         }
         
         compressedSize = LZ4_compress_fast_extState(

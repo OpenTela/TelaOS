@@ -203,11 +203,10 @@ static void parse_style(const UI::ParsedElement& root) {
     }
 }
 
-// Parse <config> section. Legacy fallback: <system>
+// Parse <config> section
 // Subtags: <network/>, <display buffer="..."/>
 static void parse_system(const UI::ParsedElement& root) {
     auto system = root.find("config");
-    if (!system) system = root.find("system");  // legacy fallback
     if (!system) return;
     
     // Check for <display buffer="..."/>
@@ -232,18 +231,14 @@ static void parse_system(const UI::ParsedElement& root) {
         LOG_I(Log::UI, "system: display buffer=%.*s (%d lines)", (int)buffer.size(), buffer.data(), targetBuffer);
     }
     
-    // Check for <bluetooth/> or <network/> - both enable BLE
-    // (network requests go through BLE to phone which performs HTTP)
-    auto bluetooth = system->find("bluetooth");
+    // Check for <network/> — enables BLE bridge for HTTP requests
     auto network = system->find("network");
-    if (bluetooth || network) {
-        const char* tagName = bluetooth ? "bluetooth" : "network";
-        auto activeTag = bluetooth ? bluetooth : network;
-        auto mode = activeTag->get("mode");
+    if (network) {
+        auto mode = network->get("mode");
         
         // Already running? Skip all memory gymnastics
         if (BLEBridge::isInitialized()) {
-            LOG_I(Log::UI, "system: %s — BLE already running", tagName);
+            LOG_I(Log::UI, "config: network — BLE already running");
         } else {
             // BLE needs ~40KB DRAM. Check if we need to reduce buffer
             size_t freeDram = heap_caps_get_free_size(MALLOC_CAP_INTERNAL);
@@ -276,13 +271,13 @@ static void parse_system(const UI::ParsedElement& root) {
         }
         
         if (mode == "ondemand") {
-            LOG_I(Log::UI, "system: %s mode=ondemand", tagName);
+            LOG_I(Log::UI, "config: network mode=ondemand");
         } else {
-            LOG_I(Log::UI, "system: %s enabled", tagName);
+            LOG_I(Log::UI, "config: network enabled");
         }
         Serial.flush();
     } else if (hasDisplayTag) {
-        // Only display tag, no bluetooth - apply buffer setting
+        // Only display tag, no network - apply buffer setting
         display_set_buffer(targetBuffer);
     }
 }

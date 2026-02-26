@@ -75,6 +75,9 @@ private:
     P::Array<lv_obj_t*> m_dots;
     P::Array<lv_obj_t*> m_icons;
     P::Array<lv_obj_t*> m_clockLabels;
+    P::Array<lv_obj_t*> m_bigDateLabels;      // "Понедельник, 24 Фев"
+    P::Array<lv_obj_t*> m_compactDayLabels;   // "понедельник"
+    P::Array<lv_obj_t*> m_compactDateLabels;  // "24 февраля"
     lv_obj_t* m_dotsContainer = nullptr;
     lv_timer_t* m_clockTimer = nullptr;
     size_t m_currentPage = 0;

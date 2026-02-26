@@ -16,6 +16,7 @@
 #include "engines/lua/lua_system.h"
 #include "engines/bf/bf_engine.h"
 #include "utils/log_config.h"
+#include "_generated_icons.h"
 #include "esp_heap_caps.h"
 #include <Arduino.h>
 #include <lvgl.h>
@@ -411,31 +412,60 @@ void Manager::printAppList() {
             iconStr = "[native]";
         } else if (!app.iconPath.empty()) {
             P::String path = app.iconPath;
+            P::String fname;
+            
             if (path.find(SYS_LVGL_PREFIX SYS_ICONS) == 0) {
-                // Shared system icon
-                auto fname = path.substr(sizeof(SYS_LVGL_PREFIX SYS_ICONS) - 1);
-                snprintf(iconBuf, sizeof(iconBuf), "%s [system]", fname.c_str());
+                fname = path.substr(sizeof(SYS_LVGL_PREFIX SYS_ICONS) - 1);
             } else {
-                // App's own icon
                 auto slash = path.rfind('/');
-                const char* fname = (slash != P::String::npos) 
-                    ? path.c_str() + slash + 1 : path.c_str();
-                snprintf(iconBuf, sizeof(iconBuf), "%s [fs]", fname);
+                fname = (slash != P::String::npos) 
+                    ? path.substr(slash + 1) : path;
             }
-#if defined(PRELOAD_ICONS_TO_PSRAM) && !defined(NO_PNG_ICONS)
-            if (app.hasIcon) {
-                // Replace [fs]/[system] tag with [psram]
-                char* bracket = strrchr(iconBuf, '[');
-                if (bracket) snprintf(bracket, sizeof(iconBuf) - (bracket - iconBuf), "[psram]");
-            }
-#endif
+            
+            // Determine source: embed (flash) / stale (fs, icon changed) / psram / fs
+            const char* src = "fs";
+            
 #ifdef USE_BUILTIN_ICONS
-            // Check if this icon would resolve to embedded
-            if (findBuiltinIcon(app.name.c_str())) {
-                char* bracket = strrchr(iconBuf, '[');
-                if (bracket) snprintf(bracket, sizeof(iconBuf) - (bracket - iconBuf), "[embed]");
+            {
+                const BuiltinIcon* entry = findBuiltinEntry(app.name.c_str());
+                if (!entry && path.find(SYS_LVGL_PREFIX SYS_ICONS) == 0) {
+                    P::String iconName = path.substr(sizeof(SYS_LVGL_PREFIX SYS_ICONS) - 1);
+                    size_t dot = iconName.rfind('.');
+                    if (dot != P::String::npos) iconName = iconName.substr(0, dot);
+                    entry = findSystemEntry(iconName.c_str());
+                }
+                if (entry) {
+                    // Check staleness
+                    P::String fsPath = path;
+                    if (fsPath.size() > 2 && fsPath[0] == 'C' && fsPath[1] == ':')
+                        fsPath = fsPath.substr(2);
+                    bool stale = false;
+                    if (LittleFS.exists(fsPath.c_str())) {
+                        File f = LittleFS.open(fsPath.c_str(), "r");
+                        if (f) { 
+                            uint32_t fsSize = (uint32_t)f.size();
+                            stale = (fsSize != entry->png_size); 
+                            if (stale) {
+                                LOG_I(Log::APP, "  stale: %s fs=%u embed=%u", 
+                                      app.name.c_str(), fsSize, entry->png_size);
+                            }
+                            f.close(); 
+                        }
+                    }
+                    src = stale ? "stale->fs" : "embed";
+                } else {
+                    LOG_D(Log::APP, "  no builtin: %s", app.name.c_str());
+                }
             }
 #endif
+
+#if defined(PRELOAD_ICONS_TO_PSRAM) && !defined(NO_PNG_ICONS)
+            if (app.hasIcon && strcmp(src, "fs") == 0) {
+                src = "psram";
+            }
+#endif
+            
+            snprintf(iconBuf, sizeof(iconBuf), "%s [%s]", fname.c_str(), src);
             iconStr = iconBuf;
         }
         
@@ -452,6 +482,7 @@ void Manager::preloadIcons() {
     
     int loaded = 0;
     int skipped = 0;
+    int embedded = 0;
     size_t totalBytes = 0;
     
     for (auto& app : m_apps) {
@@ -461,6 +492,44 @@ void Manager::preloadIcons() {
         if (fsPath.size() > 2 && fsPath[0] == 'C' && fsPath[1] == ':') {
             fsPath = fsPath.substr(2);
         }
+        
+        // --- Hybrid: skip if embedded icon is still fresh ---
+#ifdef USE_BUILTIN_ICONS
+        {
+            // Check app icon by name
+            const BuiltinIcon* entry = findBuiltinEntry(app.name.c_str());
+            
+            // Check system icon if app icon not found
+            if (!entry && !app.iconPath.empty()) {
+                const char* sysPrefix = SYS_LVGL_PREFIX SYS_ICONS;
+                if (strncmp(app.iconPath.c_str(), sysPrefix, strlen(sysPrefix)) == 0) {
+                    const char* nameStart = app.iconPath.c_str() + strlen(sysPrefix);
+                    P::String iconName(nameStart);
+                    size_t dotPos = iconName.rfind('.');
+                    if (dotPos != P::String::npos) iconName = iconName.substr(0, dotPos);
+                    entry = findSystemEntry(iconName.c_str());
+                }
+            }
+            
+            if (entry) {
+                // Compare FS file size with build-time png_size
+                bool stale = false;
+                if (!fsPath.empty() && LittleFS.exists(fsPath.c_str())) {
+                    File f = LittleFS.open(fsPath.c_str(), "r");
+                    if (f) {
+                        stale = ((uint32_t)f.size() != entry->png_size);
+                        f.close();
+                    }
+                }
+                if (!stale) {
+                    // Embedded is up-to-date — skip PSRAM decode
+                    embedded++;
+                    continue;
+                }
+                LOG_I(Log::APP, "Icon changed on FS: %s (decode from disk)", app.name.c_str());
+            }
+        }
+#endif
         
         if (!LittleFS.exists(fsPath.c_str())) { skipped++; continue; }
         
@@ -520,7 +589,8 @@ void Manager::preloadIcons() {
         totalBytes += dataSize;
     }
     
-    LOG_I(Log::APP, "Icons: %d loaded (%d KB), %d skipped", loaded, (int)(totalBytes / 1024), skipped);
+    LOG_I(Log::APP, "Icons: %d loaded (%d KB PSRAM), %d embedded (flash), %d skipped", 
+           loaded, (int)(totalBytes / 1024), embedded, skipped);
 }
 
 

@@ -17,6 +17,7 @@
 #include <Arduino.h>
 #include <cstring>
 #include <cctype>
+#include <ctime>
 
 #include "ui_layout.h"
 #include "_generated_icons.h"
@@ -29,24 +30,66 @@ namespace UI {
 // Time helpers
 // ============================================
 
+// Time is "synced" if system clock is past 2024-01-01
+static bool isTimeSynced() {
+    return time(nullptr) > 1704067200;  // 2024-01-01 00:00:00 UTC
+}
+
+static struct tm* getLocalNow() {
+    time_t now = time(nullptr);
+    return localtime(&now);
+}
+
+static const char* s_dayNames[]      = { "Воскресенье", "Понедельник", "Вторник", "Среда", "Четверг", "Пятница", "Суббота" };
+static const char* s_dayNamesLower[] = { "воскресенье", "понедельник", "вторник", "среда", "четверг", "пятница", "суббота" };
+static const char* s_monthShort[]    = { "Янв", "Фев", "Мар", "Апр", "Май", "Июн", "Июл", "Авг", "Сен", "Окт", "Ноя", "Дек" };
+static const char* s_monthGenitive[] = { "января", "февраля", "марта", "апреля", "мая", "июня",
+                                         "июля", "августа", "сентября", "октября", "ноября", "декабря" };
+
 const char* Launcher::getTimeStr() {
     static char buf[16];
-    if (!m_timeInitialized) {
-        m_startMillis = millis();
-        m_timeInitialized = true;
+    if (isTimeSynced()) {
+        struct tm* t = getLocalNow();
+        snprintf(buf, sizeof(buf), "%02d:%02d", t->tm_hour, t->tm_min);
+    } else {
+        // Fallback: uptime counter
+        if (!m_timeInitialized) {
+            m_startMillis = millis();
+            m_timeInitialized = true;
+        }
+        uint32_t elapsed = (millis() - m_startMillis) / 1000;
+        snprintf(buf, sizeof(buf), "%02d:%02d", (int)((elapsed / 3600) % 24), (int)((elapsed / 60) % 60));
     }
-    uint32_t elapsed = (millis() - m_startMillis) / 1000;
-    int hours = (elapsed / 3600) % 24;
-    int mins = (elapsed / 60) % 60;
-    snprintf(buf, sizeof(buf), "%02d:%02d", hours, mins);
     return buf;
 }
 
-const char* Launcher::getDayName() { return "Суббота"; }
-const char* Launcher::getDayNameLower() { return "суббота"; }
-int Launcher::getDay() { return 25; }
-const char* Launcher::getMonthShort() { return "Янв"; }
-const char* Launcher::getDateLower() { return "25 января"; }
+const char* Launcher::getDayName() {
+    if (!isTimeSynced()) return "Понедельник";
+    return s_dayNames[getLocalNow()->tm_wday];
+}
+
+const char* Launcher::getDayNameLower() {
+    if (!isTimeSynced()) return "понедельник";
+    return s_dayNamesLower[getLocalNow()->tm_wday];
+}
+
+int Launcher::getDay() {
+    if (!isTimeSynced()) return 1;
+    return getLocalNow()->tm_mday;
+}
+
+const char* Launcher::getMonthShort() {
+    if (!isTimeSynced()) return "Янв";
+    return s_monthShort[getLocalNow()->tm_mon];
+}
+
+const char* Launcher::getDateLower() {
+    static char buf[32];
+    if (!isTimeSynced()) return "1 января";
+    struct tm* t = getLocalNow();
+    snprintf(buf, sizeof(buf), "%d %s", t->tm_mday, s_monthGenitive[t->tm_mon]);
+    return buf;
+}
 
 // ============================================
 // Title truncation (UTF-8 aware)
@@ -95,20 +138,42 @@ lv_obj_t* Launcher::loadIcon(lv_obj_t* cell, const LauncherAppInfo& app, size_t 
     const lv_image_dsc_t* iconSrc = nullptr;
     
 #ifdef USE_BUILTIN_ICONS
-    // 1. Builtin app icon
-    iconSrc = findBuiltinIcon(app.name.c_str());
+    // 1. Builtin app icon (with staleness check)
+    {
+        const BuiltinIcon* entry = findBuiltinEntry(app.name.c_str());
+        if (entry) {
+            // Verify icon hasn't changed on FS since build
+            bool stale = false;
+            if (!app.iconPath.empty()) {
+                P::String fsPath = app.iconPath;
+                if (fsPath.size() > 2 && fsPath[0] == 'C' && fsPath[1] == ':')
+                    fsPath = fsPath.substr(2);
+                File f = LittleFS.open(fsPath.c_str(), "r");
+                if (f) { stale = ((uint32_t)f.size() != entry->png_size); f.close(); }
+            }
+            if (!stale) iconSrc = entry->icon;
+        }
+    }
     
-    // 2. Builtin system icon
+    // 2. Builtin system icon (with staleness check)
     if (!iconSrc) {
         const char* sysPrefix = SYS_LVGL_PREFIX SYS_ICONS;
         if (strncmp(app.iconPath.c_str(), sysPrefix, strlen(sysPrefix)) == 0) {
             const char* nameStart = app.iconPath.c_str() + strlen(sysPrefix);
             P::String iconName = nameStart;
             size_t dotPos = iconName.rfind('.');
-            if (dotPos != P::String::npos) {
-                iconName = iconName.substr(0, dotPos);
+            if (dotPos != P::String::npos) iconName = iconName.substr(0, dotPos);
+            
+            const BuiltinIcon* entry = findSystemEntry(iconName.c_str());
+            if (entry) {
+                bool stale = false;
+                P::String fsPath = app.iconPath;
+                if (fsPath.size() > 2 && fsPath[0] == 'C' && fsPath[1] == ':')
+                    fsPath = fsPath.substr(2);
+                File f = LittleFS.open(fsPath.c_str(), "r");
+                if (f) { stale = ((uint32_t)f.size() != entry->png_size); f.close(); }
+                if (!stale) iconSrc = entry->icon;
             }
-            iconSrc = findSystemIcon(iconName.c_str());
         }
     }
 #endif
@@ -310,6 +375,34 @@ void Launcher::updateClocks() {
     for (auto* lbl : m_clockLabels) {
         if (lbl) lv_label_set_text(lbl, timeStr);
     }
+    
+    // Update date labels once per minute (or when time just synced)
+    static int lastMin = -1;
+    struct tm* t = isTimeSynced() ? getLocalNow() : nullptr;
+    int curMin = t ? t->tm_min : -1;
+    
+    if (curMin != lastMin) {
+        lastMin = curMin;
+        
+        // Big date: "Понедельник, 24 Фев"
+        char bigDateBuf[64];
+        snprintf(bigDateBuf, sizeof(bigDateBuf), "%s, %d %s", getDayName(), getDay(), getMonthShort());
+        for (auto* lbl : m_bigDateLabels) {
+            if (lbl) lv_label_set_text(lbl, bigDateBuf);
+        }
+        
+        // Compact day: "понедельник"
+        const char* dayLower = getDayNameLower();
+        for (auto* lbl : m_compactDayLabels) {
+            if (lbl) lv_label_set_text(lbl, dayLower);
+        }
+        
+        // Compact date: "24 февраля"
+        const char* dateLower = getDateLower();
+        for (auto* lbl : m_compactDateLabels) {
+            if (lbl) lv_label_set_text(lbl, dateLower);
+        }
+    }
 }
 
 // ============================================
@@ -336,6 +429,7 @@ void Launcher::createBigClock(lv_obj_t* page) {
     lv_obj_align(bigDate, LV_ALIGN_TOP_MID, 0, DATE_TOP_OFFSET);
     lv_obj_add_flag(bigDate, LV_OBJ_FLAG_GESTURE_BUBBLE);
     lv_obj_add_flag(bigDate, LV_OBJ_FLAG_EVENT_BUBBLE);
+    m_bigDateLabels.push_back(bigDate);
 }
 
 void Launcher::createCompactClock(lv_obj_t* page) {
@@ -357,6 +451,7 @@ void Launcher::createCompactClock(lv_obj_t* page) {
     lv_obj_set_pos(compactDay, SCALED(250), SCALED_H(19));
     lv_obj_add_flag(compactDay, LV_OBJ_FLAG_GESTURE_BUBBLE);
     lv_obj_add_flag(compactDay, LV_OBJ_FLAG_EVENT_BUBBLE);
+    m_compactDayLabels.push_back(compactDay);
     
     lv_obj_t* compactDate = lv_label_create(page);
     lv_label_set_text(compactDate, getDateLower());
@@ -365,6 +460,7 @@ void Launcher::createCompactClock(lv_obj_t* page) {
     lv_obj_set_pos(compactDate, SCALED(250), SCALED_H(38));
     lv_obj_add_flag(compactDate, LV_OBJ_FLAG_GESTURE_BUBBLE);
     lv_obj_add_flag(compactDate, LV_OBJ_FLAG_EVENT_BUBBLE);
+    m_compactDateLabels.push_back(compactDate);
 }
 
 // ============================================
@@ -549,6 +645,9 @@ void Launcher::show(const std::vector<LauncherAppInfo>& apps) {
     m_dotsContainer = nullptr;
     m_icons.clear();
     m_clockLabels.clear();
+    m_bigDateLabels.clear();
+    m_compactDayLabels.clear();
+    m_compactDateLabels.clear();
     m_currentPage = 0;
     m_touchStartX = -1;
     
@@ -601,6 +700,9 @@ void Launcher::release() {
     m_dotsContainer = nullptr;
     m_icons.clear();
     m_clockLabels.clear();
+    m_bigDateLabels.clear();
+    m_compactDayLabels.clear();
+    m_compactDateLabels.clear();
     m_currentPage = 0;
     m_numPages = 0;
     m_touchStartX = -1;
