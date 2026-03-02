@@ -524,7 +524,7 @@ PSRAM (8MB)
 
 # TelaOS Documentation
 
-This folder contains the core architectural and technical specifications of TelaOS.
+This /docs folder contains the core architectural and technical specifications of TelaOS.
 
 ## 📖 Recommended reading order
 
@@ -568,4 +568,4 @@ This folder contains the core architectural and technical specifications of Tela
 
 ## License
 
-[LGPL](LICENSE)
+GNU Lesser General Public License [LGPL](LICENSE)
