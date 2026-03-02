@@ -158,7 +158,7 @@ clicker
 | `reboot` | — | — | Перезагрузка |
 | `screen` | [color], [scale], [mode] | `{w, h, color, format, raw_size}` + BIN | Скриншот |
 | `time` | [epoch_seconds] | `{time}` | Получить/установить время |
-| `sync` | protocol, datetime, timezone, [lang] | `{protocol, os, chip, time, uptime, w, h}` | Handshake: синхронизация + инфо об устройстве |
+| `sync` | protocol, datetime, timezone, [lang] | `{protocol, os, chip, time, uptime, battery, w, h}` | Handshake: синхронизация + инфо об устройстве |
 
 **screen** аргументы:
 - `color`: `rgb16` (default), `bw`, `gray`, `pal`

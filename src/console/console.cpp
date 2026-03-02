@@ -26,6 +26,9 @@ static constexpr const char* OS_VERSION = "0.4.0";
 
 static const char* TAG = "Console";
 
+// Default: 100%. Override in hardware-specific code.
+__attribute__((weak)) int getBatteryPercent() { return 100; }
+
 namespace Console {
 
 // === Helpers ===
@@ -404,6 +407,7 @@ static Result execSys(const char* cmd, JsonArray args) {
         r.data["chip"] = ESP.getChipModel();
         r.data["time"] = (long)time(nullptr);
         r.data["uptime"] = (long)(millis() / 1000);
+        r.data["battery"] = getBatteryPercent();
         r.data["w"] = SCREEN_WIDTH;
         r.data["h"] = SCREEN_HEIGHT;
         return r;
