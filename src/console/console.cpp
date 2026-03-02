@@ -284,6 +284,14 @@ static Result execSys(const char* cmd, JsonArray args) {
         r.data["chip"] = ESP.getChipModel();
         r.data["freq"] = ESP.getCpuFreqMHz();
         r.data["buf_lines"] = display_get_buffer_lines();
+        
+        auto& mgr = App::Manager::instance();
+        if (!mgr.inLauncher() && mgr.currentApp().length() > 0) {
+            r.data["app"] = mgr.currentApp();
+        } else {
+            r.data["app"] = (const char*)nullptr;
+        }
+        
 #ifndef NO_BLE
         r.data["ble"] = BLEBridge::isInitialized() ? "on" : "off";
 #else
@@ -339,10 +347,12 @@ static Result execSys(const char* cmd, JsonArray args) {
     }
     
     // sys sync <protocol_version> <datetime_iso> <timezone>
+    // sys sync <protocol> <datetime> <timezone> [lang]
     if (strcmp(cmd, "sync") == 0) {
         const char* clientProto = argStr(args, 0);
         const char* datetime = argStr(args, 1);
         const char* tz = argStr(args, 2);
+        const char* lang = argStr(args, 3, "");
         
         // Parse ISO 8601 datetime → time_t (UTC)
         if (datetime[0]) {
@@ -382,9 +392,20 @@ static Result execSys(const char* cmd, JsonArray args) {
             LOG_I(Log::APP, "Sync: timezone %s (POSIX: %s)", tz, tzStr);
         }
         
+        // Store lang if provided
+        if (lang[0]) {
+            State::store().set("sys.lang", lang);
+            LOG_I(Log::APP, "Sync: lang=%s", lang);
+        }
+        
         auto r = Result::ok();
         r.data["protocol"] = PROTOCOL_VERSION;
         r.data["os"] = OS_VERSION;
+        r.data["chip"] = ESP.getChipModel();
+        r.data["time"] = (long)time(nullptr);
+        r.data["uptime"] = (long)(millis() / 1000);
+        r.data["w"] = SCREEN_WIDTH;
+        r.data["h"] = SCREEN_HEIGHT;
         return r;
     }
     
@@ -420,10 +441,56 @@ static Result execApp(const char* cmd, JsonArray args) {
         return r;
     }
     
-    // app pull <n> [*]
+    // app info <n> — list files and total size
+    if (strcmp(cmd, "info") == 0) {
+        const char* name = argStr(args, 0);
+        if (!name[0]) return Result::errInvalid("Usage: app info <n>");
+        
+        P::String basePath = P::String(SYS_APPS) + name;
+        if (!LittleFS.exists(basePath.c_str())) {
+            return Result::errNotFound("App not found");
+        }
+        
+        struct FileEntry { P::String name; uint32_t size; };
+        P::Array<FileEntry> files;
+        uint32_t totalSize = 0;
+        
+        auto scanDir = [&](const char* dirPath, const char* prefix) {
+            File dir = LittleFS.open(dirPath);
+            if (!dir || !dir.isDirectory()) return;
+            File f = dir.openNextFile();
+            while (f) {
+                if (!f.isDirectory()) {
+                    P::String fname = prefix[0] ? (P::String(prefix) + f.name()) : P::String(f.name());
+                    files.push_back({fname, (uint32_t)f.size()});
+                    totalSize += f.size();
+                }
+                f = dir.openNextFile();
+            }
+        };
+        
+        scanDir(basePath.c_str(), "");
+        P::String resPath = basePath + "/resources";
+        if (LittleFS.exists(resPath.c_str())) {
+            scanDir(resPath.c_str(), "resources/");
+        }
+        
+        auto r = Result::ok();
+        r.data["name"] = name;
+        r.data["size"] = totalSize;
+        JsonObject filesObj = r.data["files"].to<JsonObject>();
+        for (const auto& entry : files) {
+            filesObj[entry.name] = entry.size;
+        }
+        
+        LOG_I(Log::APP, "app info %s: %u files, %u bytes", name, (unsigned)files.size(), totalSize);
+        return r;
+    }
+    
+    // app pull <n> [file|*]
     if (strcmp(cmd, "pull") == 0) {
         const char* name = argStr(args, 0);
-        if (!name[0]) return Result::errInvalid("Usage: app pull <n> [*]");
+        if (!name[0]) return Result::errInvalid("Usage: app pull <n> [file|*]");
         
         const char* fileArg = argStr(args, 1, "");
         bool allFiles = (strcmp(fileArg, "*") == 0);
@@ -488,12 +555,13 @@ static Result execApp(const char* cmd, JsonArray args) {
             return r;
         }
         
-        // Single file: {name}/{name}.bax
-        P::String path = basePath + "/" + P::String(name) + ".bax";
-        if (!LittleFS.exists(path.c_str())) return Result::errNotFound("App not found");
+        // Single file: default {name}.bax, or specific file if provided
+        P::String fileName = fileArg[0] ? P::String(fileArg) : (P::String(name) + ".bax");
+        P::String path = basePath + "/" + fileName;
+        if (!LittleFS.exists(path.c_str())) return Result::errNotFound("File not found");
         
         File f = LittleFS.open(path.c_str(), "r");
-        if (!f) return Result::errNotFound("App not found");
+        if (!f) return Result::errNotFound("File not found");
         
         uint32_t size = f.size();
         uint8_t* buf = (uint8_t*)ps_malloc(size);
@@ -507,9 +575,10 @@ static Result execApp(const char* cmd, JsonArray args) {
         
         auto r = Result::ok();
         r.data["name"] = name;
+        r.data["file"] = fileName;
         r.data["size"] = size;
         r.withBinary(buf, size);
-        LOG_I(Log::APP, "app pull %s (%u bytes)", name, size);
+        LOG_I(Log::APP, "app pull %s/%s (%u bytes)", name, fileName.c_str(), size);
         return r;
     }
     

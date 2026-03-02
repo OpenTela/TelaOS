@@ -154,11 +154,11 @@ clicker
 | Команда | Аргументы | Ответ data | Описание |
 |---|---|---|---|
 | `ping` | — | `{}` | Проверка связи |
-| `info` | — | heap, psram, chip, freq, buf_lines, ble | Системная информация |
+| `info` | — | heap, psram, chip, freq, buf_lines, ble, app | Системная информация |
 | `reboot` | — | — | Перезагрузка |
 | `screen` | [color], [scale], [mode] | `{w, h, color, format, raw_size}` + BIN | Скриншот |
 | `time` | [epoch_seconds] | `{time}` | Получить/установить время |
-| `sync` | protocol_ver, datetime_iso, timezone | `{protocol, os}` | Синхронизация времени и версий |
+| `sync` | protocol, datetime, timezone, [lang] | `{protocol, os, chip, time, uptime, w, h}` | Handshake: синхронизация + инфо об устройстве |
 
 **screen** аргументы:
 - `color`: `rgb16` (default), `bw`, `gray`, `pal`
@@ -267,7 +267,7 @@ app pull weather *
 ← BIN: [0x00,0x00, "anki\0calculator\0clicker\0..."]
 
 → [3, "sys", "info", []]
-← [3, "ok", {"heap_free":207904, "heap_min":70232, "psram_free":7845855, "psram_total":8375831, "chip":"ESP32-S3", "freq":240, "buf_lines":120, "ble":"on"}]
+← [3, "ok", {"heap_free":207904, "heap_min":70232, "psram_free":7845855, "psram_total":8375831, "chip":"ESP32-S3", "freq":240, "buf_lines":120, "ble":"on", "app":"pomodoro"}]
 
 → [4, "app", "run", ["pomodoro"]]
 ← [4, "ok", {}]

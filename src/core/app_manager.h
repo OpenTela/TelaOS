@@ -53,6 +53,7 @@ public:
     void refreshApps();  // rescan + reload icons + re-render launcher if visible
     void processPendingLaunch();
     bool inLauncher() const { return m_inLauncher; }
+    const P::String& currentApp() const { return m_currentApp; }
     const std::vector<AppInfo>& apps() const { return m_apps; }
     
     YamlConfig systemConfig{"/system/config.yml", "SysConfig"};
