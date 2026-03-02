@@ -522,14 +522,50 @@ PSRAM (8MB)
 ```
 </details>
 
-## Docs
+# TelaOS Documentation
 
-| Document | What's in it |
-|----------|-------------|
-| [UI_HTML_SPEC.md](docs/UI_HTML_SPEC.md) | Full widget/state/binding/Lua API reference |
-| [CONSOLE_PROTOCOL_SPEC.md](docs/CONSOLE_PROTOCOL_SPEC.md) | BLE & Serial command protocol |
-| [BUILD_ICONS.md](docs/BUILD_ICONS.md) | Icon pipeline & embedding |
+This folder contains the core architectural and technical specifications of TelaOS.
+
+## 📖 Recommended reading order
+
+### 1️⃣ UI & App Model
+- [UI_HTML_SPEC.md](docs/UI_HTML_SPEC.md)  
+  Full declarative UI format, state bindings, widgets, Lua API, CSS rules.
+
+### 2️⃣ Native Integration
+- [NATIVE_APP_SPEC.md](docs/NATIVE_APP_SPEC.md)  
+  Native app architecture, system-level extensions and integration model.
+
+### 3️⃣ Communication Layer
+- [CONSOLE_PROTOCOL_SPEC.md](docs/CONSOLE_PROTOCOL_SPEC.md)  
+  BLE & Serial command protocol specification.
+
+### 4️⃣ Assets & Build
+- [BUILD_ICONS.md](docs/BUILD_ICONS.md)  
+  Icon pipeline, embedding, and resource build process.
+
+### 5️⃣ Versioning Rules
+- [RULE_VERSIONING.md](docs/RULE_VERSIONING.md)  
+  Compatibility guarantees, app/runtime versioning model.
+
+---
+
+## 🔬 Internal Methodology
+
+- [AI_DEBUG_METHODOLOGY.md](docs/AI_DEBUG_METHODOLOGY.md)
+- [CI_README.md](docs/CI_README.md)
+
+---
+
+## 🧭 Architecture Layers Overview
+
+1. App Layer (.bax)
+2. UI Engine
+3. State Store
+4. Lua VM
+5. LVGL Renderer
+6. Hardware Abstraction (HAL)
 
 ## License
 
-MIT
+[LGPL](LICENSE)
