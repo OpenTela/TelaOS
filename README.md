@@ -66,9 +66,9 @@ A `.bax` file is self-contained — UI, state, logic, styles:
 
 ```xml
 <app>
-  <system>
-    <bluetooth/>           <!-- optional: internet via BLE bridge -->
-  </system>
+  <config>
+    <network/>              <!-- optional: internet via BLE bridge -->
+  </config>
 
   <ui default="/main">
     <group id="main" orientation="horizontal" indicator="dots">
@@ -120,7 +120,10 @@ navigate("/settings")            -- page navigation
 focus("inputId")                 -- keyboard focus
 setAttr("btn1", "bgcolor", "#f00")  -- imperative styling
 canvas.rect("c", 10, 10, 50, 50, "#ff0000")  -- 2D drawing
-fetch({url="https://..."}, function(r) ... end) -- HTTP via BLE
+fetch({url="https://...", authorize=true, format="json"}, function(r)
+  -- r.body is already a Lua table when format="json"
+  -- authorize=true: BLE bridge adds API credentials
+end)
 ```
 
 ### CSS
@@ -136,15 +139,18 @@ button.danger { bgcolor: #e74c3c; }         /* tag.class */
 
 ## Connectivity
 
-Apps access the internet through a BLE bridge — a Python script on your phone or PC proxies HTTP requests:
+Apps access the internet through a BLE bridge — a companion Bluetooth app on your phone or a Python script on PC proxies HTTP requests. API keys are stored on the bridge side, not on the device — `authorize = true` tells the bridge to inject credentials from its config. One key serves all apps, and the watch never stores secrets.
 
 ```lua
 fetch({
-  method = "GET",
-  url = "https://api.openweathermap.org/data/2.5/weather?q=Moscow"
-}, function(response)
-  local data = json.parse(response.body)
-  state.temp = math.floor(data.main.temp - 273)
+  url = "https://api.openweathermap.org/data/2.5/weather?q=Moscow",
+  authorize = true,
+  format = "json",
+  fields = {"main.temp", "weather[0].description"}
+}, function(r)
+  if r.ok then
+    state.temp = math.floor(r.body["main.temp"]) .. "°C"
+  end
 end)
 ```
 
@@ -176,6 +182,9 @@ src/
 ├── ble/            # BLE bridge, binary transfer
 ├── hal/            # hardware abstraction (per-board drivers)
 ├── widgets/        # LVGL widget wrappers
+├── native/         # native C++ apps
+├── csv/            # CSV parser
+├── yaml/           # YAML parser/serializer
 └── utils/          # logging, fonts, screenshots
 
 data/apps/          # 27 bundled apps
@@ -184,7 +193,7 @@ tools/              # BLE assistant (Python)
 scripts/            # build scripts (icons, resources)
 ```
 
-~12K lines of C++. ~18K with apps.
+~18K lines of C++. ~24K with apps.
 
 ## Memory architecture
 
@@ -281,9 +290,16 @@ PSRAM (8MB)
       state.timeLeft = state.timeLeft - 1
       state.timeDisplay = formatTime(state.timeLeft)
       if state.timeLeft <= 0 then
-        state.mode = 'BREAK'
-        state.modeClass = 'mode-break'
-        state.timeLeft = state.breakMins * 60
+        if state.mode == 'WORK' then
+          state.mode = 'BREAK'
+          state.modeClass = 'mode-break'
+          state.timeLeft = state.breakMins * 60
+        else
+          state.mode = 'WORK'
+          state.modeClass = 'mode-work'
+          state.timeLeft = state.workMins * 60
+        end
+        state.timeDisplay = formatTime(state.timeLeft)
       end
     end
 
@@ -345,20 +361,26 @@ PSRAM (8MB)
   </state>
 
   <script language="lua">
-    local API_KEY = "YOUR_KEY"
-
     function refresh()
+      if not net.connected() then
+        state.description = "No BLE!"
+        return
+      end
+
       state.isLoading = "true"
       fetch({
-        method = "GET",
         url = "https://api.openweathermap.org/data/2.5/weather?q="
-              .. state.city .. "&appid=" .. API_KEY .. "&units=metric"
+              .. state.city,
+        authorize = true,
+        format = "json",
+        fields = {"main.temp", "weather[0].description"}
       }, function(r)
         state.isLoading = "false"
-        if r.status == 200 then
-          local data = json.parse(r.body)
-          state.temp = tostring(math.floor(data.main.temp))
-          state.description = data.weather[1].description
+        if r.ok then
+          state.temp = math.floor(r.body["main.temp"]) .. "°C"
+          state.description = r.body["weather[0].description"]
+        else
+          state.description = r.error or ("Error " .. r.status)
         end
       end)
     end
@@ -522,49 +544,18 @@ PSRAM (8MB)
 ```
 </details>
 
-# TelaOS Documentation
+## Documentation
 
 This /docs folder contains the core architectural and technical specifications of TelaOS.
 
-## 📖 Recommended reading order
-
-### 1️⃣ UI & App Model
-- [UI_HTML_SPEC.md](docs/UI_HTML_SPEC.md)  
-  Full declarative UI format, state bindings, widgets, Lua API, CSS rules.
-
-### 2️⃣ Native Integration
-- [NATIVE_APP_SPEC.md](docs/NATIVE_APP_SPEC.md)  
-  Native app architecture, system-level extensions and integration model.
-
-### 3️⃣ Communication Layer
-- [CONSOLE_PROTOCOL_SPEC.md](docs/CONSOLE_PROTOCOL_SPEC.md)  
-  BLE & Serial command protocol specification.
-
-### 4️⃣ Assets & Build
-- [BUILD_ICONS.md](docs/BUILD_ICONS.md)  
-  Icon pipeline, embedding, and resource build process.
-
-### 5️⃣ Versioning Rules
-- [RULE_VERSIONING.md](docs/RULE_VERSIONING.md)  
-  Compatibility guarantees, app/runtime versioning model.
-
----
-
-## 🔬 Internal Methodology
-
-- [AI_DEBUG_METHODOLOGY.md](docs/AI_DEBUG_METHODOLOGY.md)
-- [CI_README.md](docs/CI_README.md)
-
----
-
-## 🧭 Architecture Layers Overview
-
-1. App Layer (.bax)
-2. UI Engine
-3. State Store
-4. Lua VM
-5. LVGL Renderer
-6. Hardware Abstraction (HAL)
+| File | Description |
+|------|-------------|
+| [UI_HTML_SPEC.md](docs/UI_HTML_SPEC.md) | Full widget/state/binding/Lua API reference |
+| [CONSOLE_PROTOCOL_SPEC.md](docs/CONSOLE_PROTOCOL_SPEC.md) | BLE & Serial command protocol |
+| [NATIVE_APP_SPEC.md](docs/NATIVE_APP_SPEC.md) | Native app architecture and integration |
+| [BUILD_ICONS.md](docs/BUILD_ICONS.md) | Icon pipeline & embedding |
+| [RULE_VERSIONING.md](docs/RULE_VERSIONING.md) | Compatibility and versioning model |
+| [COMPILER_README.md](docs/COMPILER_README.md) | Build system notes |
 
 ## License
 

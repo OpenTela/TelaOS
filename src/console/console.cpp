@@ -290,7 +290,16 @@ static Result execSys(const char* cmd, JsonArray args) {
         
         auto& mgr = App::Manager::instance();
         if (!mgr.inLauncher() && mgr.currentApp().length() > 0) {
-            r.data["app"] = mgr.currentApp();
+            // Extract name from path: "/apps/calculator/calculator.bax" → "calculator"
+            const auto& path = mgr.currentApp();
+            size_t lastSlash = path.rfind('/');
+            size_t prevSlash = (lastSlash != std::string::npos && lastSlash > 0) 
+                               ? path.rfind('/', lastSlash - 1) : std::string::npos;
+            if (prevSlash != std::string::npos) {
+                r.data["app"] = path.substr(prevSlash + 1, lastSlash - prevSlash - 1).c_str();
+            } else {
+                r.data["app"] = path.c_str();
+            }
         } else {
             r.data["app"] = (const char*)nullptr;
         }

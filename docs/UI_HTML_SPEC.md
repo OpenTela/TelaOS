@@ -15,8 +15,8 @@
 
 ```
 myapp/
-├── app.html         # Обязательно: код приложения
-├── icon.png         # Опционально: иконка в лаунчере (48x48)
+├── myapp.bax        # Обязательно: код приложения
+├── icon.png         # Опционально: иконка в лаунчере (64x64)
 └── resources/       # Опционально: ресурсы
     ├── plus.png
     └── minus.png
@@ -52,7 +52,7 @@ myapp/
 
 ---
 
-## Структура app.html
+## Структура .bax файла
 
 ```html
 <app>
@@ -265,6 +265,17 @@ myapp/
 <canvas id="draw" x="0" y="0" w="100%" h="100%"/>
 ```
 
+**События canvas:**
+```html
+<canvas id="c" ontap="onTap" onhold="onHold" ondraw="onDraw"/>
+```
+
+| Атрибут | Описание | Callback |
+|---------|----------|----------|
+| `ontap` | Одиночный тап | `function(x, y)` — координаты тапа |
+| `onhold` | Удержание | `function(x, y)` — координаты |
+| `ondraw` | Рисование (continuous) | вызывается при перемещении |
+
 Рисование из Lua:
 ```lua
 canvas.clear("draw", "#000000")
@@ -399,11 +410,12 @@ canvas.refresh("draw")
 
 **Система:**
 - `print(...)` — вывод в консоль
-- `app_launch(name)` — запустить приложение
-- `app_home()` — вернуться в launcher
+- `exit()` — выйти из приложения в launcher
+- `app.launch(name)` — запустить другое приложение
+- `setTimeout(ms, callback)` — однократный таймер
 
 **Время:**
-- `os.date()` — работает только при синхронизированном времени (NTP/RTC)
+- `os.date()` — работает при синхронизированном времени (BLE sync/NTP/RTC)
 - Для счётчика используйте локальную переменную + таймер:
 ```lua
 local sec = 0
@@ -415,6 +427,39 @@ end
 
 **Сеть (требует `<network/>`):**
 - `fetch(options, callback)` — HTTP запрос через BLE bridge
+- `net.connected()` — проверка BLE подключения (returns bool)
+
+**Опции fetch:**
+| Поле | Описание | Default |
+|------|----------|---------|
+| `url` | URL запроса | required |
+| `method` | HTTP метод | `"GET"` |
+| `body` | Тело запроса | — |
+| `format` | `"json"` — body придёт как Lua таблица | — |
+| `authorize` | `true` — bridge подставит API ключи | `false` |
+| `fields` | Список полей для выборки из JSON | — |
+
+**Ответ callback(r):**
+| Поле | Описание |
+|------|----------|
+| `r.status` | HTTP код (200, 404...) |
+| `r.body` | Тело ответа (string или table при `format="json"`) |
+| `r.ok` | `true` если status 200-299 |
+| `r.error` | Текст ошибки (при проблемах) |
+
+**Пример:**
+```lua
+fetch({
+  url = "https://api.example.com/data",
+  authorize = true,
+  format = "json",
+  fields = {"name", "value"}
+}, function(r)
+  if r.ok then
+    state.result = r.body.name
+  end
+end)
+```
 
 ---
 
