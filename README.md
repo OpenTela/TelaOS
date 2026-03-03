@@ -552,10 +552,10 @@ This /docs folder contains the core architectural and technical specifications o
 |------|-------------|
 | [UI_HTML_SPEC.md](docs/UI_HTML_SPEC.md) | Full widget/state/binding/Lua API reference |
 | [CONSOLE_PROTOCOL_SPEC.md](docs/CONSOLE_PROTOCOL_SPEC.md) | BLE & Serial command protocol |
-| [NATIVE_APP_SPEC.md](docs/NATIVE_APP_SPEC.md) | Native app architecture and integration |
+| [NATIVE_APP_SPEC.md](docs/NATIVE_APP_SPEC.md) | Native app architecture & integration |
 | [BUILD_ICONS.md](docs/BUILD_ICONS.md) | Icon pipeline & embedding |
-| [RULE_VERSIONING.md](docs/RULE_VERSIONING.md) | Compatibility and versioning model |
-| [COMPILER_README.md](docs/COMPILER_README.md) | Build system notes |
+| [RULE_VERSIONING.md](docs/RULE_VERSIONING.md) | Compatibility & versioning model |
+| [CI_README.md](docs/CI_README.md) | Build system & automated OS testing details |
 
 ## License
 
