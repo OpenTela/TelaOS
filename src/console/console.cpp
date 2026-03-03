@@ -392,7 +392,14 @@ static Result execSys(const char* cmd, JsonArray args) {
         if (tz[0]) {
             int tzH = 0, tzM = 0;
             char sign = '+';
-            sscanf(tz, "%c%d:%d", &sign, &tzH, &tzM);
+            
+            // Handle formats: "+3", "-5", "+3:00", "5", "-5:30"
+            if (tz[0] == '+' || tz[0] == '-') {
+                sign = tz[0];
+                sscanf(tz + 1, "%d:%d", &tzH, &tzM);
+            } else {
+                sscanf(tz, "%d:%d", &tzH, &tzM);
+            }
             
             // POSIX TZ inverts sign: UTC+3 → "UTC-3"
             int posixH = (sign == '-') ? tzH : -tzH;
