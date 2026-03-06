@@ -34,14 +34,7 @@ const char* findTagClose(const char* p, const char* tag) {
     snprintf(open, sizeof(open), "<%s", tag);
     snprintf(close, sizeof(close), "</%s>", tag);
     
-    int iterations = 0;
-    const int MAX_ITERATIONS = 10000;
-    
     while (*p && depth > 0) {
-        iterations++;
-        if (iterations > MAX_ITERATIONS) {
-            return nullptr;
-        }
         
         if (std::strncmp(p, close, tlen + 3) == 0) {
             depth--;

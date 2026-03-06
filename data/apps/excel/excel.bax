@@ -21,100 +21,125 @@
       <label x="64%" y="10%" class="item-muted">C</label>
       <label x="87%" y="10%" class="item-muted">D</label>
 
-      <!-- Row 1: y=14% h=7% -->
+      <!-- Row 1-8 (same as original) -->
       <label x="2%" y="16%" class="item-muted">1</label>
       <button id="A1" x="9%" y="14%" onclick="tapA1" w="22%" h="7%" bgcolor="{bgA1}" radius="0">{vA1}</button>
       <button id="B1" x="32%" y="14%" onclick="tapB1" w="22%" h="7%" bgcolor="{bgB1}" radius="0">{vB1}</button>
       <button id="C1" x="54%" y="14%" onclick="tapC1" w="22%" h="7%" bgcolor="{bgC1}" radius="0">{vC1}</button>
       <button id="D1" x="77%" y="14%" onclick="tapD1" w="22%" h="7%" bgcolor="{bgD1}" radius="0">{vD1}</button>
 
-      <!-- Row 2: y=22% h=7% -->
       <label x="2%" y="24%" visible="{showR2}" class="item-muted">2</label>
       <button id="A2" x="9%" y="22%" visible="{showR2}" onclick="tapA2" w="22%" h="7%" bgcolor="{bgA2}" radius="0">{vA2}</button>
       <button id="B2" x="32%" y="22%" visible="{showR2}" onclick="tapB2" w="22%" h="7%" bgcolor="{bgB2}" radius="0">{vB2}</button>
       <button id="C2" x="54%" y="22%" visible="{showR2}" onclick="tapC2" w="22%" h="7%" bgcolor="{bgC2}" radius="0">{vC2}</button>
       <button id="D2" x="77%" y="22%" visible="{showR2}" onclick="tapD2" w="22%" h="7%" bgcolor="{bgD2}" radius="0">{vD2}</button>
 
-      <!-- Row 3: y=30% h=7% -->
       <label x="2%" y="32%" visible="{showR3}" class="item-muted">3</label>
       <button id="A3" x="9%" y="30%" visible="{showR3}" onclick="tapA3" w="22%" h="7%" bgcolor="{bgA3}" radius="0">{vA3}</button>
       <button id="B3" x="32%" y="30%" visible="{showR3}" onclick="tapB3" w="22%" h="7%" bgcolor="{bgB3}" radius="0">{vB3}</button>
       <button id="C3" x="54%" y="30%" visible="{showR3}" onclick="tapC3" w="22%" h="7%" bgcolor="{bgC3}" radius="0">{vC3}</button>
       <button id="D3" x="77%" y="30%" visible="{showR3}" onclick="tapD3" w="22%" h="7%" bgcolor="{bgD3}" radius="0">{vD3}</button>
 
-      <!-- Row 4: y=38% h=7% -->
       <label x="2%" y="40%" visible="{showR4}" class="item-muted">4</label>
       <button id="A4" x="9%" y="38%" visible="{showR4}" onclick="tapA4" w="22%" h="7%" bgcolor="{bgA4}" radius="0">{vA4}</button>
       <button id="B4" x="32%" y="38%" visible="{showR4}" onclick="tapB4" w="22%" h="7%" bgcolor="{bgB4}" radius="0">{vB4}</button>
       <button id="C4" x="54%" y="38%" visible="{showR4}" onclick="tapC4" w="22%" h="7%" bgcolor="{bgC4}" radius="0">{vC4}</button>
       <button id="D4" x="77%" y="38%" visible="{showR4}" onclick="tapD4" w="22%" h="7%" bgcolor="{bgD4}" radius="0">{vD4}</button>
 
-      <!-- Row 5: y=46% h=7% -->
       <label x="2%" y="48%" visible="{showR5}" class="item-muted">5</label>
       <button id="A5" x="9%" y="46%" visible="{showR5}" onclick="tapA5" w="22%" h="7%" bgcolor="{bgA5}" radius="0">{vA5}</button>
       <button id="B5" x="32%" y="46%" visible="{showR5}" onclick="tapB5" w="22%" h="7%" bgcolor="{bgB5}" radius="0">{vB5}</button>
       <button id="C5" x="54%" y="46%" visible="{showR5}" onclick="tapC5" w="22%" h="7%" bgcolor="{bgC5}" radius="0">{vC5}</button>
       <button id="D5" x="77%" y="46%" visible="{showR5}" onclick="tapD5" w="22%" h="7%" bgcolor="{bgD5}" radius="0">{vD5}</button>
 
-      <!-- Row 6: y=54% h=7% (under keyboard) -->
       <label x="2%" y="56%" visible="{showR6}" class="item-muted">6</label>
       <button id="A6" x="9%" y="54%" visible="{showR6}" onclick="tapA6" w="22%" h="7%" bgcolor="{bgA6}" radius="0">{vA6}</button>
       <button id="B6" x="32%" y="54%" visible="{showR6}" onclick="tapB6" w="22%" h="7%" bgcolor="{bgB6}" radius="0">{vB6}</button>
       <button id="C6" x="54%" y="54%" visible="{showR6}" onclick="tapC6" w="22%" h="7%" bgcolor="{bgC6}" radius="0">{vC6}</button>
       <button id="D6" x="77%" y="54%" visible="{showR6}" onclick="tapD6" w="22%" h="7%" bgcolor="{bgD6}" radius="0">{vD6}</button>
 
-      <!-- Row 7: y=62% h=7% (under keyboard) -->
       <label x="2%" y="64%" visible="{showR7}" class="item-muted">7</label>
       <button id="A7" x="9%" y="62%" visible="{showR7}" onclick="tapA7" w="22%" h="7%" bgcolor="{bgA7}" radius="0">{vA7}</button>
       <button id="B7" x="32%" y="62%" visible="{showR7}" onclick="tapB7" w="22%" h="7%" bgcolor="{bgB7}" radius="0">{vB7}</button>
       <button id="C7" x="54%" y="62%" visible="{showR7}" onclick="tapC7" w="22%" h="7%" bgcolor="{bgC7}" radius="0">{vC7}</button>
       <button id="D7" x="77%" y="62%" visible="{showR7}" onclick="tapD7" w="22%" h="7%" bgcolor="{bgD7}" radius="0">{vD7}</button>
 
-      <!-- Row 8: y=70% h=7% (under keyboard) -->
       <label x="2%" y="72%" visible="{showR8}" class="item-muted">8</label>
       <button id="A8" x="9%" y="70%" visible="{showR8}" onclick="tapA8" w="22%" h="7%" bgcolor="{bgA8}" radius="0">{vA8}</button>
       <button id="B8" x="32%" y="70%" visible="{showR8}" onclick="tapB8" w="22%" h="7%" bgcolor="{bgB8}" radius="0">{vB8}</button>
       <button id="C8" x="54%" y="70%" visible="{showR8}" onclick="tapC8" w="22%" h="7%" bgcolor="{bgC8}" radius="0">{vC8}</button>
       <button id="D8" x="77%" y="70%" visible="{showR8}" onclick="tapD8" w="22%" h="7%" bgcolor="{bgD8}" radius="0">{vD8}</button>
 
-      <!-- Клавиатура 54%+ -->
-      <button x="1%" y="54%" onclick="kA" class="btn-light">A</button>
-      <button x="21%" y="54%" onclick="kB" class="btn-light">B</button>
-      <button x="41%" y="54%" onclick="kC" class="btn-light">C</button>
-      <button x="61%" y="54%" onclick="kD" class="btn-light">D</button>
-      <button x="81%" y="54%" onclick="kEq" class="btn-orange">=</button>
+      <!-- ====== NORMAL KEYBOARD ====== -->
+      <button x="1%" y="54%" visible="{showKb}" onclick="kA" class="btn-light">A</button>
+      <button x="21%" y="54%" visible="{showKb}" onclick="kB" class="btn-light">B</button>
+      <button x="41%" y="54%" visible="{showKb}" onclick="kC" class="btn-light">C</button>
+      <button x="61%" y="54%" visible="{showKb}" onclick="kD" class="btn-light">D</button>
+      <button x="81%" y="54%" visible="{showKb}" onclick="kEq" class="btn-orange">=</button>
 
-      <button x="1%" y="64%" onclick="k1" class="btn-gray">1</button>
-      <button x="21%" y="64%" onclick="k2" class="btn-gray">2</button>
-      <button x="41%" y="64%" onclick="k3" class="btn-gray">3</button>
-      <button x="61%" y="64%" onclick="kPlus" w="19%" h="9%" bgcolor="#ff9500">+</button>
-      <button x="81%" y="64%" onclick="kMinus" class="btn-orange">-</button>
+      <button x="1%" y="64%" visible="{showKb}" onclick="k1" class="btn-gray">1</button>
+      <button x="21%" y="64%" visible="{showKb}" onclick="k2" class="btn-gray">2</button>
+      <button x="41%" y="64%" visible="{showKb}" onclick="k3" class="btn-gray">3</button>
+      <button x="61%" y="64%" visible="{showKb}" onclick="kPlus" w="19%" h="9%" bgcolor="#ff9500">+</button>
+      <button x="81%" y="64%" visible="{showKb}" onclick="kMinus" class="btn-orange">-</button>
 
-      <button x="1%" y="74%" onclick="k4" class="btn-gray">4</button>
-      <button x="21%" y="74%" onclick="k5" class="btn-gray">5</button>
-      <button x="41%" y="74%" onclick="k6" class="btn-gray">6</button>
-      <button x="61%" y="74%" onclick="kMul" w="19%" h="9%" bgcolor="#ff9500">*</button>
-      <button x="81%" y="74%" onclick="kDiv" class="btn-orange">/</button>
+      <button x="1%" y="74%" visible="{showKb}" onclick="k4" class="btn-gray">4</button>
+      <button x="21%" y="74%" visible="{showKb}" onclick="k5" class="btn-gray">5</button>
+      <button x="41%" y="74%" visible="{showKb}" onclick="k6" class="btn-gray">6</button>
+      <button x="61%" y="74%" visible="{showKb}" onclick="kMul" w="19%" h="9%" bgcolor="#ff9500">*</button>
+      <button x="81%" y="74%" visible="{showKb}" onclick="kDiv" class="btn-orange">/</button>
 
-      <button x="1%" y="84%" onclick="k7" class="btn-gray">7</button>
-      <button x="21%" y="84%" onclick="k8" class="btn-gray">8</button>
-      <button x="41%" y="84%" onclick="k9" class="btn-gray">9</button>
-      <button x="61%" y="84%" onclick="kLp" class="btn-gray">(</button>
-      <button x="81%" y="84%" onclick="kRp" w="18%" h="9%" bgcolor="#505050">)</button>
+      <button x="1%" y="84%" visible="{showKb}" onclick="k7" class="btn-gray">7</button>
+      <button x="21%" y="84%" visible="{showKb}" onclick="k8" class="btn-gray">8</button>
+      <button x="41%" y="84%" visible="{showKb}" onclick="k9" class="btn-gray">9</button>
+      <button x="61%" y="84%" visible="{showKb}" onclick="kLp" class="btn-gray">(</button>
+      <button x="81%" y="84%" visible="{showKb}" onclick="kRp" w="18%" h="9%" bgcolor="#505050">)</button>
 
-      <button x="1%" y="94%" onclick="k0" w="24%" h="6%" bgcolor="#505050">0</button>
-      <button x="26%" y="94%" onclick="kDot" w="24%" h="6%" bgcolor="#505050">.</button>
-      <button x="51%" y="94%" onclick="kAbc" w="24%" h="6%" bgcolor="#a0a0a0" color="#000">Abc</button>
-      <button x="76%" y="94%" onclick="kDel" w="23%" h="6%" bgcolor="#d32f2f" font="16">&lt;-</button>
+      <button x="1%" y="94%" visible="{showKb}" onclick="k0" w="19%" h="6%" bgcolor="#505050">0</button>
+      <button x="21%" y="94%" visible="{showKb}" onclick="kDot" w="19%" h="6%" bgcolor="#505050">.</button>
+      <button x="41%" y="94%" visible="{showKb}" onclick="kAbc" w="19%" h="6%" bgcolor="#a0a0a0" color="#000">Abc</button>
+      <button x="61%" y="94%" visible="{showKb}" onclick="toggleFn" w="19%" h="6%" bgcolor="#1565C0">f(x)</button>
+      <button x="81%" y="94%" visible="{showKb}" onclick="kDel" w="18%" h="6%" bgcolor="#d32f2f">&lt;-</button>
+
+      <!-- ====== FUNCTION KEYBOARD ====== -->
+      <button x="1%" y="54%" visible="{showFn}" onclick="fSum" class="btn-fn">SUM</button>
+      <button x="21%" y="54%" visible="{showFn}" onclick="fAvg" class="btn-fn">AVG</button>
+      <button x="41%" y="54%" visible="{showFn}" onclick="fMin" class="btn-fn">MIN</button>
+      <button x="61%" y="54%" visible="{showFn}" onclick="fMax" class="btn-fn">MAX</button>
+      <button x="81%" y="54%" visible="{showFn}" onclick="fCount" class="btn-fn">CNT</button>
+
+      <button x="1%" y="64%" visible="{showFn}" onclick="fAbs" class="btn-fn">ABS</button>
+      <button x="21%" y="64%" visible="{showFn}" onclick="fRound" class="btn-fn">RND</button>
+      <button x="41%" y="64%" visible="{showFn}" onclick="fPow" class="btn-fn">POW</button>
+      <button x="61%" y="64%" visible="{showFn}" onclick="fMod" class="btn-fn">MOD</button>
+      <button x="81%" y="64%" visible="{showFn}" onclick="fSqrt" class="btn-fn">SQRT</button>
+
+      <button x="1%" y="74%" visible="{showFn}" onclick="kA" class="btn-light">A</button>
+      <button x="21%" y="74%" visible="{showFn}" onclick="kB" class="btn-light">B</button>
+      <button x="41%" y="74%" visible="{showFn}" onclick="kC" class="btn-light">C</button>
+      <button x="61%" y="74%" visible="{showFn}" onclick="kD" class="btn-light">D</button>
+      <button x="81%" y="74%" visible="{showFn}" onclick="kEq" class="btn-orange">=</button>
+
+      <button x="1%" y="84%" visible="{showFn}" onclick="kLp" w="19%" h="9%" bgcolor="#505050">(</button>
+      <button x="21%" y="84%" visible="{showFn}" onclick="kRp" w="19%" h="9%" bgcolor="#505050">)</button>
+      <button x="41%" y="84%" visible="{showFn}" onclick="kComma" w="19%" h="9%" bgcolor="#505050">,</button>
+      <button x="61%" y="84%" visible="{showFn}" onclick="kPlus" w="19%" h="9%" bgcolor="#ff9500">+</button>
+      <button x="81%" y="84%" visible="{showFn}" onclick="kMinus" class="btn-orange">-</button>
+
+      <button x="1%" y="94%" visible="{showFn}" onclick="k0" w="19%" h="6%" bgcolor="#505050">0</button>
+      <button x="21%" y="94%" visible="{showFn}" onclick="kDot" w="19%" h="6%" bgcolor="#505050">.</button>
+      <button x="41%" y="94%" visible="{showFn}" onclick="kAbc" w="19%" h="6%" bgcolor="#a0a0a0" color="#000">Abc</button>
+      <button x="61%" y="94%" visible="{showFn}" onclick="toggleFn" w="19%" h="6%" bgcolor="#505050">123</button>
+      <button x="81%" y="94%" visible="{showFn}" onclick="kDel" w="18%" h="6%" bgcolor="#d32f2f">&lt;-</button>
     </page>
   </ui>
 
   <style>
     button { color: #fff; }
-
     .btn-gray { bgcolor: #505050; height: 9%; width: 19%; }
     .btn-light { bgcolor: #a0a0a0; color: #000; height: 9%; width: 19%; }
     .btn-orange { bgcolor: #ff9500; height: 9%; width: 18%; }
+    .btn-fn { bgcolor: #0d47a1; height: 9%; width: 19%; }
     .item-muted { color: #666; }
   </style>
 
@@ -145,6 +170,8 @@
     <string name="showR6" default="false"/>
     <string name="showR7" default="false"/>
     <string name="showR8" default="false"/>
+    <string name="showKb" default="true"/>
+    <string name="showFn" default="false"/>
   </state>
 
   <script language="lua">
@@ -168,16 +195,111 @@
       return tonumber(state["v"..id] or "") or 0
     end
 
+    local function allVals()
+      local vals = {}
+      for _, c in ipairs(cells) do
+        local n = tonumber(state["v"..c] or "")
+        if n then vals[#vals+1] = n end
+      end
+      return vals
+    end
+
+    local function evalArgs(args)
+      -- Parse comma-separated args, eval each, return list of numbers
+      local result = {}
+      for arg in string.gmatch(args, "[^,]+") do
+        arg = arg:match("^%s*(.-)%s*$") -- trim
+        local fn = load("return " .. arg)
+        if fn then
+          local ok, r = pcall(fn)
+          if ok and type(r) == "number" then
+            result[#result+1] = r
+          end
+        end
+      end
+      return result
+    end
+
     local function calc(expr, id)
       local s = string.upper(expr)
       if id and string.find(s, id) then return nil end
+
+      -- Replace cell refs with values
       for _, c in ipairs(cells) do
         s = string.gsub(s, c, tostring(getN(c)))
       end
-      local total = 0
-      for _, c in ipairs(cells) do total = total + getN(c) end
-      s = string.gsub(s, "SUM", tostring(total))
-      if string.match(s, "[A-Z]") then return nil end
+
+      -- Aggregate functions with optional args: SUM / SUM() / SUM(1,2,3)
+      local function doAggregate(name, fn)
+        -- With args: NAME(a,b,c)
+        s = string.gsub(s, name .. "%((.+)%)", function(args)
+          local nums = evalArgs(args)
+          if #nums == 0 then return "0" end
+          return tostring(fn(nums))
+        end)
+        -- No args: NAME() or bare NAME
+        s = string.gsub(s, name .. "%(%)", tostring(fn(allVals())))
+        s = string.gsub(s, name, tostring(fn(allVals())))
+      end
+
+      doAggregate("SUM", function(v)
+        local t = 0; for _, x in ipairs(v) do t = t + x end; return t
+      end)
+      doAggregate("AVG", function(v)
+        if #v == 0 then return 0 end
+        local t = 0; for _, x in ipairs(v) do t = t + x end; return t / #v
+      end)
+      doAggregate("MIN", function(v)
+        if #v == 0 then return 0 end
+        local m = v[1]; for _, x in ipairs(v) do if x < m then m = x end end; return m
+      end)
+      doAggregate("MAX", function(v)
+        if #v == 0 then return 0 end
+        local m = v[1]; for _, x in ipairs(v) do if x > m then m = x end end; return m
+      end)
+      doAggregate("COUNT", function(v) return #v end)
+      doAggregate("CNT", function(v) return #v end)
+
+      -- Single-arg: ABS(expr), SQRT(expr), ROUND(expr)
+      s = string.gsub(s, "ABS%((.-)%)", function(x)
+        local fn = load("return " .. x)
+        if fn then local ok, r = pcall(fn); if ok then return tostring(math.abs(r)) end end
+        return "0"
+      end)
+      s = string.gsub(s, "SQRT%((.-)%)", function(x)
+        local fn = load("return " .. x)
+        if fn then local ok, r = pcall(fn); if ok and r >= 0 then return tostring(math.sqrt(r)) end end
+        return "0"
+      end)
+      s = string.gsub(s, "ROUND%((.-)%)", function(x)
+        local fn = load("return " .. x)
+        if fn then local ok, r = pcall(fn); if ok then return tostring(math.floor(r + 0.5)) end end
+        return "0"
+      end)
+
+      -- Two-arg: POW(a,b), MOD(a,b)
+      s = string.gsub(s, "POW%((.+),(.+)%)", function(a, b)
+        local fa = load("return " .. a)
+        local fb = load("return " .. b)
+        if fa and fb then
+          local oka, ra = pcall(fa)
+          local okb, rb = pcall(fb)
+          if oka and okb then return tostring(ra ^ rb) end
+        end
+        return "0"
+      end)
+      s = string.gsub(s, "MOD%((.+),(.+)%)", function(a, b)
+        local fa = load("return " .. a)
+        local fb = load("return " .. b)
+        if fa and fb then
+          local oka, ra = pcall(fa)
+          local okb, rb = pcall(fb)
+          if oka and okb and rb ~= 0 then return tostring(ra % rb) end
+        end
+        return "0"
+      end)
+
+            if string.match(s, "[A-Z]") then return nil end
       local fn = load("return " .. s)
       if fn then
         local ok, r = pcall(fn)
@@ -185,6 +307,7 @@
       end
       return nil
     end
+
 
     local function refreshCell(id)
       local raw = D[id] or ""
@@ -196,10 +319,10 @@
           if r == math.floor(r) then
             state["v"..id] = tostring(math.floor(r))
           else
-            state["v"..id] = string.format("%.1f", r)
+            state["v"..id] = string.format("%.2f", r)
           end
         else
-          state["v"..id] = "#REF"
+          state["v"..id] = "#ERR"
         end
       else
         state["v"..id] = raw
@@ -207,9 +330,7 @@
     end
 
     local function refresh()
-      for _, id in ipairs(cells) do
-        refreshCell(id)
-      end
+      for _, id in ipairs(cells) do refreshCell(id) end
     end
 
     local function key(k)
@@ -220,6 +341,30 @@
       end
     end
 
+    -- Toggle keyboards
+    function toggleFn()
+      if state.showFn == "true" then
+        state.showFn = "false"
+        state.showKb = "true"
+      else
+        state.showFn = "true"
+        state.showKb = "false"
+      end
+    end
+
+    -- Function keys: insert name + (
+    function fSum() key("SUM") end
+    function fAvg() key("AVG") end
+    function fMin() key("MIN") end
+    function fMax() key("MAX") end
+    function fCount() key("CNT") end
+    function fAbs() key("ABS(") end
+    function fRound() key("ROUND(") end
+    function fPow() key("POW(") end
+    function fMod() key("MOD(") end
+    function fSqrt() key("SQRT(") end
+
+    -- Normal keys
     function kA() key("A") end
     function kB() key("B") end
     function kC() key("C") end
@@ -242,6 +387,7 @@
     function kEq() key("=") end
     function kLp() key("(") end
     function kRp() key(")") end
+    function kComma() key(",") end
 
     function kDel()
       local v = state.val or ""
