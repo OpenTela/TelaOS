@@ -1,11 +1,16 @@
 # TelaOS
 
+# TelaOS
+
 **TelaOS (Tela — canvas in Latin) — blank canvas OS for low-memory smart devices (ESP32 and more). Paint apps. Yours. With AI. Or yourself.**
 
 Smartwatch OS where apps are just HTML + Lua scripting. Write a complete app in a single `.bax` file — declarative UI, reactive state, embedded logic — and it runs natively on ESP32 with LVGL rendering.
 
-**Ecosystem:** TelaPhone (Android companion) & TelaIDE (desktop development platform)
+**Development tools:**
+- 📱 **[TelaPhone](https://github.com/OpenTela/TelaPhone)** — Android companion with AI-powered code generation
+- 💻 **[TelaIDE](https://github.com/OpenTela/TelaIDE)** — Desktop IDE with real-time emulator
 
+**Application example:**
 ```xml
 <app>
   <ui default="/main">
