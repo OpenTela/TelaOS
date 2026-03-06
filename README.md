@@ -1,8 +1,10 @@
 # TelaOS
 
-**Smartwatch OS where apps are just HTML + Lua.**
+**TelaOS (Tela — canvas in Latin) — blank canvas OS for low-memory smart devices (ESP32 and more). Paint apps. Yours. With AI. Or yourself.**
 
-Write a complete app in a single `.bax` file — declarative UI, reactive state, scripting — and it runs natively on an ESP32 with LVGL rendering.
+Smartwatch OS where apps are just HTML + Lua scripting. Write a complete app in a single `.bax` file — declarative UI, reactive state, embedded logic — and it runs natively on ESP32 with LVGL rendering.
+
+**Ecosystem:** TelaPhone (Android companion) & TelaIDE (desktop development platform)
 
 ```xml
 <app>
@@ -27,11 +29,26 @@ Write a complete app in a single `.bax` file — declarative UI, reactive state,
 
 That's a working app. Deploy it over BLE, it appears in the launcher with an icon.
 
+<!-- TODO: add screenshot/gif of launcher and running app -->
+
 ---
 
 ## What's inside
 
-**27 apps** ship with the OS: calculator, weather, paint, snake, flappy bird, pomodoro, excel spreadsheet, crosswords, crypto tracker, dice, and more — all written in the same HTML+Lua format.
+**27 apps** included, all as single `.bax` files (HTML + Lua — and yes, one runs on Brainfuck):
+
+- **Calculator** — standard calc with expression parsing
+- **Excel** — spreadsheet with formulas and cell navigation
+- **Weather** — live weather via BLE bridge API
+- **Crypto** — real-time cryptocurrency tracker
+- **Snake** — canvas rendering, touch-directed movement
+- **Pomodoro** — multi-page timer with configurable intervals
+- **Paint** — freehand drawing on canvas with color picker
+- **Crossword / Scanword** — word puzzles with keyboard input
+- **Anki** — flashcard learning system
+- **Arkanoid, Pong, Dino, 2048, Memory** — classic games
+
+Production apps ship with the firmware in `data/apps/`. The rest live in `experiments/` as starting points to build on.
 
 **The stack:**
 
@@ -47,6 +64,8 @@ That's a working app. Deploy it over BLE, it appears in the launcher with an ico
          ↓
   ESP32-S3 ── 240MHz, 8MB PSRAM, 480×480 touch display
 ```
+
+The launcher shows apps as a grid of icons across swipeable pages. A shade panel (swipe down) provides quick access to brightness, BLE status, and battery. Apps launch instantly and return to the launcher with the hardware button or `exit()` from Lua.
 
 ## Hardware
 
@@ -187,7 +206,8 @@ src/
 ├── yaml/           # YAML parser/serializer
 └── utils/          # logging, fonts, screenshots
 
-data/apps/          # 27 bundled apps
+data/apps/          # production apps (ship with firmware)
+experiments/        # experimental apps (starting points)
 docs/               # specs & guides
 tools/              # BLE assistant (Python)
 scripts/            # build scripts (icons, resources)
@@ -212,31 +232,6 @@ PSRAM (8MB)
 ```
 
 ## Examples
-
-<details>
-<summary><b>Counter</b> — minimal app, 15 lines</summary>
-
-```xml
-<app>
-  <ui default="/main">
-    <page id="main">
-      <label align="center" y="30%" color="#fff" font="72">{count}</label>
-      <button align="center" y="55%" w="60%" h="50" bgcolor="#3498db" onclick="add">+1</button>
-    </page>
-  </ui>
-
-  <state>
-    <int name="count" default="0"/>
-  </state>
-
-  <script language="lua">
-    function add()
-      state.count = state.count + 1
-    end
-  </script>
-</app>
-```
-</details>
 
 <details>
 <summary><b>Pomodoro timer</b> — multi-page, dynamic CSS classes, sliders</summary>
@@ -546,7 +541,7 @@ PSRAM (8MB)
 
 ## Documentation
 
-This /docs folder contains the core architectural and technical specifications of TelaOS.
+The `docs/` folder contains the core specs:
 
 | File | Description |
 |------|-------------|
