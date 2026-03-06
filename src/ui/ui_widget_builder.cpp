@@ -107,6 +107,28 @@ P::String extractBindVar(const char* bindStr) {
     return vb;  // allow plain var name too
 }
 
+// Helper: check if text is a quoted literal ("...") and strip quotes
+// Returns true if literal (no binding needed), modifies text in-place
+static bool stripLiteral(P::String& text) {
+    if (text.length() >= 2 && text[0] == '"' && text.back() == '"') {
+        // Strip outer quotes
+        text = text.substr(1, text.length() - 2);
+        // Replace "" -> "
+        P::String result;
+        for (size_t i = 0; i < text.size(); i++) {
+            if (text[i] == '"' && i + 1 < text.size() && text[i + 1] == '"') {
+                result += '"';
+                i++; // skip second "
+            } else {
+                result += text[i];
+            }
+        }
+        text = result;
+        return true;
+    }
+    return false;
+}
+
 static void button_click_handler(lv_event_t *e) {
     s_in_lvgl_callback = true;
     
@@ -510,7 +532,8 @@ void create_label(const char *astart, const char *aend, const char *content, lv_
     int32_t h = getAttrCoordH(astart, aend, "h", hasH);
     
     auto text = trimmed(content);
-    bool hasDynamicText = contains(text, '{');
+    bool isLiteral = stripLiteral(text);
+    bool hasDynamicText = !isLiteral && contains(text, '{');
     
     // Check for dynamic color bindings
     P::String colorAttr = getAttr(astart, aend, "color");
@@ -524,7 +547,7 @@ void create_label(const char *astart, const char *aend, const char *content, lv_
     int fontSize  = getAttrInt(astart, aend, "font");
     int radiusVal = getAttrInt(astart, aend, "radius");
     
-    P::String rendered = render_template(text.c_str());
+    P::String rendered = isLiteral ? P::String(text) : render_template(text.c_str());
     
     // Create via Label widget — handles LVGL creation + static visuals
     Label widget = {
@@ -722,7 +745,8 @@ void create_button(const char *astart, const char *aend, const char *content, lv
     // Flatten nested <label> inside button content
     auto flat = flattenButtonContent(content);
     auto text = flat.text;
-    bool hasDynamicText = contains(text, '{');
+    bool isLiteral = stripLiteral(text);
+    bool hasDynamicText = !isLiteral && contains(text, '{');
     bool hasIcon = !iconAttr.empty();
     bool hasText = !text.empty();
     
@@ -1258,7 +1282,8 @@ void create_canvas(const char *astart, const char *aend, lv_obj_t *parent) {
 
 void create_markdown(const char *astart, const char *aend, const char *content, lv_obj_t *parent) {
     auto text = trimmed(content);
-    bool hasDynamicText = contains(text, '{');
+    bool isLiteral = stripLiteral(text);
+    bool hasDynamicText = !isLiteral && contains(text, '{');
     
     CommonAttrs attrs = parseCommonAttrs(astart, aend);
     ensureId(attrs, "_md", hasDynamicText);

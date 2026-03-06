@@ -42,6 +42,9 @@ namespace Tag {
         constexpr const char* Markdown = "markdown";
         constexpr const char* Tabs = "tabs";
         constexpr const char* Tab = "tab";
+        constexpr const char* Table = "table";
+        constexpr const char* Tr = "tr";
+        constexpr const char* Td = "td";
     }
     
     namespace TypeTag {

@@ -146,4 +146,7 @@ void create_canvas(const char* astart, const char* aend, lv_obj_t* parent);
 void create_markdown(const char* astart, const char* aend, const char* content, lv_obj_t* parent);
 void create_tabs(const char* astart, const char* aend, const char* content, lv_obj_t* parent);
 
+// Layout: table/tr/td (recursive child parsing)
+void parse_children(const char *html, int len, lv_obj_t *parent);
+
 #endif // UI_HTML_INTERNAL_H

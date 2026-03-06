@@ -75,6 +75,9 @@ P::String ui_default_page;  // <ui default="/page"> — initial page to show
 P::Array<P::String> s_iconPaths;   // Persistent storage for icon paths (LVGL needs valid pointers)
 P::Array<P::String> s_imagePaths;  // Persistent storage for image paths
 
+// Template storage: name (lowercase) -> body HTML
+static P::Map<P::String, P::String> s_templates;
+
 // CSS z-index deferred: CSS runs before store_element, so cache here
 static std::unordered_map<lv_obj_t*, int> s_deferredZIndex;
 
@@ -277,6 +280,356 @@ static void parse_system(const UI::ParsedElement& root) {
     }
 }
 
+// ============ TEMPLATE & @FOR EXPANSION ============
+
+// Parse <templates> section from raw HTML
+static void parse_templates(const char* html) {
+    // Find <templates> section
+    const char* tplSection = strstr(html, "<templates>");
+    if (!tplSection) tplSection = strstr(html, "<templates ");
+    if (!tplSection) return;
+    
+    const char* sectionEnd = strstr(tplSection, "</templates>");
+    if (!sectionEnd) return;
+    
+    // Iterate <template> tags inside
+    const char* p = tplSection;
+    while (p < sectionEnd) {
+        const char* tstart = strstr(p, "<template ");
+        if (!tstart || tstart >= sectionEnd) break;
+        
+        // Parse attributes (find id)
+        const char* astart = tstart + 10; // strlen("<template ")
+        const char* aend = astart;
+        while (aend < sectionEnd && *aend != '>') aend++;
+        if (aend >= sectionEnd) break;
+        
+        P::String id = getAttr(astart, aend, "id");
+        if (id.empty()) {
+            LOG_W(Log::UI, "template without id, skipping");
+            p = aend + 1;
+            continue;
+        }
+        
+        // Verify PascalCase
+        if (!isupper((unsigned char)id[0])) {
+            LOG_E(Log::UI, "Template '%s' must start with uppercase (PascalCase)", id.c_str());
+            p = aend + 1;
+            continue;
+        }
+        
+        // Get body: content between > and </template>
+        const char* bodyStart = aend + 1;
+        const char* bodyEnd = strstr(bodyStart, "</template>");
+        if (!bodyEnd || bodyEnd > sectionEnd) break;
+        
+        // Store with lowercase key
+        P::String key = id;
+        for (char& c : key) c = tolower((unsigned char)c);
+        
+        // Trim body whitespace
+        while (bodyStart < bodyEnd && isspace((unsigned char)*bodyStart)) bodyStart++;
+        const char* trimEnd = bodyEnd;
+        while (trimEnd > bodyStart && isspace((unsigned char)*(trimEnd - 1))) trimEnd--;
+        
+        s_templates[key] = P::String(bodyStart, trimEnd - bodyStart);
+        LOG_I(Log::UI, "template: %s -> %d bytes", id.c_str(), (int)(trimEnd - bodyStart));
+        
+        p = bodyEnd + 11; // strlen("</template>")
+    }
+    
+    LOG_I(Log::UI, "templates: %d defined", (int)s_templates.size());
+}
+
+// Substitute {varname} with value in text, handling nested {val_{var}_{var2}}
+// Simple text replacement: all occurrences of {key} -> val
+static P::String substitute_var(const P::String& text, const P::String& var, const P::String& val) {
+    P::String result;
+    P::String pattern = P::String("{") + var + "}";
+    size_t patLen = pattern.size();
+    size_t pos = 0;
+    
+    while (pos < text.size()) {
+        size_t found = text.find(pattern.c_str(), pos);
+        if (found == P::String::npos) {
+            result.append(text.c_str() + pos, text.size() - pos);
+            break;
+        }
+        result.append(text.c_str() + pos, found - pos);
+        result += val;
+        pos = found + patLen;
+    }
+    return result;
+}
+
+// Expand a template invocation: substitute attributes into body
+static P::String expand_template_call(const P::String& body, 
+                                       const char* astart, const char* aend) {
+    P::String result = body;
+    
+    // Parse attributes and substitute each as {name} -> value
+    const char* p = astart;
+    while (p < aend) {
+        while (p < aend && isspace((unsigned char)*p)) p++;
+        if (p >= aend || *p == '/' || *p == '>') break;
+        
+        // Read attr name
+        const char* nstart = p;
+        while (p < aend && *p != '=' && !isspace((unsigned char)*p) && *p != '/' && *p != '>') p++;
+        P::String attrName(nstart, p - nstart);
+        // Lowercase the attr name for matching
+        for (char& c : attrName) c = tolower((unsigned char)c);
+        
+        if (attrName.empty()) { p++; continue; }
+        
+        // Skip =
+        while (p < aend && isspace((unsigned char)*p)) p++;
+        if (p >= aend || *p != '=') continue;
+        p++; // skip =
+        while (p < aend && isspace((unsigned char)*p)) p++;
+        
+        // Read value (quoted)
+        P::String attrVal;
+        if (p < aend && (*p == '"' || *p == '\'')) {
+            char quote = *p++;
+            const char* vstart = p;
+            while (p < aend && *p != quote) p++;
+            attrVal.assign(vstart, p - vstart);
+            if (p < aend) p++; // skip closing quote
+        }
+        
+        if (!attrName.empty()) {
+            result = substitute_var(result, attrName, attrVal);
+        }
+    }
+    return result;
+}
+
+// Find matching } for an opening { using depth tracking
+static const char* find_matching_brace(const char* start, const char* end) {
+    int depth = 1;
+    const char* p = start;
+    while (p < end && depth > 0) {
+        if (*p == '{') depth++;
+        else if (*p == '}') depth--;
+        if (depth > 0) p++;
+    }
+    return (depth == 0) ? p : nullptr;
+}
+
+// Parse and expand @for(var in start..end [step N]) { body }
+// Returns expanded HTML, advances *pp past the directive
+static P::String expand_for(const char* p, const char* end, const char** pp) {
+    // p points to '@' in @for(...)
+    p++; // skip @
+    
+    // Expect "for("
+    if (strncmp(p, "for(", 4) != 0) {
+        *pp = p;
+        return "";
+    }
+    p += 4; // skip "for("
+    
+    // Parse variable name
+    while (p < end && isspace((unsigned char)*p)) p++;
+    const char* varStart = p;
+    while (p < end && isalnum((unsigned char)*p) && *p != ' ') p++;
+    P::String varName(varStart, p - varStart);
+    
+    // Expect "in"
+    while (p < end && isspace((unsigned char)*p)) p++;
+    if (strncmp(p, "in", 2) != 0) {
+        LOG_E(Log::UI, "@for: expected 'in' after variable '%s'", varName.c_str());
+        *pp = p;
+        return "";
+    }
+    p += 2;
+    while (p < end && isspace((unsigned char)*p)) p++;
+    
+    // Parse start..end
+    int rangeStart = 0, rangeEnd = 0, step = 1;
+    rangeStart = atoi(p);
+    while (p < end && (isdigit((unsigned char)*p) || *p == '-')) p++;
+    
+    // Expect ".."
+    if (p + 1 < end && p[0] == '.' && p[1] == '.') {
+        p += 2;
+    } else {
+        LOG_E(Log::UI, "@for: expected '..' in range");
+        *pp = p;
+        return "";
+    }
+    
+    rangeEnd = atoi(p);
+    while (p < end && (isdigit((unsigned char)*p) || *p == '-')) p++;
+    
+    // Optional "step N"
+    while (p < end && isspace((unsigned char)*p)) p++;
+    if (strncmp(p, "step", 4) == 0) {
+        p += 4;
+        while (p < end && isspace((unsigned char)*p)) p++;
+        step = atoi(p);
+        while (p < end && isdigit((unsigned char)*p)) p++;
+        if (step <= 0) step = 1;
+    }
+    
+    // Skip to closing )
+    while (p < end && *p != ')') p++;
+    if (p < end) p++; // skip )
+    
+    // Skip whitespace to opening {
+    while (p < end && isspace((unsigned char)*p)) p++;
+    if (p >= end || *p != '{') {
+        LOG_E(Log::UI, "@for: expected '{' after @for(...)");
+        *pp = p;
+        return "";
+    }
+    p++; // skip opening {
+    
+    // Find matching }
+    const char* bodyStart = p;
+    const char* bodyEnd = find_matching_brace(p, end);
+    if (!bodyEnd) {
+        LOG_E(Log::UI, "@for: no matching '}' found");
+        *pp = end;
+        return "";
+    }
+    
+    P::String body(bodyStart, bodyEnd - bodyStart);
+    *pp = bodyEnd + 1; // past closing }
+    
+    // Check conflict with state
+    if (State::store().has(varName)) {
+        LOG_E(Log::UI, "@for: variable '%s' conflicts with state variable. Rename one of them.", 
+                 varName.c_str());
+        return "";
+    }
+    
+    LOG_D(Log::UI, "@for(%s in %d..%d step %d) body=%d bytes", 
+             varName.c_str(), rangeStart, rangeEnd, step, (int)body.size());
+    
+    // Expand: substitute {var} for each value
+    P::String result;
+    for (int i = rangeStart; i <= rangeEnd; i += step) {
+        char valBuf[16];
+        snprintf(valBuf, sizeof(valBuf), "%d", i);
+        P::String expanded = substitute_var(body, varName, P::String(valBuf));
+        result += expanded;
+    }
+    
+    return result;
+}
+
+// Pre-process HTML: expand all @for directives
+static P::String expand_all_for(const P::String& html) {
+    P::String result;
+    const char* p = html.c_str();
+    const char* end = p + html.size();
+    
+    while (p < end) {
+        // Look for @for
+        if (*p == '@' && p + 4 < end && strncmp(p + 1, "for(", 4) == 0) {
+            const char* next = nullptr;
+            P::String expanded = expand_for(p, end, &next);
+            result += expanded;
+            p = next;
+        } else {
+            result += *p++;
+        }
+    }
+    return result;
+}
+
+// Pre-process HTML: expand all template invocations (PascalCase tags)
+static P::String expand_all_templates(const P::String& html) {
+    if (s_templates.empty()) return html;
+    
+    P::String result;
+    const char* p = html.c_str();
+    const char* end = p + html.size();
+    
+    while (p < end) {
+        if (*p == '<' && p + 1 < end && isupper((unsigned char)p[1])) {
+            // Potential template call
+            const char* tagStart = p + 1;
+            const char* t = tagStart;
+            
+            // Read tag name
+            char tagBuf[TAG_BUF_LEN];
+            int ti = 0;
+            while (t < end && !isspace((unsigned char)*t) && *t != '>' && *t != '/' && ti < TAG_BUF_LEN - 1) {
+                tagBuf[ti++] = tolower((unsigned char)*t++);
+            }
+            tagBuf[ti] = '\0';
+            
+            // Look up template
+            auto it = s_templates.find(P::String(tagBuf));
+            if (it != s_templates.end()) {
+                // Found template — parse attributes
+                const char* astart = t;
+                while (t < end && *t != '>' && *t != '/') t++;
+                const char* aend = t;
+                
+                bool selfClose = (t > p && *t == '/' && t + 1 < end && *(t + 1) == '>');
+                if (selfClose) {
+                    t += 2; // skip />
+                } else if (*t == '>') {
+                    t++; // skip >
+                    // Find closing tag </TagName>
+                    char closePat[PATTERN_BUF_LEN];
+                    snprintf(closePat, sizeof(closePat), "</%s>", tagBuf);
+                    // Also try original case
+                    const char* closePos = nullptr;
+                    // Search case-insensitive for closing tag
+                    const char* sp = t;
+                    while (sp < end) {
+                        if (*sp == '<' && *(sp + 1) == '/') {
+                            // Compare tag name case-insensitively
+                            const char* cp = sp + 2;
+                            const char* tp = tagBuf;
+                            while (*tp && cp < end && tolower((unsigned char)*cp) == *tp) {
+                                cp++; tp++;
+                            }
+                            if (*tp == '\0' && cp < end && *cp == '>') {
+                                closePos = cp + 1;
+                                break;
+                            }
+                        }
+                        sp++;
+                    }
+                    if (closePos) {
+                        t = closePos;
+                    }
+                }
+                
+                // Expand template
+                P::String expanded = expand_template_call(it->second, astart, aend);
+                result += expanded;
+                p = t;
+                continue;
+            }
+        }
+        result += *p++;
+    }
+    return result;
+}
+
+// Full pre-expansion: @for first, then templates, repeat until stable
+static P::String preprocess_html(const char* html, int len) {
+    P::String current(html, len);
+    
+    // Max iterations to prevent infinite loops
+    for (int pass = 0; pass < 8; pass++) {
+        P::String after_for = expand_all_for(current);
+        P::String after_tpl = expand_all_templates(after_for);
+        
+        if (after_tpl == current) break; // stable
+        current = after_tpl;
+    }
+    
+    return current;
+}
+
 // Parse metadata sections (config, state, timer, script, style) from <app>
 static void parse_head(const char *html) {
     // Clear previous CSS
@@ -345,6 +698,7 @@ static void parse_head(const char *html) {
     }
     
     parse_state(*app);
+    parse_templates(html);  // after state, so @for can check conflicts
     parse_timers(*app);
     parse_script(*app);
     parse_style(*app);
@@ -939,8 +1293,7 @@ const char* ui_get_current_page_id() {
 
 // Event handlers + widget builders moved to ui_widget_builder.cpp
 
-// Forward declaration for recursive use by create_tabs
-static void parse_children(const char *html, int len, lv_obj_t *parent);
+// Forward declaration for parse_children now in ui_html_internal.h
 
 // ============ Tabs widget ============
 // <tabs id="t" x="0" y="0" w="100%" h="100%" barh="32">
@@ -1050,9 +1403,28 @@ void create_tabs(const char* astart, const char* aend, const char* content, lv_o
 }
 
 // Parse children of a page (labels, buttons, etc.)
-static void parse_children(const char *html, int len, lv_obj_t *parent) {
+void parse_children(const char *html, int len, lv_obj_t *parent) {
+    // Pre-expand @for directives and template invocations
+    P::String expanded;
     const char *p = html;
     const char *end = html + len;
+    
+    // Quick check: does content need expansion?
+    bool needsExpand = false;
+    for (const char *scan = html; scan < html + len; scan++) {
+        if (*scan == '@' || (*scan == '<' && scan + 1 < html + len && isupper((unsigned char)scan[1]))) {
+            needsExpand = true;
+            break;
+        }
+    }
+    
+    if (needsExpand) {
+        expanded = preprocess_html(html, len);
+        p = expanded.c_str();
+        end = p + expanded.length();
+        LOG_D(Log::UI, "preprocess: %d -> %d bytes", len, (int)expanded.size());
+    }
+    
     char tag[TAG_BUF_LEN];
     
     while (p < end) {
@@ -1120,6 +1492,64 @@ static void parse_children(const char *html, int len, lv_obj_t *parent) {
             create_markdown(astart, aend, content.c_str(), parent);
         } else if (strcmp(tag, Element::Tabs) == 0) {
             create_tabs(astart, aend, content.c_str(), parent);
+        } else if (strcmp(tag, Element::Table) == 0 ||
+                   strcmp(tag, Element::Tr) == 0 ||
+                   strcmp(tag, Element::Td) == 0) {
+            // --- Layout container ---
+            lv_obj_t *container = lv_obj_create(parent);
+            lv_obj_remove_style_all(container);
+            
+            // Flex direction: table=column, tr=row, td=none
+            if (strcmp(tag, Element::Table) == 0) {
+                lv_obj_set_flex_flow(container, LV_FLEX_FLOW_COLUMN);
+            } else if (strcmp(tag, Element::Tr) == 0) {
+                lv_obj_set_flex_flow(container, LV_FLEX_FLOW_ROW);
+            }
+            
+            // Clean styling
+            lv_obj_set_style_pad_all(container, 0, LV_PART_MAIN);
+            lv_obj_set_style_pad_row(container, 0, LV_PART_MAIN);
+            lv_obj_set_style_pad_column(container, 0, LV_PART_MAIN);
+            lv_obj_set_style_border_width(container, 0, LV_PART_MAIN);
+            
+            // Position & size
+            auto wAttr = getAttr(astart, aend, "w");
+            auto hAttr = getAttr(astart, aend, "h");
+            auto xAttr = getAttr(astart, aend, "x");
+            auto yAttr = getAttr(astart, aend, "y");
+            auto bgAttr = getAttr(astart, aend, "bgcolor");
+            
+            if (!wAttr.empty()) {
+                lv_obj_set_width(container, parse_coord_w(wAttr.c_str()));
+            } else {
+                lv_obj_set_width(container, LV_SIZE_CONTENT);
+            }
+            if (!hAttr.empty()) {
+                lv_obj_set_height(container, parse_coord_h(hAttr.c_str()));
+            } else {
+                lv_obj_set_height(container, LV_SIZE_CONTENT);
+            }
+            
+            if (!xAttr.empty() || !yAttr.empty()) {
+                int32_t x = xAttr.empty() ? 0 : parse_coord_w(xAttr.c_str());
+                int32_t y = yAttr.empty() ? 0 : parse_coord_h(yAttr.c_str());
+                lv_obj_set_pos(container, x, y);
+            }
+            
+            if (!bgAttr.empty()) {
+                uint32_t bgc = parse_color(bgAttr.c_str());
+                lv_obj_set_style_bg_color(container, lv_color_hex(bgc), LV_PART_MAIN);
+                lv_obj_set_style_bg_opa(container, LV_OPA_COVER, LV_PART_MAIN);
+            }
+            
+            LOG_I(Log::UI, "<%s> w=%s h=%s", tag,
+                     wAttr.empty() ? "auto" : wAttr.c_str(),
+                     hAttr.empty() ? "auto" : hAttr.c_str());
+            
+            // Recursive parse children
+            if (!content.empty()) {
+                parse_children(content.c_str(), content.length(), container);
+            }
         }
     }
 }
@@ -1128,6 +1558,7 @@ void ui_html_init_internal(void) {
     // Clear all vectors
     elements.clear();
     s_deferredZIndex.clear();
+    s_templates.clear();
     timers.clear();
     styles.clear();
     groups.clear();
@@ -1430,6 +1861,7 @@ void ui_clear_internal(void) {
     LOG_D(Log::UI, "clear: clearing elements vector...");
     elements.clear();
     s_deferredZIndex.clear();
+    s_templates.clear();
     page_count = 0;
     current_page = 0;
     groups.clear();
