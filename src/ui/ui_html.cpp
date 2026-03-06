@@ -1512,23 +1512,19 @@ void parse_children(const char *html, int len, lv_obj_t *parent) {
             lv_obj_set_style_pad_column(container, 0, LV_PART_MAIN);
             lv_obj_set_style_border_width(container, 0, LV_PART_MAIN);
             
-            // Position & size
+            // Default size
+            lv_obj_set_width(container, LV_SIZE_CONTENT);
+            lv_obj_set_height(container, LV_SIZE_CONTENT);
+            
+            // Explicit attributes (override defaults)
             auto wAttr = getAttr(astart, aend, "w");
             auto hAttr = getAttr(astart, aend, "h");
             auto xAttr = getAttr(astart, aend, "x");
             auto yAttr = getAttr(astart, aend, "y");
             auto bgAttr = getAttr(astart, aend, "bgcolor");
             
-            if (!wAttr.empty()) {
-                lv_obj_set_width(container, parse_coord_w(wAttr.c_str()));
-            } else {
-                lv_obj_set_width(container, LV_SIZE_CONTENT);
-            }
-            if (!hAttr.empty()) {
-                lv_obj_set_height(container, parse_coord_h(hAttr.c_str()));
-            } else {
-                lv_obj_set_height(container, LV_SIZE_CONTENT);
-            }
+            if (!wAttr.empty()) lv_obj_set_width(container, parse_coord_w(wAttr.c_str()));
+            if (!hAttr.empty()) lv_obj_set_height(container, parse_coord_h(hAttr.c_str()));
             
             if (!xAttr.empty() || !yAttr.empty()) {
                 int32_t x = xAttr.empty() ? 0 : parse_coord_w(xAttr.c_str());
@@ -1542,9 +1538,14 @@ void parse_children(const char *html, int len, lv_obj_t *parent) {
                 lv_obj_set_style_bg_opa(container, LV_OPA_COVER, LV_PART_MAIN);
             }
             
-            LOG_I(Log::UI, "<%s> w=%s h=%s", tag,
-                     wAttr.empty() ? "auto" : wAttr.c_str(),
-                     hAttr.empty() ? "auto" : hAttr.c_str());
+            // Apply CSS (may override w, h, bgcolor)
+            auto idAttr = getAttr(astart, aend, "id");
+            auto classAttr = getAttr(astart, aend, "class");
+            Widget{container}.applyCss(tag, idAttr.c_str(), classAttr.c_str());
+            
+            LOG_I(Log::UI, "<%s> id=%s class=%s", tag,
+                     idAttr.empty() ? "-" : idAttr.c_str(),
+                     classAttr.empty() ? "-" : classAttr.c_str());
             
             // Recursive parse children
             if (!content.empty()) {
