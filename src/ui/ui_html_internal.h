@@ -149,4 +149,7 @@ void create_tabs(const char* astart, const char* aend, const char* content, lv_o
 // Layout: table/tr/td (recursive child parsing)
 void parse_children(const char *html, int len, lv_obj_t *parent);
 
+// Keyboard close/enter handler (shared between widget_builder and engine)
+void keyboard_event_handler(lv_event_t *e);
+
 #endif // UI_HTML_INTERNAL_H

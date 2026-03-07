@@ -817,6 +817,13 @@ bool Manager::loadApp(const P::String& path) {
         // --- Definite close: long + vertical ---
         if ((fromTop && swipedDown && vertical) || 
             (fromBottom && swipedUp && vertical)) {
+            // If keyboard visible → dismiss it first, don't close
+            if (ui_engine().isKeyboardVisible()) {
+                LOG_D(Log::APP, "Keyboard visible, dismissing instead of exit");
+                s_appTouchStartY = -1;
+                ui_engine().dismissKeyboard();
+                return;
+            }
             const char* gesture = fromTop ? "swipe-down-from-top" : "swipe-up-from-bottom";
             LOG_D(Log::APP, "Exit! %s startY=%d%% dy=%d%% dx=%d%%", 
                      gesture, startYPct, dyPct, dxPct);
@@ -833,6 +840,13 @@ bool Manager::loadApp(const P::String& path) {
         bool ambiguousAngle  = fromEdge && dyPct >= CONFIRM_SWIPE_PCT && !vertical && sloppyVertical;
         
         if (ambiguousLength || ambiguousAngle) {
+            // If keyboard visible → dismiss it first
+            if (ui_engine().isKeyboardVisible()) {
+                LOG_D(Log::APP, "Keyboard visible, dismissing instead of confirm");
+                s_appTouchStartY = -1;
+                ui_engine().dismissKeyboard();
+                return;
+            }
             LOG_D(Log::APP, "Confirm? startY=%d%% dy=%d%% dx=%d%%", startYPct, dyPct, dxPct);
             s_appTouchStartY = -1;
             showCloseConfirm(Manager::instance().m_currentAppTitle.c_str());

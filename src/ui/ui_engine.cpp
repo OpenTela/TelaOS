@@ -99,6 +99,23 @@ const char* Engine::currentPageId() const {
     return ::ui_get_current_page_id();
 }
 
+bool Engine::isKeyboardVisible() const {
+    for (int i = 0; i < page_count; i++) {
+        if (g_keyboards[i] && !lv_obj_has_flag(g_keyboards[i], LV_OBJ_FLAG_HIDDEN)) {
+            return true;
+        }
+    }
+    return false;
+}
+
+void Engine::dismissKeyboard() {
+    for (int i = 0; i < page_count; i++) {
+        if (g_keyboards[i]) {
+            lv_obj_add_flag(g_keyboards[i], LV_OBJ_FLAG_HIDDEN);
+        }
+    }
+}
+
 // ============ Timer getters ============
 
 int Engine::timerCount() const {
@@ -271,6 +288,9 @@ bool focusInput(const char* id) {
         g_keyboards[page_idx] = lv_keyboard_create(parent);
         lv_obj_set_size(g_keyboards[page_idx], lv_pct(FULL_SIZE_PCT), lv_pct(KEYBOARD_HEIGHT_PCT));
         lv_obj_align(g_keyboards[page_idx], LV_ALIGN_BOTTOM_MID, 0, 0);
+        lv_obj_add_event_cb(g_keyboards[page_idx], keyboard_event_handler, LV_EVENT_ALL, nullptr);
+        lv_obj_add_flag(g_keyboards[page_idx], LV_OBJ_FLAG_GESTURE_BUBBLE);
+        lv_obj_add_flag(g_keyboards[page_idx], LV_OBJ_FLAG_EVENT_BUBBLE);
     }
     
     lv_keyboard_set_textarea(g_keyboards[page_idx], obj);

@@ -1,5 +1,18 @@
 #include "core/state_store.h"
+#include "utils/log_config.h"
 #include <cstdlib>
+
+static const char* TAG = "StateStore";
+
+void warnIfNumericString(const P::String& name, const P::String& def) {
+    if (def.empty()) return;
+    char* endptr = nullptr;
+    strtod(def.c_str(), &endptr);
+    if (endptr && *endptr == '\0') {
+        LOG_W(Log::STATE, "'%s' declared as <string> but default '%s' is numeric. Consider <int> or <float>.",
+                 name.c_str(), def.c_str());
+    }
+}
 
 // Static buffer for C API
 static thread_local P::String s_get_buffer;

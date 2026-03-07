@@ -286,7 +286,7 @@ static void input_complete_handler(lv_event_t *e) {
     }
 }
 
-static void keyboard_event_handler(lv_event_t *e) {
+void keyboard_event_handler(lv_event_t *e) {
     lv_event_code_t code = lv_event_get_code(e);
     lv_obj_t *kb = (lv_obj_t*)lv_event_get_target(e);
     
@@ -348,6 +348,8 @@ static void input_focus_handler(lv_event_t *e) {
         lv_obj_add_event_cb(g_keyboards[page_idx], keyboard_event_handler, LV_EVENT_ALL, nullptr);
         lv_obj_set_size(g_keyboards[page_idx], lv_pct(FULL_SIZE_PCT), lv_pct(KEYBOARD_HEIGHT_PCT));
         lv_obj_align(g_keyboards[page_idx], LV_ALIGN_BOTTOM_MID, 0, 0);
+        lv_obj_add_flag(g_keyboards[page_idx], LV_OBJ_FLAG_GESTURE_BUBBLE);
+        lv_obj_add_flag(g_keyboards[page_idx], LV_OBJ_FLAG_EVENT_BUBBLE);
         lv_obj_set_style_text_font(g_keyboards[page_idx], UI::Font::get(), LV_PART_ITEMS);
     }
     

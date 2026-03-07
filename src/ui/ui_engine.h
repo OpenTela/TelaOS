@@ -78,6 +78,10 @@ public:
     bool hasPage(const char* id);  // Check if page exists
     const char* currentPageId() const;  // Current visible page ID
     
+    // Keyboard
+    bool isKeyboardVisible() const;  // Any keyboard shown?
+    void dismissKeyboard();          // Hide all keyboards
+    
     // Head section getters
     int timerCount() const;
     int timerInterval(int i) const;

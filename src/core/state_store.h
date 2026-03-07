@@ -4,6 +4,7 @@
 #include <variant>
 #include <functional>
 #include <cstring>
+#include <cstdlib>
 #include "utils/psram_alloc.h"
 #include "utils/log_config.h"
 #include "utils/log_config.h"
@@ -21,6 +22,9 @@ struct Variable {
 };
 
 // ============ STORE ============
+
+// Warn if string variable has numeric default (common bug)
+void warnIfNumericString(const P::String& name, const P::String& def);
 
 class Store {
 public:
@@ -41,6 +45,7 @@ public:
     }
     
     void defineString(const P::String& name, const P::String& def = "") {
+        warnIfNumericString(name, def);
         define(name, VarType::String, def);
     }
     
