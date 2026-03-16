@@ -8,6 +8,7 @@
 #define UI_HTML_INTERNAL_H
 
 #include "ui/ui_types.h"
+#include "ui/ui_coords.h"
 #include <cstdint>
 #include <string>
 
@@ -76,9 +77,8 @@ void ui_show_page_internal(const char* path);
 int  find_page_index(const char* id);
 
 /// Parse coordinate value (px or %) - width based (for x, w)
-int32_t parse_coord_w(const char* s);
+/// If parent provided, % is relative to parent; otherwise relative to screen
 /// Parse coordinate value (px or %) - height based (for y, h)
-int32_t parse_coord_h(const char* s);
 
 /// Get current state variable value (returns nullptr if not found)
 const char* get_state_value(const char* name);
@@ -102,6 +102,7 @@ struct ElementDesc {
     const char* href        = nullptr;
     const char* onclick     = nullptr;
     const char* onchange    = nullptr;
+    const char* oninput     = nullptr;
     const char* bind        = nullptr;
     const char* tpl         = nullptr;
     bool        is_page     = false;

@@ -249,7 +249,7 @@ static void slider_event_handler(lv_event_t *e) {
     }
 }
 
-// Input (textarea) event handler
+// Input (textarea) event handler — fires on every character
 static void input_event_handler(lv_event_t *e) {
     if (g_updating_from_binding) return;
     
@@ -263,6 +263,16 @@ static void input_event_handler(lv_event_t *e) {
     // Update state and UI directly
     if (!elements[idx]->bind.empty()) {
         ui_update_bindings(elements[idx]->bind.c_str(), text);
+    }
+    
+    // Sync Lua state so oninput handler can read current value
+    if (!elements[idx]->bind.empty() && g_state_change_handler) {
+        g_state_change_handler(elements[idx]->bind.c_str(), text);
+    }
+    
+    // Call oninput Lua handler (HTML standard: fires on every input)
+    if (!elements[idx]->oninput.empty() && g_onclick_handler) {
+        g_onclick_handler(elements[idx]->oninput.c_str());
     }
 }
 
@@ -378,47 +388,49 @@ uint32_t parse_color(const char *s) {
 // Parse coordinate - supports pixels and percentages, with float values
 // Examples: "5" "5px" "5.7" "5.7px" "12.5%" 
 // Returns rounded integer pixels
-int32_t parse_coord_w(const char *s) {
+// Position: % always from screen (absolute positioning on page)
+int32_t parse_coord_w(const char *s, lv_obj_t *parent) {
     if (!s || !s[0]) return 0;
-    
-    // Parse as float to handle decimals
     char* end = nullptr;
     float val = strtof(s, &end);
-    
-    // Check suffix
     if (end && *end == '%') {
-        // Percentage of width, with rounding
         return (int32_t)(val * SCREEN_WIDTH / 100.0f + 0.5f);
     }
-    // "px" suffix or just number - round to int
     return (int32_t)(val + 0.5f);
 }
 
-// Height variant: % calculated from SCREEN_HEIGHT
-int32_t parse_coord_h(const char *s) {
+int32_t parse_coord_h(const char *s, lv_obj_t *parent) {
     if (!s || !s[0]) return 0;
-    
     char* end = nullptr;
     float val = strtof(s, &end);
-    
     if (end && *end == '%') {
         return (int32_t)(val * SCREEN_HEIGHT / 100.0f + 0.5f);
     }
     return (int32_t)(val + 0.5f);
 }
 
-// Convenience: read coordinate attribute (px or %) - width based
-static int32_t getAttrCoordW(const char* s, const char* e, const char* name, int32_t def = 0) {
-    char buf[32];
-    if (!getAttr(s, e, name, buf, sizeof(buf))) return def;
-    return parse_coord_w(buf);
+// Size: % via lv_pct() — LVGL resolves from parent at layout time
+int32_t parse_size(const char *s) {
+    if (!s || !s[0]) return 0;
+    char* end = nullptr;
+    float val = strtof(s, &end);
+    if (end && *end == '%') {
+        return lv_pct((int)val);
+    }
+    return (int32_t)(val + 0.5f);
 }
 
-// Convenience: read coordinate attribute (px or %) - height based
-static int32_t getAttrCoordH(const char* s, const char* e, const char* name, int32_t def = 0) {
+// Convenience: read coordinate attribute (px or %) - width based
+static int32_t getAttrCoordW(const char* s, const char* e, const char* name, int32_t def = 0, lv_obj_t* parent = nullptr) {
     char buf[32];
     if (!getAttr(s, e, name, buf, sizeof(buf))) return def;
-    return parse_coord_h(buf);
+    return parse_coord_w(buf, parent);
+}
+
+static int32_t getAttrCoordH(const char* s, const char* e, const char* name, int32_t def = 0, lv_obj_t* parent = nullptr) {
+    char buf[32];
+    if (!getAttr(s, e, name, buf, sizeof(buf))) return def;
+    return parse_coord_h(buf, parent);
 }
 
 // Default (backward compat) - uses width
@@ -427,16 +439,29 @@ static int32_t getAttrCoord(const char* s, const char* e, const char* name, int3
 }
 
 // Width/height variants with "has" flag
-static int32_t getAttrCoordW(const char* s, const char* e, const char* name, bool& found) {
+static int32_t getAttrCoordW(const char* s, const char* e, const char* name, bool& found, lv_obj_t* parent = nullptr) {
     char buf[32];
     found = getAttr(s, e, name, buf, sizeof(buf));
-    return found ? parse_coord_w(buf) : 0;
+    return found ? parse_coord_w(buf, parent) : 0;
 }
 
-static int32_t getAttrCoordH(const char* s, const char* e, const char* name, bool& found) {
+static int32_t getAttrCoordH(const char* s, const char* e, const char* name, bool& found, lv_obj_t* parent = nullptr) {
     char buf[32];
     found = getAttr(s, e, name, buf, sizeof(buf));
-    return found ? parse_coord_h(buf) : 0;
+    return found ? parse_coord_h(buf, parent) : 0;
+}
+
+// Size helpers: % via lv_pct() (for w, h)
+static int32_t getAttrSize(const char* s, const char* e, const char* name, int32_t def = 0) {
+    char buf[32];
+    if (!getAttr(s, e, name, buf, sizeof(buf))) return def;
+    return parse_size(buf);
+}
+
+static int32_t getAttrSize(const char* s, const char* e, const char* name, bool& found) {
+    char buf[32];
+    found = getAttr(s, e, name, buf, sizeof(buf));
+    return found ? parse_size(buf) : 0;
 }
 
 static void set_pos(lv_obj_t *obj, int32_t x, int32_t y) {
@@ -495,6 +520,13 @@ static lv_align_t getLvAlign(const P::String& h, const P::String& v) {
 static void applyTextValign(lv_obj_t* lbl, const P::String& valign, int32_t h) {
     if (valign.empty() || valign == "top" || h <= 0) return;
     
+    // h might be lv_pct encoded (large value) — resolve to actual pixels
+    if (h > SCREEN_HEIGHT) {
+        lv_obj_update_layout(lbl);
+        h = lv_obj_get_height(lbl);
+        if (h <= 0) return;
+    }
+    
     const lv_font_t* font = lv_obj_get_style_text_font(lbl, LV_PART_MAIN);
     if (!font) font = lv_font_default();
     int lineHeight = lv_font_get_line_height(font);
@@ -528,10 +560,10 @@ void create_label(const char *astart, const char *aend, const char *content, lv_
     auto textValign = getAttr(astart, aend, "text-valign");
     
     bool hasX, hasY, hasW, hasH;
-    int32_t x = getAttrCoordW(astart, aend, "x", hasX);
-    int32_t y = getAttrCoordH(astart, aend, "y", hasY);
-    int32_t w = getAttrCoordW(astart, aend, "w", hasW);
-    int32_t h = getAttrCoordH(astart, aend, "h", hasH);
+    int32_t x = getAttrCoordW(astart, aend, "x", hasX, parent);
+    int32_t y = getAttrCoordH(astart, aend, "y", hasY, parent);
+    int32_t w = getAttrSize(astart, aend, "w", hasW);
+    int32_t h = getAttrSize(astart, aend, "h", hasH);
     
     auto text = trimmed(content);
     bool isLiteral = stripLiteral(text);
@@ -625,6 +657,7 @@ void create_label(const char *astart, const char *aend, const char *content, lv_
     
     // Vertical text alignment (font already applied by CSS at this point)
     // Default to "center" when height is set and no explicit text-valign
+    // Skip for percentage heights — lv_pct() values are encoded and not real pixels
     if (hasH && h > 0) {
         // Check if user explicitly set vertical text alignment
         bool hasExplicitValign = !textValign.empty() || 
@@ -739,10 +772,10 @@ void create_button(const char *astart, const char *aend, const char *content, lv
     auto align = getAttr(astart, aend, "align");
     auto iconAttr = getAttr(astart, aend, "icon");
     
-    int32_t x = getAttrCoordW(astart, aend, "x");
-    int32_t y = getAttrCoordH(astart, aend, "y");
-    int32_t w = getAttrCoordW(astart, aend, "w");
-    int32_t h = getAttrCoordH(astart, aend, "h");
+    int32_t x = getAttrCoordW(astart, aend, "x", 0, parent);
+    int32_t y = getAttrCoordH(astart, aend, "y", 0, parent);
+    int32_t w = getAttrSize(astart, aend, "w");
+    int32_t h = getAttrSize(astart, aend, "h");
     
     // Flatten nested <label> inside button content
     auto flat = flattenButtonContent(content);
@@ -806,14 +839,6 @@ void create_button(const char *astart, const char *aend, const char *content, lv
     auto *btn = widget.handle;
     
     _unique_id(btn, attrs.id.c_str());  // For testing mock
-    // === HTML-specific positioning (overrides struct defaults) ===
-    if (align == "center") {
-        if (w != 0 || h != 0) set_size(btn, w, h);
-        lv_obj_align(btn, LV_ALIGN_TOP_MID, 0, y);
-    } else {
-        set_pos(btn, x, y);
-        if (w != 0 || h != 0) set_size(btn, w, h);
-    }
     
     lv_obj_set_ext_click_area(btn, ClickArea::BUTTON);
     
@@ -821,6 +846,15 @@ void create_button(const char *astart, const char *aend, const char *content, lv
     {
         P::String renderedClass = attrs.hasDynamicClass ? render_template(attrs.cssClass.c_str()) : attrs.cssClass;
         widget.applyCss("button", attrs.id.c_str(), renderedClass.c_str());
+    }
+    
+    // 2. Inline positioning (overrides CSS — HTML standard)
+    if (align == "center") {
+        if (w != 0 || h != 0) set_size(btn, w, h);
+        lv_obj_align(btn, LV_ALIGN_TOP_MID, 0, y);
+    } else {
+        set_pos(btn, x, y);
+        if (w != 0 || h != 0) set_size(btn, w, h);
     }
     
     // 2. Local bgcolor override (static or dynamic)
@@ -901,8 +935,8 @@ void create_switch(const char *astart, const char *aend, lv_obj_t *parent) {
     auto bind = getAttr(astart, aend, "bind");
     auto onchange = getAttr(astart, aend, "onchange");
     
-    int32_t x = getAttrCoordW(astart, aend, "x");
-    int32_t y = getAttrCoordH(astart, aend, "y");
+    int32_t x = getAttrCoordW(astart, aend, "x", 0, parent);
+    int32_t y = getAttrCoordH(astart, aend, "y", 0, parent);
     
     ensureId(attrs, "_sw", !bind.empty() || !onchange.empty());
     
@@ -919,14 +953,14 @@ void create_switch(const char *astart, const char *aend, lv_obj_t *parent) {
     widget.create(parent);
     auto *sw = widget.handle;
     
-    set_pos(sw, x, y);
     lv_obj_set_ext_click_area(sw, ClickArea::SWITCH);
     
-    // Apply CSS (always — tag/id selectors don't need class)
+    // CSS first, then inline overrides
     {
         P::String renderedClass = attrs.hasDynamicClass ? render_template(attrs.cssClass.c_str()) : attrs.cssClass;
         Widget{sw}.applyCss("switch", attrs.id.c_str(), renderedClass.c_str());
     }
+    set_pos(sw, x, y);
     
     ElementDesc sd;
     sd.id          = attrs.id.c_str();
@@ -945,9 +979,9 @@ void create_slider(const char *astart, const char *aend, lv_obj_t *parent) {
     auto bind = getAttr(astart, aend, "bind");
     auto onchange = getAttr(astart, aend, "onchange");
     
-    int32_t x = getAttrCoordW(astart, aend, "x");
-    int32_t y = getAttrCoordH(astart, aend, "y");
-    int32_t w = getAttrCoordW(astart, aend, "w", Defaults::Slider::WIDTH);
+    int32_t x = getAttrCoordW(astart, aend, "x", 0, parent);
+    int32_t y = getAttrCoordH(astart, aend, "y", 0, parent);
+    int32_t w = getAttrSize(astart, aend, "w", Defaults::Slider::WIDTH);
     int min_val = getAttrInt(astart, aend, "min", Defaults::Slider::MIN);
     int max_val = getAttrInt(astart, aend, "max", Defaults::Slider::MAX);
     
@@ -971,14 +1005,14 @@ void create_slider(const char *astart, const char *aend, lv_obj_t *parent) {
     widget.create(parent);
     auto *slider = widget.handle;
     
-    set_pos(slider, x, y);
     lv_obj_set_ext_click_area(slider, ClickArea::SLIDER);
     
-    // Apply CSS (always — tag/id selectors don't need class)
+    // CSS first, then inline overrides
     {
         P::String renderedClass = attrs.hasDynamicClass ? render_template(attrs.cssClass.c_str()) : attrs.cssClass;
         Widget{slider}.applyCss("slider", attrs.id.c_str(), renderedClass.c_str());
     }
+    set_pos(slider, x, y);
     
     ElementDesc sld;
     sld.id          = attrs.id.c_str();
@@ -999,14 +1033,15 @@ void create_input(const char *astart, const char *aend, const char *content, lv_
     auto onchange = getAttr(astart, aend, "onchange");
     auto onenter = getAttr(astart, aend, "onenter");
     auto onblur = getAttr(astart, aend, "onblur");
+    auto oninput = getAttr(astart, aend, "oninput");
     auto placeholder = getAttr(astart, aend, "placeholder");
     auto bgcolorAttr = getAttr(astart, aend, "bgcolor");
     auto colorAttr = getAttr(astart, aend, "color");
     
-    int32_t x = getAttrCoordW(astart, aend, "x");
-    int32_t y = getAttrCoordH(astart, aend, "y");
-    int32_t w = getAttrCoordW(astart, aend, "w", Defaults::Input::WIDTH);
-    int32_t h = getAttrCoordH(astart, aend, "h", Defaults::Input::HEIGHT);
+    int32_t x = getAttrCoordW(astart, aend, "x", 0, parent);
+    int32_t y = getAttrCoordH(astart, aend, "y", 0, parent);
+    int32_t w = getAttrSize(astart, aend, "w", Defaults::Input::WIDTH);
+    int32_t h = getAttrSize(astart, aend, "h", Defaults::Input::HEIGHT);
     
     ensureId(attrs, "_inp", !bind.empty() || !onchange.empty());
     
@@ -1048,19 +1083,19 @@ void create_input(const char *astart, const char *aend, const char *content, lv_
         lv_obj_set_style_text_color(ta, lv_color_hex(c), 0);
     }
     
-    set_pos(ta, x, y);
-    set_size(ta, w, h);
-    
-    // Apply CSS (always — tag/id selectors don't need class)
+    // CSS first, then inline overrides
     {
         P::String renderedClass = attrs.hasDynamicClass ? render_template(attrs.cssClass.c_str()) : attrs.cssClass;
         Widget{ta}.applyCss("input", attrs.id.c_str(), renderedClass.c_str());
     }
+    set_pos(ta, x, y);
+    set_size(ta, w, h);
     
     ElementDesc ind;
     ind.id          = attrs.id.c_str();
     ind.obj         = ta;
     ind.onchange    = onchange.c_str();
+    ind.oninput     = oninput.c_str();
     ind.bind        = bind.c_str();
     ind.visibleBind = attrs.hasDynamicVisible ? attrs.visible.c_str() : nullptr;
     ind.zIndex      = attrs.zIndex;
@@ -1079,10 +1114,10 @@ void create_image(const char *astart, const char *aend, lv_obj_t *parent) {
     auto onclick = getAttr(astart, aend, "onclick");
     auto align = getAttr(astart, aend, "align");
     
-    int32_t x = getAttrCoordW(astart, aend, "x");
-    int32_t y = getAttrCoordH(astart, aend, "y");
-    int32_t w = getAttrCoordW(astart, aend, "w");
-    int32_t h = getAttrCoordH(astart, aend, "h");
+    int32_t x = getAttrCoordW(astart, aend, "x", 0, parent);
+    int32_t y = getAttrCoordH(astart, aend, "y", 0, parent);
+    int32_t w = getAttrSize(astart, aend, "w");
+    int32_t h = getAttrSize(astart, aend, "h");
     
     P::String imgPath = resolve_resource_path(src);
     
@@ -1199,8 +1234,9 @@ void create_canvas(const char *astart, const char *aend, lv_obj_t *parent) {
     auto onhold = getAttr(astart, aend, "onhold");
     auto bgcolor = getAttr(astart, aend, "bgcolor");
     
-    int32_t x = getAttrCoordW(astart, aend, "x");
-    int32_t y = getAttrCoordH(astart, aend, "y");
+    int32_t x = getAttrCoordW(astart, aend, "x", 0, parent);
+    int32_t y = getAttrCoordH(astart, aend, "y", 0, parent);
+    // Canvas MUST be in pixels — it allocates a pixel buffer
     int32_t w = getAttrCoordW(astart, aend, "w", 200);
     int32_t h = getAttrCoordH(astart, aend, "h", 200);
     
@@ -1296,10 +1332,10 @@ void create_markdown(const char *astart, const char *aend, const char *content, 
     auto align = getAttr(astart, aend, "align");
     auto valignPos = getAttr(astart, aend, "valign");
     bool hasX, hasY, hasW, hasH;
-    int32_t x = getAttrCoordW(astart, aend, "x", hasX);
-    int32_t y = getAttrCoordH(astart, aend, "y", hasY);
-    int32_t w = getAttrCoordW(astart, aend, "w", hasW);
-    int32_t h = getAttrCoordH(astart, aend, "h", hasH);
+    int32_t x = getAttrCoordW(astart, aend, "x", hasX, parent);
+    int32_t y = getAttrCoordH(astart, aend, "y", hasY, parent);
+    int32_t w = getAttrSize(astart, aend, "w", hasW);
+    int32_t h = getAttrSize(astart, aend, "h", hasH);
     
     // Parse optional color attributes
     P::String colorAttr = getAttr(astart, aend, "color");
@@ -1320,6 +1356,10 @@ void create_markdown(const char *astart, const char *aend, const char *content, 
     md.create(parent);
     lv_obj_t* spangroup = md.handle;
     
+    // CSS first, then inline overrides
+    P::String renderedClass = attrs.hasDynamicClass ? render_template(attrs.cssClass.c_str()) : attrs.cssClass;
+    Widget{spangroup}.applyCss("markdown", attrs.id.c_str(), renderedClass.c_str());
+    
     // Position (same logic as label)
     bool useAlign = !align.empty() || !valignPos.empty();
     if (useAlign && !hasX && !hasY) {
@@ -1337,10 +1377,6 @@ void create_markdown(const char *astart, const char *aend, const char *content, 
     }
     if (hasW) lv_obj_set_width(spangroup, w);
     if (hasH) lv_obj_set_height(spangroup, h);
-    
-    // Apply CSS cascade
-    P::String renderedClass = attrs.hasDynamicClass ? render_template(attrs.cssClass.c_str()) : attrs.cssClass;
-    Widget{spangroup}.applyCss("markdown", attrs.id.c_str(), renderedClass.c_str());
     
     // Initial render
     md.render(rendered);

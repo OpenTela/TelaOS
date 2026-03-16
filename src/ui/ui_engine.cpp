@@ -21,8 +21,6 @@ static const char* TAG = "ui_engine";
 using namespace UI::StringUtils;
 
 // Forward declarations from ui_widget_builder.cpp
-int32_t parse_coord_w(const char* s);
-int32_t parse_coord_h(const char* s);
 const char* ui_get_current_page_id();
 
 // Forward declarations from ui_html.cpp

@@ -111,6 +111,7 @@ struct Element {
     P::String href;
     P::String onclick;
     P::String onchange;
+    P::String oninput;
     P::String ontap;
     P::String onhold;
     

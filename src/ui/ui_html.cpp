@@ -745,6 +745,7 @@ int store_element(ElementDesc d) {
     el->href     = (d.href     && d.href[0])     ? d.href     : "";
     el->onclick  = (d.onclick  && d.onclick[0])  ? d.onclick  : "";
     el->onchange = (d.onchange && d.onchange[0]) ? d.onchange : "";
+    el->oninput  = (d.oninput  && d.oninput[0])  ? d.oninput  : "";
     el->bind     = (d.bind     && d.bind[0])     ? d.bind     : "";
     el->tpl      = (d.tpl && strchr(d.tpl, '{')) ? d.tpl : "";
     el->classTemplate = (d.classTpl && strchr(d.classTpl, '{')) ? d.classTpl : "";
@@ -958,8 +959,6 @@ static bool template_has_var(const char *tpl, const char *varname) {
 // Forward declarations
 static void ui_update_bindings_internal(const char *varname, const char *value);
 uint32_t parse_color(const char *s);
-int32_t parse_coord_w(const char *s);
-int32_t parse_coord_h(const char *s);
 
 // Flag to track if we're inside LVGL callback
 bool s_in_lvgl_callback = false;
@@ -1306,8 +1305,8 @@ void create_tabs(const char* astart, const char* aend, const char* content, lv_o
     
     int32_t x = parse_coord_w(getAttr(astart, aend, "x").c_str());
     int32_t y = parse_coord_h(getAttr(astart, aend, "y").c_str());
-    int32_t w = parse_coord_w(getAttr(astart, aend, "w").c_str());
-    int32_t h = parse_coord_h(getAttr(astart, aend, "h").c_str());
+    int32_t w = parse_size(getAttr(astart, aend, "w").c_str());
+    int32_t h = parse_size(getAttr(astart, aend, "h").c_str());
     int barh = getAttrInt(astart, aend, "barh", 32);
     auto id = getAttr(astart, aend, "id");
     auto bgcolorAttr = getAttr(astart, aend, "bgcolor");
@@ -1497,7 +1496,8 @@ void parse_children(const char *html, int len, lv_obj_t *parent) {
                    strcmp(tag, Element::Td) == 0) {
             // --- Layout container ---
             lv_obj_t *container = lv_obj_create(parent);
-            lv_obj_remove_style_all(container);
+            lv_obj_remove_style_all(container);  // clean slate: no theme defaults
+            lv_obj_clear_flag(container, LV_OBJ_FLAG_SCROLLABLE);
             
             // Flex direction: table=column, tr=row, td=none
             if (strcmp(tag, Element::Table) == 0) {
@@ -1506,29 +1506,45 @@ void parse_children(const char *html, int len, lv_obj_t *parent) {
                 lv_obj_set_flex_flow(container, LV_FLEX_FLOW_ROW);
             }
             
-            // Clean styling
-            lv_obj_set_style_pad_all(container, 0, LV_PART_MAIN);
-            lv_obj_set_style_pad_row(container, 0, LV_PART_MAIN);
-            lv_obj_set_style_pad_column(container, 0, LV_PART_MAIN);
-            lv_obj_set_style_border_width(container, 0, LV_PART_MAIN);
-            
-            // Default size
-            lv_obj_set_width(container, LV_SIZE_CONTENT);
-            lv_obj_set_height(container, LV_SIZE_CONTENT);
-            
-            // Explicit attributes (override defaults)
+            // Read attributes first (needed for default decisions)
             auto wAttr = getAttr(astart, aend, "w");
             auto hAttr = getAttr(astart, aend, "h");
             auto xAttr = getAttr(astart, aend, "x");
             auto yAttr = getAttr(astart, aend, "y");
             auto bgAttr = getAttr(astart, aend, "bgcolor");
             
-            if (!wAttr.empty()) lv_obj_set_width(container, parse_coord_w(wAttr.c_str()));
-            if (!hAttr.empty()) lv_obj_set_height(container, parse_coord_h(hAttr.c_str()));
+            // Default size — HTML semantics:
+            // table without h: rows size to content
+            // table with h: rows share height via flex-grow
+            static bool s_tableHasHeight = false;
+            
+            if (strcmp(tag, Element::Table) == 0) {
+                lv_obj_set_width(container, LV_SIZE_CONTENT);
+                lv_obj_set_height(container, LV_SIZE_CONTENT);
+                s_tableHasHeight = !hAttr.empty();
+            } else if (strcmp(tag, Element::Tr) == 0) {
+                lv_obj_set_width(container, lv_pct(100));
+                if (s_tableHasHeight && hAttr.empty()) {
+                    lv_obj_set_flex_grow(container, 1);
+                } else {
+                    lv_obj_set_height(container, LV_SIZE_CONTENT);
+                }
+            } else if (strcmp(tag, Element::Td) == 0) {
+                lv_obj_set_flex_grow(container, 1);
+                if (s_tableHasHeight && hAttr.empty()) {
+                    lv_obj_set_height(container, lv_pct(100));
+                } else {
+                    lv_obj_set_height(container, LV_SIZE_CONTENT);
+                }
+            }
+            
+            // Explicit attributes (override defaults)
+            if (!wAttr.empty()) lv_obj_set_width(container, parse_size(wAttr.c_str()));
+            if (!hAttr.empty()) lv_obj_set_height(container, parse_size(hAttr.c_str()));
             
             if (!xAttr.empty() || !yAttr.empty()) {
-                int32_t x = xAttr.empty() ? 0 : parse_coord_w(xAttr.c_str());
-                int32_t y = yAttr.empty() ? 0 : parse_coord_h(yAttr.c_str());
+                int32_t x = xAttr.empty() ? 0 : parse_coord_w(xAttr.c_str(), parent);
+                int32_t y = yAttr.empty() ? 0 : parse_coord_h(yAttr.c_str(), parent);
                 lv_obj_set_pos(container, x, y);
             }
             
@@ -1538,14 +1554,59 @@ void parse_children(const char *html, int len, lv_obj_t *parent) {
                 lv_obj_set_style_bg_opa(container, LV_OPA_COVER, LV_PART_MAIN);
             }
             
+            // cellspacing (HTML classic) / gap (modern) — spacing between cells
+            static int32_t s_tableCellspacing = 0;
+            auto gapAttr = getAttr(astart, aend, "cellspacing");
+            if (gapAttr.empty()) gapAttr = getAttr(astart, aend, "gap");
+            int32_t gap = gapAttr.empty() ? 0 : parse_coord_w(gapAttr.c_str());
+            
+            if (strcmp(tag, Element::Table) == 0) {
+                s_tableCellspacing = gap;  // store for child tr's
+                if (gap > 0) {
+                    lv_obj_set_style_pad_row(container, gap, LV_PART_MAIN);
+                }
+            } else if (strcmp(tag, Element::Tr) == 0) {
+                int colGap = (gap > 0) ? gap : s_tableCellspacing;
+                if (colGap > 0) {
+                    lv_obj_set_style_pad_column(container, colGap, LV_PART_MAIN);
+                }
+            } else if (gap > 0) {
+                // td with explicit gap
+                lv_obj_set_style_pad_row(container, gap, LV_PART_MAIN);
+                lv_obj_set_style_pad_column(container, gap, LV_PART_MAIN);
+            }
+            
             // Apply CSS (may override w, h, bgcolor)
             auto idAttr = getAttr(astart, aend, "id");
             auto classAttr = getAttr(astart, aend, "class");
             Widget{container}.applyCss(tag, idAttr.c_str(), classAttr.c_str());
             
-            LOG_I(Log::UI, "<%s> id=%s class=%s", tag,
+            // visible binding
+            auto visAttr = getAttr(astart, aend, "visible");
+            bool hasDynVisible = !visAttr.empty() && visAttr.find('{') != P::String::npos;
+            
+            // Register element if it has id or dynamic visible
+            if (!idAttr.empty() || hasDynVisible) {
+                // Auto-generate id if needed
+                P::String autoId = idAttr;
+                if (autoId.empty()) {
+                    static int s_containerIdx = 0;
+                    char buf[32];
+                    snprintf(buf, sizeof(buf), "_%s_%d", tag, s_containerIdx++);
+                    autoId = buf;
+                }
+                
+                ElementDesc ed = {};
+                ed.id = autoId.c_str();
+                ed.obj = container;
+                ed.visibleBind = hasDynVisible ? visAttr.c_str() : nullptr;
+                store_element(ed);
+            }
+            
+            LOG_I(Log::UI, "<%s> id=%s class=%s vis=%s", tag,
                      idAttr.empty() ? "-" : idAttr.c_str(),
-                     classAttr.empty() ? "-" : classAttr.c_str());
+                     classAttr.empty() ? "-" : classAttr.c_str(),
+                     visAttr.empty() ? "-" : visAttr.c_str());
             
             // Recursive parse children
             if (!content.empty()) {

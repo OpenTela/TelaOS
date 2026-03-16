@@ -13,10 +13,9 @@
  */
 
 #include "ui/css_parser.h"
+#include "ui/ui_coords.h"
 
 // From ui_widget_builder.cpp — parse "17%", "50", "12.5%" → pixels
-int32_t parse_coord_w(const char* s);
-int32_t parse_coord_h(const char* s);
 
 #include "widgets/widget_common.h"
 #include "utils/log_config.h"
@@ -219,9 +218,9 @@ void Css::applyProps(Widget& w, const P::Map<P::String, P::String>& props) const
             if (!w.handle) continue;
             setElementZIndex(w.handle, atoi(value.c_str()));
         } else if (name == "width" || name == "w") {
-            int v = parse_coord_w(value.c_str()); if (v > 0) lv_obj_set_width(w.handle, v);
+            int v = parse_size(value.c_str()); if (v != 0) lv_obj_set_width(w.handle, v);
         } else if (name == "height" || name == "h") {
-            int v = parse_coord_h(value.c_str()); if (v > 0) lv_obj_set_height(w.handle, v);
+            int v = parse_size(value.c_str()); if (v != 0) lv_obj_set_height(w.handle, v);
         } else if (name == "left") {
             int v = parse_coord_w(value.c_str()); if (v >= 0) lv_obj_set_x(w.handle, v);
         } else if (name == "top") {
@@ -236,6 +235,12 @@ void Css::applyProps(Widget& w, const P::Map<P::String, P::String>& props) const
             int v = parseSizeValue(value); if (v >= 0) lv_obj_set_style_pad_top(w.handle, v, 0);
         } else if (name == "padding-bottom") {
             int v = parseSizeValue(value); if (v >= 0) lv_obj_set_style_pad_bottom(w.handle, v, 0);
+        } else if (name == "gap" || name == "border-spacing") {
+            int v = parseSizeValue(value);
+            if (v >= 0) {
+                lv_obj_set_style_pad_row(w.handle, v, 0);
+                lv_obj_set_style_pad_column(w.handle, v, 0);
+            }
         } else if (name == "opacity") {
             int opa = (int)(std::atof(value.c_str()) * 255);
             if (opa < 0) opa = 0; if (opa > 255) opa = 255;

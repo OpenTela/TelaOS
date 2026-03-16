@@ -4,35 +4,39 @@
       <!-- Дисплей -->
       <label class="display" align="right" x="12%" y="7%" w="76%" h="10%">{display}</label>
 
-      <!-- Ряд 1: C, +/-, %, / -->
-      <button class="btn btn-func" x="5%" y="21%" onclick="clear">C</button>
-      <button class="btn btn-func" x="28%" y="21%" onclick="negate">+/-</button>
-      <button class="btn btn-func" x="51%" y="21%" onclick="percent">%</button>
-      <button class="btn" x="74%" y="21%" onclick="opDiv" bgcolor="{bgDiv}" color="#fff">/</button>
-
-      <!-- Ряд 2: 7, 8, 9, * -->
-      <button class="btn btn-num" x="5%" y="35%" onclick="digit7">7</button>
-      <button class="btn btn-num" x="28%" y="35%" onclick="digit8">8</button>
-      <button class="btn btn-num" x="51%" y="35%" onclick="digit9">9</button>
-      <button class="btn" x="74%" y="35%" onclick="opMul" bgcolor="{bgMul}" color="#fff">x</button>
-
-      <!-- Ряд 3: 4, 5, 6, - -->
-      <button class="btn btn-num" x="5%" y="49%" onclick="digit4">4</button>
-      <button class="btn btn-num" x="28%" y="49%" onclick="digit5">5</button>
-      <button class="btn btn-num" x="51%" y="49%" onclick="digit6">6</button>
-      <button class="btn" x="74%" y="49%" onclick="opSub" bgcolor="{bgSub}" color="#fff">-</button>
-
-      <!-- Ряд 4: 1, 2, 3, + -->
-      <button class="btn btn-num" x="5%" y="63%" onclick="digit1">1</button>
-      <button class="btn btn-num" x="28%" y="63%" onclick="digit2">2</button>
-      <button class="btn btn-num" x="51%" y="63%" onclick="digit3">3</button>
-      <button class="btn" x="74%" y="63%" onclick="opAdd" bgcolor="{bgAdd}" color="#fff">+</button>
-
-      <!-- Ряд 5: DEL, 0, ., = -->
-      <button class="btn btn-func" x="5%" y="77%" onclick="backspace">DEL</button>
-      <button class="btn btn-num" x="28%" y="77%" onclick="digit0">0</button>
-      <button class="btn btn-num" x="51%" y="77%" onclick="dot">.</button>
-      <button class="btn btn-eq" x="74%" y="77%" onclick="equals">=</button>
+      <!-- Кнопки: table h=75% cellspacing=2%, кнопки заполняют ячейки через CSS -->
+      <table x="4%" y="20%" w="92%" h="75%" cellspacing="2%">
+        <tr>
+          <td><button class="btn btn-func" onclick="clear">C</button></td>
+          <td><button class="btn btn-func" onclick="negate">+/-</button></td>
+          <td><button class="btn btn-func" onclick="percent">%</button></td>
+          <td><button class="btn" onclick="opDiv" bgcolor="{bgDiv}" color="#fff">/</button></td>
+        </tr>
+        <tr>
+          <td><button class="btn btn-num" onclick="digit7">7</button></td>
+          <td><button class="btn btn-num" onclick="digit8">8</button></td>
+          <td><button class="btn btn-num" onclick="digit9">9</button></td>
+          <td><button class="btn" onclick="opMul" bgcolor="{bgMul}" color="#fff">x</button></td>
+        </tr>
+        <tr>
+          <td><button class="btn btn-num" onclick="digit4">4</button></td>
+          <td><button class="btn btn-num" onclick="digit5">5</button></td>
+          <td><button class="btn btn-num" onclick="digit6">6</button></td>
+          <td><button class="btn" onclick="opSub" bgcolor="{bgSub}" color="#fff">-</button></td>
+        </tr>
+        <tr>
+          <td><button class="btn btn-num" onclick="digit1">1</button></td>
+          <td><button class="btn btn-num" onclick="digit2">2</button></td>
+          <td><button class="btn btn-num" onclick="digit3">3</button></td>
+          <td><button class="btn" onclick="opAdd" bgcolor="{bgAdd}" color="#fff">+</button></td>
+        </tr>
+        <tr>
+          <td><button class="btn btn-func" onclick="backspace">DEL</button></td>
+          <td><button class="btn btn-num" onclick="digit0">0</button></td>
+          <td><button class="btn btn-num" onclick="dot">.</button></td>
+          <td><button class="btn btn-eq" onclick="equals">=</button></td>
+        </tr>
+      </table>
     </page>
   </ui>
 
@@ -132,11 +136,9 @@
 
     function opAdd() setOp('+', 'bgAdd') end
     function opSub()
-      -- Если уже есть операция и ждём ввода — это минус числа
       if state.op ~= '' and state.newInput then
         state.display = '-'
         state.newInput = false
-        -- НЕ сбрасываем подсветку - операция всё ещё активна
       else
         setOp('-', 'bgSub')
       end
@@ -179,12 +181,7 @@
   </script>
 
   <style>
-  /* Auto-generated */
-
-    button { height: 12%; width: 21%; }
-
-  /* Original */
-
+    button { width: 100%; height: 100%; }
     .display { background: #1c1c1c; color: #ffffff; font-size: 32; border-radius: 8; padding-left: 10; padding-right: 10; }
     .btn { border-radius: 12px; }
     .btn-num { background: #505050; color: #ffffff; }

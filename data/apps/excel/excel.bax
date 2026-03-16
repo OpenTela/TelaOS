@@ -1,165 +1,210 @@
 <app>
   <ui default="/main">
     <page id="main">
-      <!-- Строка формул 0-10% -->
       <label x="0" y="0" w="100%" h="10%" bgcolor="#1b5e20"/>
       <label x="1%" y="2%" color="#a5d6a7" font="16">{cell}</label>
-      <label x="10%" y="1%" w="60%" h="8%" bgcolor="#2e7d32"/>
-      <label x="12%" y="2%" color="#fff" font="16">{val}</label>
-      <button x="75%" y="1%" onclick="delRow" w="8%" h="8%" bgcolor="#388e3c" font="32">-</button>
-      <label x="86%" y="3%" w="3%" color="#a5d6a7" font="16">{rows}</label>
-      <button x="90%" y="1%" onclick="addRow" w="8%" h="8%" bgcolor="#388e3c" font="32">+</button>
-
-      <input id="edit" x="200%" y="0" bind="val" onenter="apply" w="1" h="1"/>
-
-      <!-- Сетка 11-53% -->
-      <label x="0" y="11%" w="100%" h="43%" bgcolor="#000"/>
-
-      <!-- Заголовки -->
-      <label x="19%" y="10%" class="item-muted">A</label>
-      <label x="42%" y="10%" class="item-muted">B</label>
-      <label x="64%" y="10%" class="item-muted">C</label>
-      <label x="87%" y="10%" class="item-muted">D</label>
-
-      <!-- Row 1-8 (same as original) -->
-      <label x="2%" y="16%" class="item-muted">1</label>
-      <button id="A1" x="9%" y="14%" onclick="tapA1" w="22%" h="7%" bgcolor="{bgA1}" radius="0">{vA1}</button>
-      <button id="B1" x="32%" y="14%" onclick="tapB1" w="22%" h="7%" bgcolor="{bgB1}" radius="0">{vB1}</button>
-      <button id="C1" x="54%" y="14%" onclick="tapC1" w="22%" h="7%" bgcolor="{bgC1}" radius="0">{vC1}</button>
-      <button id="D1" x="77%" y="14%" onclick="tapD1" w="22%" h="7%" bgcolor="{bgD1}" radius="0">{vD1}</button>
-
-      <label x="2%" y="24%" visible="{showR2}" class="item-muted">2</label>
-      <button id="A2" x="9%" y="22%" visible="{showR2}" onclick="tapA2" w="22%" h="7%" bgcolor="{bgA2}" radius="0">{vA2}</button>
-      <button id="B2" x="32%" y="22%" visible="{showR2}" onclick="tapB2" w="22%" h="7%" bgcolor="{bgB2}" radius="0">{vB2}</button>
-      <button id="C2" x="54%" y="22%" visible="{showR2}" onclick="tapC2" w="22%" h="7%" bgcolor="{bgC2}" radius="0">{vC2}</button>
-      <button id="D2" x="77%" y="22%" visible="{showR2}" onclick="tapD2" w="22%" h="7%" bgcolor="{bgD2}" radius="0">{vD2}</button>
-
-      <label x="2%" y="32%" visible="{showR3}" class="item-muted">3</label>
-      <button id="A3" x="9%" y="30%" visible="{showR3}" onclick="tapA3" w="22%" h="7%" bgcolor="{bgA3}" radius="0">{vA3}</button>
-      <button id="B3" x="32%" y="30%" visible="{showR3}" onclick="tapB3" w="22%" h="7%" bgcolor="{bgB3}" radius="0">{vB3}</button>
-      <button id="C3" x="54%" y="30%" visible="{showR3}" onclick="tapC3" w="22%" h="7%" bgcolor="{bgC3}" radius="0">{vC3}</button>
-      <button id="D3" x="77%" y="30%" visible="{showR3}" onclick="tapD3" w="22%" h="7%" bgcolor="{bgD3}" radius="0">{vD3}</button>
-
-      <label x="2%" y="40%" visible="{showR4}" class="item-muted">4</label>
-      <button id="A4" x="9%" y="38%" visible="{showR4}" onclick="tapA4" w="22%" h="7%" bgcolor="{bgA4}" radius="0">{vA4}</button>
-      <button id="B4" x="32%" y="38%" visible="{showR4}" onclick="tapB4" w="22%" h="7%" bgcolor="{bgB4}" radius="0">{vB4}</button>
-      <button id="C4" x="54%" y="38%" visible="{showR4}" onclick="tapC4" w="22%" h="7%" bgcolor="{bgC4}" radius="0">{vC4}</button>
-      <button id="D4" x="77%" y="38%" visible="{showR4}" onclick="tapD4" w="22%" h="7%" bgcolor="{bgD4}" radius="0">{vD4}</button>
-
-      <label x="2%" y="48%" visible="{showR5}" class="item-muted">5</label>
-      <button id="A5" x="9%" y="46%" visible="{showR5}" onclick="tapA5" w="22%" h="7%" bgcolor="{bgA5}" radius="0">{vA5}</button>
-      <button id="B5" x="32%" y="46%" visible="{showR5}" onclick="tapB5" w="22%" h="7%" bgcolor="{bgB5}" radius="0">{vB5}</button>
-      <button id="C5" x="54%" y="46%" visible="{showR5}" onclick="tapC5" w="22%" h="7%" bgcolor="{bgC5}" radius="0">{vC5}</button>
-      <button id="D5" x="77%" y="46%" visible="{showR5}" onclick="tapD5" w="22%" h="7%" bgcolor="{bgD5}" radius="0">{vD5}</button>
-
-      <label x="2%" y="56%" visible="{showR6}" class="item-muted">6</label>
-      <button id="A6" x="9%" y="54%" visible="{showR6}" onclick="tapA6" w="22%" h="7%" bgcolor="{bgA6}" radius="0">{vA6}</button>
-      <button id="B6" x="32%" y="54%" visible="{showR6}" onclick="tapB6" w="22%" h="7%" bgcolor="{bgB6}" radius="0">{vB6}</button>
-      <button id="C6" x="54%" y="54%" visible="{showR6}" onclick="tapC6" w="22%" h="7%" bgcolor="{bgC6}" radius="0">{vC6}</button>
-      <button id="D6" x="77%" y="54%" visible="{showR6}" onclick="tapD6" w="22%" h="7%" bgcolor="{bgD6}" radius="0">{vD6}</button>
-
-      <label x="2%" y="64%" visible="{showR7}" class="item-muted">7</label>
-      <button id="A7" x="9%" y="62%" visible="{showR7}" onclick="tapA7" w="22%" h="7%" bgcolor="{bgA7}" radius="0">{vA7}</button>
-      <button id="B7" x="32%" y="62%" visible="{showR7}" onclick="tapB7" w="22%" h="7%" bgcolor="{bgB7}" radius="0">{vB7}</button>
-      <button id="C7" x="54%" y="62%" visible="{showR7}" onclick="tapC7" w="22%" h="7%" bgcolor="{bgC7}" radius="0">{vC7}</button>
-      <button id="D7" x="77%" y="62%" visible="{showR7}" onclick="tapD7" w="22%" h="7%" bgcolor="{bgD7}" radius="0">{vD7}</button>
-
-      <label x="2%" y="72%" visible="{showR8}" class="item-muted">8</label>
-      <button id="A8" x="9%" y="70%" visible="{showR8}" onclick="tapA8" w="22%" h="7%" bgcolor="{bgA8}" radius="0">{vA8}</button>
-      <button id="B8" x="32%" y="70%" visible="{showR8}" onclick="tapB8" w="22%" h="7%" bgcolor="{bgB8}" radius="0">{vB8}</button>
-      <button id="C8" x="54%" y="70%" visible="{showR8}" onclick="tapC8" w="22%" h="7%" bgcolor="{bgC8}" radius="0">{vC8}</button>
-      <button id="D8" x="77%" y="70%" visible="{showR8}" onclick="tapD8" w="22%" h="7%" bgcolor="{bgD8}" radius="0">{vD8}</button>
-
-      <!-- ====== NORMAL KEYBOARD ====== -->
-      <button x="1%" y="54%" visible="{showKb}" onclick="kA" class="btn-light">A</button>
-      <button x="21%" y="54%" visible="{showKb}" onclick="kB" class="btn-light">B</button>
-      <button x="41%" y="54%" visible="{showKb}" onclick="kC" class="btn-light">C</button>
-      <button x="61%" y="54%" visible="{showKb}" onclick="kD" class="btn-light">D</button>
-      <button x="81%" y="54%" visible="{showKb}" onclick="kEq" class="btn-orange">=</button>
-
-      <button x="1%" y="64%" visible="{showKb}" onclick="k1" class="btn-gray">1</button>
-      <button x="21%" y="64%" visible="{showKb}" onclick="k2" class="btn-gray">2</button>
-      <button x="41%" y="64%" visible="{showKb}" onclick="k3" class="btn-gray">3</button>
-      <button x="61%" y="64%" visible="{showKb}" onclick="kPlus" w="19%" h="9%" bgcolor="#ff9500">+</button>
-      <button x="81%" y="64%" visible="{showKb}" onclick="kMinus" class="btn-orange">-</button>
-
-      <button x="1%" y="74%" visible="{showKb}" onclick="k4" class="btn-gray">4</button>
-      <button x="21%" y="74%" visible="{showKb}" onclick="k5" class="btn-gray">5</button>
-      <button x="41%" y="74%" visible="{showKb}" onclick="k6" class="btn-gray">6</button>
-      <button x="61%" y="74%" visible="{showKb}" onclick="kMul" w="19%" h="9%" bgcolor="#ff9500">*</button>
-      <button x="81%" y="74%" visible="{showKb}" onclick="kDiv" class="btn-orange">/</button>
-
-      <button x="1%" y="84%" visible="{showKb}" onclick="k7" class="btn-gray">7</button>
-      <button x="21%" y="84%" visible="{showKb}" onclick="k8" class="btn-gray">8</button>
-      <button x="41%" y="84%" visible="{showKb}" onclick="k9" class="btn-gray">9</button>
-      <button x="61%" y="84%" visible="{showKb}" onclick="kLp" class="btn-gray">(</button>
-      <button x="81%" y="84%" visible="{showKb}" onclick="kRp" w="18%" h="9%" bgcolor="#505050">)</button>
-
-      <button x="1%" y="94%" visible="{showKb}" onclick="k0" w="19%" h="6%" bgcolor="#505050">0</button>
-      <button x="21%" y="94%" visible="{showKb}" onclick="kDot" w="19%" h="6%" bgcolor="#505050">.</button>
-      <button x="41%" y="94%" visible="{showKb}" onclick="kAbc" w="19%" h="6%" bgcolor="#a0a0a0" color="#000">Abc</button>
-      <button x="61%" y="94%" visible="{showKb}" onclick="toggleFn" w="19%" h="6%" bgcolor="#1565C0">f(x)</button>
-      <button x="81%" y="94%" visible="{showKb}" onclick="kDel" w="18%" h="6%" bgcolor="#d32f2f">&lt;-</button>
-
-      <!-- ====== FUNCTION KEYBOARD ====== -->
-      <button x="1%" y="54%" visible="{showFn}" onclick="fSum" class="btn-fn">SUM</button>
-      <button x="21%" y="54%" visible="{showFn}" onclick="fAvg" class="btn-fn">AVG</button>
-      <button x="41%" y="54%" visible="{showFn}" onclick="fMin" class="btn-fn">MIN</button>
-      <button x="61%" y="54%" visible="{showFn}" onclick="fMax" class="btn-fn">MAX</button>
-      <button x="81%" y="54%" visible="{showFn}" onclick="fCount" class="btn-fn">CNT</button>
-
-      <button x="1%" y="64%" visible="{showFn}" onclick="fAbs" class="btn-fn">ABS</button>
-      <button x="21%" y="64%" visible="{showFn}" onclick="fRound" class="btn-fn">RND</button>
-      <button x="41%" y="64%" visible="{showFn}" onclick="fPow" class="btn-fn">POW</button>
-      <button x="61%" y="64%" visible="{showFn}" onclick="fMod" class="btn-fn">MOD</button>
-      <button x="81%" y="64%" visible="{showFn}" onclick="fSqrt" class="btn-fn">SQRT</button>
-
-      <button x="1%" y="74%" visible="{showFn}" onclick="kA" class="btn-light">A</button>
-      <button x="21%" y="74%" visible="{showFn}" onclick="kB" class="btn-light">B</button>
-      <button x="41%" y="74%" visible="{showFn}" onclick="kC" class="btn-light">C</button>
-      <button x="61%" y="74%" visible="{showFn}" onclick="kD" class="btn-light">D</button>
-      <button x="81%" y="74%" visible="{showFn}" onclick="kEq" class="btn-orange">=</button>
-
-      <button x="1%" y="84%" visible="{showFn}" onclick="kLp" w="19%" h="9%" bgcolor="#505050">(</button>
-      <button x="21%" y="84%" visible="{showFn}" onclick="kRp" w="19%" h="9%" bgcolor="#505050">)</button>
-      <button x="41%" y="84%" visible="{showFn}" onclick="kComma" w="19%" h="9%" bgcolor="#505050">,</button>
-      <button x="61%" y="84%" visible="{showFn}" onclick="kPlus" w="19%" h="9%" bgcolor="#ff9500">+</button>
-      <button x="81%" y="84%" visible="{showFn}" onclick="kMinus" class="btn-orange">-</button>
-
-      <button x="1%" y="94%" visible="{showFn}" onclick="k0" w="19%" h="6%" bgcolor="#505050">0</button>
-      <button x="21%" y="94%" visible="{showFn}" onclick="kDot" w="19%" h="6%" bgcolor="#505050">.</button>
-      <button x="41%" y="94%" visible="{showFn}" onclick="kAbc" w="19%" h="6%" bgcolor="#a0a0a0" color="#000">Abc</button>
-      <button x="61%" y="94%" visible="{showFn}" onclick="toggleFn" w="19%" h="6%" bgcolor="#505050">123</button>
-      <button x="81%" y="94%" visible="{showFn}" onclick="kDel" w="18%" h="6%" bgcolor="#d32f2f">&lt;-</button>
+      <label x="8%" y="1%" w="55%" h="8%" bgcolor="#2e7d32"/>
+      <label x="10%" y="2%" color="#fff" font="16">{val}</label>
+      <button x="70%" y="1%" onclick="delRow" w="8%" h="8%" bgcolor="#388e3c" font="32">-</button>
+      <label x="81%" y="3%" w="3%" color="#a5d6a7" font="16">{rows}</label>
+      <button x="85%" y="1%" onclick="addRow" w="8%" h="8%" bgcolor="#388e3c" font="32">+</button>
+      <input id="edit" x="200%" y="0" bind="val" onenter="apply" oninput="onType" w="1" h="1"/>
+      <table x="0" y="11%" w="100%" h="43%" cellspacing="1" bgcolor="#000">
+        <tr h="12%">
+          <td w="5%"><label class="hdr"></label></td>
+          <td><label class="hdr">A</label></td>
+          <td><label class="hdr">B</label></td>
+          <td><label class="hdr">C</label></td>
+          <td><label class="hdr">D</label></td>
+          <td><label class="hdr">E</label></td>
+          <td><label class="hdr">F</label></td>
+        </tr>
+        <tr h="11%">
+          <td w="5%"><label class="rownum">1</label></td>
+          <td><button id="A1" class="cell" onclick="tapA1" bgcolor="{bgA1}">{vA1}</button></td>
+          <td><button id="B1" class="cell" onclick="tapB1" bgcolor="{bgB1}">{vB1}</button></td>
+          <td><button id="C1" class="cell" onclick="tapC1" bgcolor="{bgC1}">{vC1}</button></td>
+          <td><button id="D1" class="cell" onclick="tapD1" bgcolor="{bgD1}">{vD1}</button></td>
+          <td><button id="E1" class="cell" onclick="tapE1" bgcolor="{bgE1}">{vE1}</button></td>
+          <td><button id="F1" class="cell" onclick="tapF1" bgcolor="{bgF1}">{vF1}</button></td>
+        </tr>
+        <tr h="11%" visible="{showR2}">
+          <td w="5%"><label class="rownum">2</label></td>
+          <td><button id="A2" class="cell" onclick="tapA2" bgcolor="{bgA2}">{vA2}</button></td>
+          <td><button id="B2" class="cell" onclick="tapB2" bgcolor="{bgB2}">{vB2}</button></td>
+          <td><button id="C2" class="cell" onclick="tapC2" bgcolor="{bgC2}">{vC2}</button></td>
+          <td><button id="D2" class="cell" onclick="tapD2" bgcolor="{bgD2}">{vD2}</button></td>
+          <td><button id="E2" class="cell" onclick="tapE2" bgcolor="{bgE2}">{vE2}</button></td>
+          <td><button id="F2" class="cell" onclick="tapF2" bgcolor="{bgF2}">{vF2}</button></td>
+        </tr>
+        <tr h="11%" visible="{showR3}">
+          <td w="5%"><label class="rownum">3</label></td>
+          <td><button id="A3" class="cell" onclick="tapA3" bgcolor="{bgA3}">{vA3}</button></td>
+          <td><button id="B3" class="cell" onclick="tapB3" bgcolor="{bgB3}">{vB3}</button></td>
+          <td><button id="C3" class="cell" onclick="tapC3" bgcolor="{bgC3}">{vC3}</button></td>
+          <td><button id="D3" class="cell" onclick="tapD3" bgcolor="{bgD3}">{vD3}</button></td>
+          <td><button id="E3" class="cell" onclick="tapE3" bgcolor="{bgE3}">{vE3}</button></td>
+          <td><button id="F3" class="cell" onclick="tapF3" bgcolor="{bgF3}">{vF3}</button></td>
+        </tr>
+        <tr h="11%" visible="{showR4}">
+          <td w="5%"><label class="rownum">4</label></td>
+          <td><button id="A4" class="cell" onclick="tapA4" bgcolor="{bgA4}">{vA4}</button></td>
+          <td><button id="B4" class="cell" onclick="tapB4" bgcolor="{bgB4}">{vB4}</button></td>
+          <td><button id="C4" class="cell" onclick="tapC4" bgcolor="{bgC4}">{vC4}</button></td>
+          <td><button id="D4" class="cell" onclick="tapD4" bgcolor="{bgD4}">{vD4}</button></td>
+          <td><button id="E4" class="cell" onclick="tapE4" bgcolor="{bgE4}">{vE4}</button></td>
+          <td><button id="F4" class="cell" onclick="tapF4" bgcolor="{bgF4}">{vF4}</button></td>
+        </tr>
+        <tr h="11%" visible="{showR5}">
+          <td w="5%"><label class="rownum">5</label></td>
+          <td><button id="A5" class="cell" onclick="tapA5" bgcolor="{bgA5}">{vA5}</button></td>
+          <td><button id="B5" class="cell" onclick="tapB5" bgcolor="{bgB5}">{vB5}</button></td>
+          <td><button id="C5" class="cell" onclick="tapC5" bgcolor="{bgC5}">{vC5}</button></td>
+          <td><button id="D5" class="cell" onclick="tapD5" bgcolor="{bgD5}">{vD5}</button></td>
+          <td><button id="E5" class="cell" onclick="tapE5" bgcolor="{bgE5}">{vE5}</button></td>
+          <td><button id="F5" class="cell" onclick="tapF5" bgcolor="{bgF5}">{vF5}</button></td>
+        </tr>
+        <tr h="11%" visible="{showR6}">
+          <td w="5%"><label class="rownum">6</label></td>
+          <td><button id="A6" class="cell" onclick="tapA6" bgcolor="{bgA6}">{vA6}</button></td>
+          <td><button id="B6" class="cell" onclick="tapB6" bgcolor="{bgB6}">{vB6}</button></td>
+          <td><button id="C6" class="cell" onclick="tapC6" bgcolor="{bgC6}">{vC6}</button></td>
+          <td><button id="D6" class="cell" onclick="tapD6" bgcolor="{bgD6}">{vD6}</button></td>
+          <td><button id="E6" class="cell" onclick="tapE6" bgcolor="{bgE6}">{vE6}</button></td>
+          <td><button id="F6" class="cell" onclick="tapF6" bgcolor="{bgF6}">{vF6}</button></td>
+        </tr>
+        <tr h="11%" visible="{showR7}">
+          <td w="5%"><label class="rownum">7</label></td>
+          <td><button id="A7" class="cell" onclick="tapA7" bgcolor="{bgA7}">{vA7}</button></td>
+          <td><button id="B7" class="cell" onclick="tapB7" bgcolor="{bgB7}">{vB7}</button></td>
+          <td><button id="C7" class="cell" onclick="tapC7" bgcolor="{bgC7}">{vC7}</button></td>
+          <td><button id="D7" class="cell" onclick="tapD7" bgcolor="{bgD7}">{vD7}</button></td>
+          <td><button id="E7" class="cell" onclick="tapE7" bgcolor="{bgE7}">{vE7}</button></td>
+          <td><button id="F7" class="cell" onclick="tapF7" bgcolor="{bgF7}">{vF7}</button></td>
+        </tr>
+        <tr h="11%" visible="{showR8}">
+          <td w="5%"><label class="rownum">8</label></td>
+          <td><button id="A8" class="cell" onclick="tapA8" bgcolor="{bgA8}">{vA8}</button></td>
+          <td><button id="B8" class="cell" onclick="tapB8" bgcolor="{bgB8}">{vB8}</button></td>
+          <td><button id="C8" class="cell" onclick="tapC8" bgcolor="{bgC8}">{vC8}</button></td>
+          <td><button id="D8" class="cell" onclick="tapD8" bgcolor="{bgD8}">{vD8}</button></td>
+          <td><button id="E8" class="cell" onclick="tapE8" bgcolor="{bgE8}">{vE8}</button></td>
+          <td><button id="F8" class="cell" onclick="tapF8" bgcolor="{bgF8}">{vF8}</button></td>
+        </tr>
+      </table>
+      <table x="1%" y="54%" w="98%" h="8%" cellspacing="1%" visible="{showKb}">
+        <tr>
+          <td><button class="kb btn-light" onclick="kA">A</button></td>
+          <td><button class="kb btn-light" onclick="kB">B</button></td>
+          <td><button class="kb btn-light" onclick="kC">C</button></td>
+          <td><button class="kb btn-light" onclick="kD">D</button></td>
+          <td><button class="kb btn-light" onclick="kE">E</button></td>
+          <td><button class="kb btn-light" onclick="kF">F</button></td>
+          <td><button class="kb btn-orange" onclick="kEq">=</button></td>
+        </tr>
+      </table>
+      <table x="1%" y="63%" w="98%" h="8%" cellspacing="1%" visible="{showKb}">
+        <tr>
+          <td><button class="kb btn-gray" onclick="k1">1</button></td>
+          <td><button class="kb btn-gray" onclick="k2">2</button></td>
+          <td><button class="kb btn-gray" onclick="k3">3</button></td>
+          <td><button class="kb btn-orange" onclick="kPlus">+</button></td>
+          <td><button class="kb btn-orange" onclick="kMinus">-</button></td>
+        </tr>
+      </table>
+      <table x="1%" y="72%" w="98%" h="8%" cellspacing="1%" visible="{showKb}">
+        <tr>
+          <td><button class="kb btn-gray" onclick="k4">4</button></td>
+          <td><button class="kb btn-gray" onclick="k5">5</button></td>
+          <td><button class="kb btn-gray" onclick="k6">6</button></td>
+          <td><button class="kb btn-orange" onclick="kMul">*</button></td>
+          <td><button class="kb btn-orange" onclick="kDiv">/</button></td>
+        </tr>
+      </table>
+      <table x="1%" y="81%" w="98%" h="8%" cellspacing="1%" visible="{showKb}">
+        <tr>
+          <td><button class="kb btn-gray" onclick="k7">7</button></td>
+          <td><button class="kb btn-gray" onclick="k8">8</button></td>
+          <td><button class="kb btn-gray" onclick="k9">9</button></td>
+          <td><button class="kb btn-gray" onclick="kLp">(</button></td>
+          <td><button class="kb btn-gray" onclick="kRp">)</button></td>
+        </tr>
+      </table>
+      <table x="1%" y="90%" w="98%" h="8%" cellspacing="1%" visible="{showKb}">
+        <tr>
+          <td><button class="kb btn-gray" onclick="k0">0</button></td>
+          <td><button class="kb btn-gray" onclick="kDot">.</button></td>
+          <td><button class="kb btn-light" onclick="kAbc">Abc</button></td>
+          <td><button class="kb btn-fn" onclick="toggleFn">f(x)</button></td>
+          <td><button class="kb btn-red" onclick="kDel">&lt;-</button></td>
+        </tr>
+      </table>
+      <table x="1%" y="54%" w="98%" h="8%" cellspacing="1%" visible="{showFn}">
+        <tr>
+          <td><button class="kb btn-fn" onclick="fSum">SUM</button></td>
+          <td><button class="kb btn-fn" onclick="fAvg">AVG</button></td>
+          <td><button class="kb btn-fn" onclick="fMin">MIN</button></td>
+          <td><button class="kb btn-fn" onclick="fMax">MAX</button></td>
+          <td><button class="kb btn-fn" onclick="fCount">CNT</button></td>
+        </tr>
+      </table>
+      <table x="1%" y="63%" w="98%" h="8%" cellspacing="1%" visible="{showFn}">
+        <tr>
+          <td><button class="kb btn-fn" onclick="fAbs">ABS</button></td>
+          <td><button class="kb btn-fn" onclick="fSqrt">SQRT</button></td>
+          <td><button class="kb btn-fn" onclick="fRound">RND</button></td>
+          <td><button class="kb btn-fn" onclick="fPow">POW</button></td>
+          <td><button class="kb btn-fn" onclick="fMod">MOD</button></td>
+        </tr>
+      </table>
+      <table x="1%" y="72%" w="98%" h="8%" cellspacing="1%" visible="{showFn}">
+        <tr>
+          <td><button class="kb btn-light" onclick="kA">A</button></td>
+          <td><button class="kb btn-light" onclick="kB">B</button></td>
+          <td><button class="kb btn-light" onclick="kC">C</button></td>
+          <td><button class="kb btn-light" onclick="kD">D</button></td>
+          <td><button class="kb btn-light" onclick="kE">E</button></td>
+          <td><button class="kb btn-light" onclick="kF">F</button></td>
+          <td><button class="kb btn-orange" onclick="kEq">=</button></td>
+        </tr>
+      </table>
+      <table x="1%" y="81%" w="98%" h="8%" cellspacing="1%" visible="{showFn}">
+        <tr>
+          <td><button class="kb btn-gray" onclick="kLp">(</button></td>
+          <td><button class="kb btn-gray" onclick="kRp">)</button></td>
+          <td><button class="kb btn-gray" onclick="kComma">,</button></td>
+          <td><button class="kb btn-orange" onclick="kPlus">+</button></td>
+          <td><button class="kb btn-orange" onclick="kMinus">-</button></td>
+        </tr>
+      </table>
+      <table x="1%" y="90%" w="98%" h="8%" cellspacing="1%" visible="{showFn}">
+        <tr>
+          <td><button class="kb btn-gray" onclick="k0">0</button></td>
+          <td><button class="kb btn-gray" onclick="kDot">.</button></td>
+          <td><button class="kb btn-light" onclick="kAbc">Abc</button></td>
+          <td><button class="kb btn-gray" onclick="toggleFn">123</button></td>
+          <td><button class="kb btn-red" onclick="kDel">&lt;-</button></td>
+        </tr>
+      </table>
     </page>
   </ui>
-
-  <style>
-    button { color: #fff; }
-    .btn-gray { bgcolor: #505050; height: 9%; width: 19%; }
-    .btn-light { bgcolor: #a0a0a0; color: #000; height: 9%; width: 19%; }
-    .btn-orange { bgcolor: #ff9500; height: 9%; width: 18%; }
-    .btn-fn { bgcolor: #0d47a1; height: 9%; width: 19%; }
-    .item-muted { color: #666; }
-  </style>
-
   <state>
-    <string name="vA1" default=""/><string name="vB1" default=""/><string name="vC1" default=""/><string name="vD1" default=""/>
-    <string name="vA2" default=""/><string name="vB2" default=""/><string name="vC2" default=""/><string name="vD2" default=""/>
-    <string name="vA3" default=""/><string name="vB3" default=""/><string name="vC3" default=""/><string name="vD3" default=""/>
-    <string name="vA4" default=""/><string name="vB4" default=""/><string name="vC4" default=""/><string name="vD4" default=""/>
-    <string name="vA5" default=""/><string name="vB5" default=""/><string name="vC5" default=""/><string name="vD5" default=""/>
-    <string name="vA6" default=""/><string name="vB6" default=""/><string name="vC6" default=""/><string name="vD6" default=""/>
-    <string name="vA7" default=""/><string name="vB7" default=""/><string name="vC7" default=""/><string name="vD7" default=""/>
-    <string name="vA8" default=""/><string name="vB8" default=""/><string name="vC8" default=""/><string name="vD8" default=""/>
-    <string name="bgA1" default="#1a237e"/><string name="bgB1" default="#000"/><string name="bgC1" default="#000"/><string name="bgD1" default="#000"/>
-    <string name="bgA2" default="#000"/><string name="bgB2" default="#000"/><string name="bgC2" default="#000"/><string name="bgD2" default="#000"/>
-    <string name="bgA3" default="#000"/><string name="bgB3" default="#000"/><string name="bgC3" default="#000"/><string name="bgD3" default="#000"/>
-    <string name="bgA4" default="#000"/><string name="bgB4" default="#000"/><string name="bgC4" default="#000"/><string name="bgD4" default="#000"/>
-    <string name="bgA5" default="#000"/><string name="bgB5" default="#000"/><string name="bgC5" default="#000"/><string name="bgD5" default="#000"/>
-    <string name="bgA6" default="#000"/><string name="bgB6" default="#000"/><string name="bgC6" default="#000"/><string name="bgD6" default="#000"/>
-    <string name="bgA7" default="#000"/><string name="bgB7" default="#000"/><string name="bgC7" default="#000"/><string name="bgD7" default="#000"/>
-    <string name="bgA8" default="#000"/><string name="bgB8" default="#000"/><string name="bgC8" default="#000"/><string name="bgD8" default="#000"/>
+    <string name="vA1" default=""/><string name="vB1" default=""/><string name="vC1" default=""/><string name="vD1" default=""/><string name="vE1" default=""/><string name="vF1" default=""/>
+    <string name="vA2" default=""/><string name="vB2" default=""/><string name="vC2" default=""/><string name="vD2" default=""/><string name="vE2" default=""/><string name="vF2" default=""/>
+    <string name="vA3" default=""/><string name="vB3" default=""/><string name="vC3" default=""/><string name="vD3" default=""/><string name="vE3" default=""/><string name="vF3" default=""/>
+    <string name="vA4" default=""/><string name="vB4" default=""/><string name="vC4" default=""/><string name="vD4" default=""/><string name="vE4" default=""/><string name="vF4" default=""/>
+    <string name="vA5" default=""/><string name="vB5" default=""/><string name="vC5" default=""/><string name="vD5" default=""/><string name="vE5" default=""/><string name="vF5" default=""/>
+    <string name="vA6" default=""/><string name="vB6" default=""/><string name="vC6" default=""/><string name="vD6" default=""/><string name="vE6" default=""/><string name="vF6" default=""/>
+    <string name="vA7" default=""/><string name="vB7" default=""/><string name="vC7" default=""/><string name="vD7" default=""/><string name="vE7" default=""/><string name="vF7" default=""/>
+    <string name="vA8" default=""/><string name="vB8" default=""/><string name="vC8" default=""/><string name="vD8" default=""/><string name="vE8" default=""/><string name="vF8" default=""/>
+    <string name="bgA1" default="#1a237e"/><string name="bgB1" default="#000"/><string name="bgC1" default="#000"/><string name="bgD1" default="#000"/><string name="bgE1" default="#000"/><string name="bgF1" default="#000"/>
+    <string name="bgA2" default="#000"/><string name="bgB2" default="#000"/><string name="bgC2" default="#000"/><string name="bgD2" default="#000"/><string name="bgE2" default="#000"/><string name="bgF2" default="#000"/>
+    <string name="bgA3" default="#000"/><string name="bgB3" default="#000"/><string name="bgC3" default="#000"/><string name="bgD3" default="#000"/><string name="bgE3" default="#000"/><string name="bgF3" default="#000"/>
+    <string name="bgA4" default="#000"/><string name="bgB4" default="#000"/><string name="bgC4" default="#000"/><string name="bgD4" default="#000"/><string name="bgE4" default="#000"/><string name="bgF4" default="#000"/>
+    <string name="bgA5" default="#000"/><string name="bgB5" default="#000"/><string name="bgC5" default="#000"/><string name="bgD5" default="#000"/><string name="bgE5" default="#000"/><string name="bgF5" default="#000"/>
+    <string name="bgA6" default="#000"/><string name="bgB6" default="#000"/><string name="bgC6" default="#000"/><string name="bgD6" default="#000"/><string name="bgE6" default="#000"/><string name="bgF6" default="#000"/>
+    <string name="bgA7" default="#000"/><string name="bgB7" default="#000"/><string name="bgC7" default="#000"/><string name="bgD7" default="#000"/><string name="bgE7" default="#000"/><string name="bgF7" default="#000"/>
+    <string name="bgA8" default="#000"/><string name="bgB8" default="#000"/><string name="bgC8" default="#000"/><string name="bgD8" default="#000"/><string name="bgE8" default="#000"/><string name="bgF8" default="#000"/>
     <string name="val" default=""/>
     <string name="cell" default="A1"/>
     <string name="rows" default="3"/>
@@ -173,287 +218,143 @@
     <string name="showKb" default="true"/>
     <string name="showFn" default="false"/>
   </state>
-
   <script language="lua">
     local D = {}
     local maxRow = 3
     local cells = {
-      "A1","B1","C1","D1",
-      "A2","B2","C2","D2",
-      "A3","B3","C3","D3",
-      "A4","B4","C4","D4",
-      "A5","B5","C5","D5",
-      "A6","B6","C6","D6",
-      "A7","B7","C7","D7",
-      "A8","B8","C8","D8"
+      "A1","B1","C1","D1","E1","F1",
+      "A2","B2","C2","D2","E2","F2",
+      "A3","B3","C3","D3","E3","F3",
+      "A4","B4","C4","D4","E4","F4",
+      "A5","B5","C5","D5","E5","F5",
+      "A6","B6","C6","D6","E6","F6",
+      "A7","B7","C7","D7","E7","F7",
+      "A8","B8","C8","D8","E8","F8"
     }
-
     local NORMAL = "#000"
     local SELECTED = "#1a237e"
-
-    local function getN(id)
-      return tonumber(state["v"..id] or "") or 0
-    end
-
+    local function getN(id) return tonumber(state["v"..id] or "") or 0 end
     local function allVals()
       local vals = {}
-      for _, c in ipairs(cells) do
-        local n = tonumber(state["v"..c] or "")
-        if n then vals[#vals+1] = n end
-      end
+      for _, c in ipairs(cells) do local n = tonumber(state["v"..c] or ""); if n then vals[#vals+1] = n end end
       return vals
     end
-
     local function evalArgs(args)
-      -- Parse comma-separated args, eval each, return list of numbers
       local result = {}
       for arg in string.gmatch(args, "[^,]+") do
-        arg = arg:match("^%s*(.-)%s*$") -- trim
+        arg = arg:match("^%s*(.-)%s*$")
         local fn = load("return " .. arg)
-        if fn then
-          local ok, r = pcall(fn)
-          if ok and type(r) == "number" then
-            result[#result+1] = r
-          end
-        end
+        if fn then local ok, r = pcall(fn); if ok and type(r) == "number" then result[#result+1] = r end end
       end
       return result
     end
-
     local function calc(expr, id)
       local s = string.upper(expr)
       if id and string.find(s, id) then return nil end
-
-      -- Replace cell refs with values
-      for _, c in ipairs(cells) do
-        s = string.gsub(s, c, tostring(getN(c)))
-      end
-
-      -- Aggregate functions with optional args: SUM / SUM() / SUM(1,2,3)
+      for _, c in ipairs(cells) do s = string.gsub(s, c, tostring(getN(c))) end
       local function doAggregate(name, fn)
-        -- With args: NAME(a,b,c)
-        s = string.gsub(s, name .. "%((.+)%)", function(args)
-          local nums = evalArgs(args)
-          if #nums == 0 then return "0" end
-          return tostring(fn(nums))
-        end)
-        -- No args: NAME() or bare NAME
-        s = string.gsub(s, name .. "%(%)", tostring(fn(allVals())))
+        s = string.gsub(s, name .. "%((.+)%)", function(args) local nums = evalArgs(args); if #nums == 0 then return "0" end; return tostring(fn(nums)) end)
+        s = string.gsub(s, name .. "%(%)$", tostring(fn(allVals())))
         s = string.gsub(s, name, tostring(fn(allVals())))
       end
-
-      doAggregate("SUM", function(v)
-        local t = 0; for _, x in ipairs(v) do t = t + x end; return t
-      end)
-      doAggregate("AVG", function(v)
-        if #v == 0 then return 0 end
-        local t = 0; for _, x in ipairs(v) do t = t + x end; return t / #v
-      end)
-      doAggregate("MIN", function(v)
-        if #v == 0 then return 0 end
-        local m = v[1]; for _, x in ipairs(v) do if x < m then m = x end end; return m
-      end)
-      doAggregate("MAX", function(v)
-        if #v == 0 then return 0 end
-        local m = v[1]; for _, x in ipairs(v) do if x > m then m = x end end; return m
-      end)
-      doAggregate("COUNT", function(v) return #v end)
+      doAggregate("SUM", function(v) local t=0; for _,x in ipairs(v) do t=t+x end; return t end)
+      doAggregate("AVG", function(v) if #v==0 then return 0 end; local t=0; for _,x in ipairs(v) do t=t+x end; return t/#v end)
+      doAggregate("MIN", function(v) if #v==0 then return 0 end; local m=v[1]; for _,x in ipairs(v) do if x<m then m=x end end; return m end)
+      doAggregate("MAX", function(v) if #v==0 then return 0 end; local m=v[1]; for _,x in ipairs(v) do if x>m then m=x end end; return m end)
       doAggregate("CNT", function(v) return #v end)
-
-      -- Single-arg: ABS(expr), SQRT(expr), ROUND(expr)
-      s = string.gsub(s, "ABS%((.-)%)", function(x)
-        local fn = load("return " .. x)
-        if fn then local ok, r = pcall(fn); if ok then return tostring(math.abs(r)) end end
-        return "0"
-      end)
-      s = string.gsub(s, "SQRT%((.-)%)", function(x)
-        local fn = load("return " .. x)
-        if fn then local ok, r = pcall(fn); if ok and r >= 0 then return tostring(math.sqrt(r)) end end
-        return "0"
-      end)
-      s = string.gsub(s, "ROUND%((.-)%)", function(x)
-        local fn = load("return " .. x)
-        if fn then local ok, r = pcall(fn); if ok then return tostring(math.floor(r + 0.5)) end end
-        return "0"
-      end)
-
-      -- Two-arg: POW(a,b), MOD(a,b)
-      s = string.gsub(s, "POW%((.+),(.+)%)", function(a, b)
-        local fa = load("return " .. a)
-        local fb = load("return " .. b)
-        if fa and fb then
-          local oka, ra = pcall(fa)
-          local okb, rb = pcall(fb)
-          if oka and okb then return tostring(ra ^ rb) end
-        end
-        return "0"
-      end)
-      s = string.gsub(s, "MOD%((.+),(.+)%)", function(a, b)
-        local fa = load("return " .. a)
-        local fb = load("return " .. b)
-        if fa and fb then
-          local oka, ra = pcall(fa)
-          local okb, rb = pcall(fb)
-          if oka and okb and rb ~= 0 then return tostring(ra % rb) end
-        end
-        return "0"
-      end)
-
-            if string.match(s, "[A-Z]") then return nil end
+      s = string.gsub(s, "ABS%((.-)%)", function(a) local n=tonumber(a); return n and tostring(math.abs(n)) or "0" end)
+      s = string.gsub(s, "SQRT%((.-)%)", function(a) local n=tonumber(a); if n and n>=0 then return tostring(math.sqrt(n)) end; return "0" end)
+      s = string.gsub(s, "ROUND%((.-)%)", function(a) local n=tonumber(a); return n and tostring(math.floor(n+0.5)) or "0" end)
+      s = string.gsub(s, "POW%((.-)%)", function(args) local nums=evalArgs(args); if #nums>=2 then return tostring(nums[1]^nums[2]) end; return "0" end)
+      s = string.gsub(s, "MOD%((.-)%)", function(args) local nums=evalArgs(args); if #nums>=2 and nums[2]~=0 then return tostring(nums[1]%nums[2]) end; return "0" end)
       local fn = load("return " .. s)
-      if fn then
-        local ok, r = pcall(fn)
-        if ok then return r end
-      end
-      return nil
+      if not fn then return nil end
+      local ok, result = pcall(fn)
+      if not ok or type(result) ~= "number" then return nil end
+      if result == math.floor(result) then return tostring(math.floor(result)) end
+      return string.format("%.4g", result)
     end
-
-
     local function refreshCell(id)
       local raw = D[id] or ""
-      if raw == "" then
-        state["v"..id] = ""
+      if raw == "" then state["v"..id] = ""
       elseif string.sub(raw,1,1) == "=" then
         local r = calc(string.sub(raw,2), id)
-        if r then
-          if r == math.floor(r) then
-            state["v"..id] = tostring(math.floor(r))
-          else
-            state["v"..id] = string.format("%.2f", r)
-          end
-        else
-          state["v"..id] = "#ERR"
-        end
-      else
-        state["v"..id] = raw
-      end
+        if r then state["v"..id] = r else state["v"..id] = "#ERR" end
+      else state["v"..id] = raw end
     end
-
-    local function refresh()
-      for _, id in ipairs(cells) do refreshCell(id) end
-    end
-
+    local function refresh() for _, id in ipairs(cells) do refreshCell(id) end end
     local function key(k)
       state.val = (state.val or "") .. k
-      if state.cell ~= "" then
-        D[state.cell] = string.upper(state.val)
-        refreshCell(state.cell)
-      end
+      if state.cell ~= "" then D[state.cell] = string.upper(state.val); refreshCell(state.cell) end
     end
-
-    -- Toggle keyboards
+    function onType()
+      if state.cell ~= "" then D[state.cell] = string.upper(state.val or ""); refreshCell(state.cell) end
+    end
     function toggleFn()
-      if state.showFn == "true" then
-        state.showFn = "false"
-        state.showKb = "true"
-      else
-        state.showFn = "true"
-        state.showKb = "false"
-      end
+      if state.showFn == "true" then state.showFn = "false"; state.showKb = "true"
+      else state.showFn = "true"; state.showKb = "false" end
     end
-
-    -- Function keys: insert name + (
-    function fSum() key("SUM") end
-    function fAvg() key("AVG") end
-    function fMin() key("MIN") end
-    function fMax() key("MAX") end
-    function fCount() key("CNT") end
-    function fAbs() key("ABS(") end
-    function fRound() key("ROUND(") end
-    function fPow() key("POW(") end
-    function fMod() key("MOD(") end
-    function fSqrt() key("SQRT(") end
-
-    -- Normal keys
-    function kA() key("A") end
-    function kB() key("B") end
-    function kC() key("C") end
-    function kD() key("D") end
-    function k0() key("0") end
-    function k1() key("1") end
-    function k2() key("2") end
-    function k3() key("3") end
-    function k4() key("4") end
-    function k5() key("5") end
-    function k6() key("6") end
-    function k7() key("7") end
-    function k8() key("8") end
-    function k9() key("9") end
-    function kDot() key(".") end
-    function kPlus() key("+") end
-    function kMinus() key("-") end
-    function kMul() key("*") end
-    function kDiv() key("/") end
-    function kEq() key("=") end
-    function kLp() key("(") end
-    function kRp() key(")") end
-    function kComma() key(",") end
-
-    function kDel()
-      local v = state.val or ""
-      if #v > 0 then
-        state.val = string.sub(v, 1, -2)
-        if state.cell ~= "" then
-          D[state.cell] = string.upper(state.val)
-          refreshCell(state.cell)
-        end
-      end
-    end
-
-    function kAbc() focus("edit") end
-
     function tap(id)
-      if state.cell ~= "" then
-        D[state.cell] = string.upper(state.val or "")
-        refresh()
-      end
-      if state.cell ~= "" then
-        state["bg"..state.cell] = NORMAL
-      end
-      state.cell = id
-      state["bg"..id] = SELECTED
-      state.val = D[id] or ""
+      if state.cell ~= "" then D[state.cell] = string.upper(state.val or ""); refresh() end
+      if state.cell ~= "" then state["bg"..state.cell] = NORMAL end
+      state.cell = id; state["bg"..id] = SELECTED; state.val = D[id] or ""
     end
-
-    function tapA1() tap("A1") end function tapB1() tap("B1") end function tapC1() tap("C1") end function tapD1() tap("D1") end
-    function tapA2() tap("A2") end function tapB2() tap("B2") end function tapC2() tap("C2") end function tapD2() tap("D2") end
-    function tapA3() tap("A3") end function tapB3() tap("B3") end function tapC3() tap("C3") end function tapD3() tap("D3") end
-    function tapA4() tap("A4") end function tapB4() tap("B4") end function tapC4() tap("C4") end function tapD4() tap("D4") end
-    function tapA5() tap("A5") end function tapB5() tap("B5") end function tapC5() tap("C5") end function tapD5() tap("D5") end
-    function tapA6() tap("A6") end function tapB6() tap("B6") end function tapC6() tap("C6") end function tapD6() tap("D6") end
-    function tapA7() tap("A7") end function tapB7() tap("B7") end function tapC7() tap("C7") end function tapD7() tap("D7") end
-    function tapA8() tap("A8") end function tapB8() tap("B8") end function tapC8() tap("C8") end function tapD8() tap("D8") end
-
+    function tapA1() tap("A1") end     function tapB1() tap("B1") end     function tapC1() tap("C1") end     function tapD1() tap("D1") end     function tapE1() tap("E1") end     function tapF1() tap("F1") end 
+function tapA2() tap("A2") end     function tapB2() tap("B2") end     function tapC2() tap("C2") end     function tapD2() tap("D2") end     function tapE2() tap("E2") end     function tapF2() tap("F2") end 
+function tapA3() tap("A3") end     function tapB3() tap("B3") end     function tapC3() tap("C3") end     function tapD3() tap("D3") end     function tapE3() tap("E3") end     function tapF3() tap("F3") end 
+function tapA4() tap("A4") end     function tapB4() tap("B4") end     function tapC4() tap("C4") end     function tapD4() tap("D4") end     function tapE4() tap("E4") end     function tapF4() tap("F4") end 
+function tapA5() tap("A5") end     function tapB5() tap("B5") end     function tapC5() tap("C5") end     function tapD5() tap("D5") end     function tapE5() tap("E5") end     function tapF5() tap("F5") end 
+function tapA6() tap("A6") end     function tapB6() tap("B6") end     function tapC6() tap("C6") end     function tapD6() tap("D6") end     function tapE6() tap("E6") end     function tapF6() tap("F6") end 
+function tapA7() tap("A7") end     function tapB7() tap("B7") end     function tapC7() tap("C7") end     function tapD7() tap("D7") end     function tapE7() tap("E7") end     function tapF7() tap("F7") end 
+function tapA8() tap("A8") end     function tapB8() tap("B8") end     function tapC8() tap("C8") end     function tapD8() tap("D8") end     function tapE8() tap("E8") end     function tapF8() tap("F8") end 
     function apply()
-      if state.cell ~= "" then
-        D[state.cell] = string.upper(state.val or "")
-        refresh()
-      end
+      if state.cell ~= "" then D[state.cell] = string.upper(state.val or ""); refresh() end
     end
-
     function addRow()
-      if maxRow < 8 then
-        maxRow = maxRow + 1
-        state["showR" .. maxRow] = "true"
-        state.rows = tostring(maxRow)
-      end
+      if maxRow < 8 then maxRow = maxRow + 1; state["showR"..maxRow] = "true"; state.rows = tostring(maxRow) end
     end
-
     function delRow()
       if maxRow > 1 then
-        for _, col in ipairs({"A","B","C","D"}) do
-          local id = col .. maxRow
-          D[id] = ""
-          state["v"..id] = ""
-          state["bg"..id] = NORMAL
+        for _, col in ipairs({"A","B","C","D","E","F"}) do
+          local id = col .. maxRow; D[id] = ""; state["v"..id] = ""; state["bg"..id] = NORMAL
         end
-        state["showR" .. maxRow] = "false"
-        maxRow = maxRow - 1
-        state.rows = tostring(maxRow)
-        refresh()
+        state["showR"..maxRow] = "false"; maxRow = maxRow - 1; state.rows = tostring(maxRow); refresh()
       end
     end
-
+    function kA() key("A") end  function kB() key("B") end  function kC() key("C") end
+    function kD() key("D") end  function kE() key("E") end  function kF() key("F") end
+    function kEq() key("=") end
+    function k0() key("0") end  function k1() key("1") end  function k2() key("2") end
+    function k3() key("3") end  function k4() key("4") end  function k5() key("5") end
+    function k6() key("6") end  function k7() key("7") end  function k8() key("8") end
+    function k9() key("9") end  function kDot() key(".") end
+    function kPlus() key("+") end  function kMinus() key("-") end
+    function kMul() key("*") end  function kDiv() key("/") end
+    function kLp() key("(") end  function kRp() key(")") end  function kComma() key(",") end
+    function kAbc() focus("edit") end
+    function kDel()
+      local v = state.val
+      if #v > 0 then state.val = string.sub(v, 1, -2)
+        if state.cell ~= "" then D[state.cell] = string.upper(state.val); refreshCell(state.cell) end
+      end
+    end
+    function fSum() key("SUM") end  function fAvg() key("AVG") end
+    function fMin() key("MIN") end  function fMax() key("MAX") end  function fCount() key("CNT") end
+    function fAbs() key("ABS(") end  function fRound() key("ROUND(") end
+    function fPow() key("POW(") end  function fMod() key("MOD(") end  function fSqrt() key("SQRT(") end
     state["bgA1"] = SELECTED
   </script>
+
+  <style>
+    button { color: #fff; }
+    .hdr { width: 100%; height: 100%; color: #666; text-align: center; font-size: 16; }
+    .rownum { width: 100%; height: 100%; color: #666; text-align: center; font-size: 16; }
+    .cell { width: 100%; height: 100%; border-radius: 0; }
+    .kb { width: 100%; height: 100%; }
+    .btn-gray { bgcolor: #505050; }
+    .btn-light { bgcolor: #a0a0a0; color: #000; }
+    .btn-orange { bgcolor: #ff9500; }
+    .btn-fn { bgcolor: #0d47a1; }
+    .btn-red { bgcolor: #d32f2f; }
+  </style>
 </app>
