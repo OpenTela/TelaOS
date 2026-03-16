@@ -221,6 +221,14 @@ void Css::applyProps(Widget& w, const P::Map<P::String, P::String>& props) const
             int v = parse_size(value.c_str()); if (v != 0) lv_obj_set_width(w.handle, v);
         } else if (name == "height" || name == "h") {
             int v = parse_size(value.c_str()); if (v != 0) lv_obj_set_height(w.handle, v);
+        } else if (name == "min-height") {
+            int v = parse_size(value.c_str()); if (v != 0) lv_obj_set_style_min_height(w.handle, v, 0);
+        } else if (name == "max-height") {
+            int v = parse_size(value.c_str()); if (v != 0) lv_obj_set_style_max_height(w.handle, v, 0);
+        } else if (name == "min-width") {
+            int v = parse_size(value.c_str()); if (v != 0) lv_obj_set_style_min_width(w.handle, v, 0);
+        } else if (name == "max-width") {
+            int v = parse_size(value.c_str()); if (v != 0) lv_obj_set_style_max_width(w.handle, v, 0);
         } else if (name == "left") {
             int v = parse_coord_w(value.c_str()); if (v >= 0) lv_obj_set_x(w.handle, v);
         } else if (name == "top") {

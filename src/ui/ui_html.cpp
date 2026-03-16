@@ -963,6 +963,9 @@ uint32_t parse_color(const char *s);
 // Flag to track if we're inside LVGL callback
 bool s_in_lvgl_callback = false;
 
+// Forward declaration
+static void enforceTableRowLimits(lv_obj_t* table);
+
 // Public function - calls internal directly (we're always in LVGL context)
 void ui_update_bindings(const char *varname, const char *value) {
     ui_update_bindings_internal(varname, value);
@@ -1401,6 +1404,55 @@ void create_tabs(const char* astart, const char* aend, const char* content, lv_o
     LOG_I(Log::UI, "tabs: id=%s barh=%d", id.empty() ? "?" : id.c_str(), barh);
 }
 
+// Enforce min/max-height on flex-grow children of a table.
+// Called after initial layout and after visibility changes.
+// Resets flex-grow first so LVGL can redistribute space.
+static void enforceTableRowLimits(lv_obj_t* table) {
+    if (!table) return;
+    
+    uint32_t count = lv_obj_get_child_count(table);
+    
+    // Step 1: restore flex-grow on children that have min/max constraints
+    for (uint32_t i = 0; i < count; i++) {
+        lv_obj_t* child = lv_obj_get_child(table, i);
+        if (lv_obj_has_flag(child, LV_OBJ_FLAG_HIDDEN)) continue;
+        int32_t rawMax = lv_obj_get_style_max_height(child, LV_PART_MAIN);
+        int32_t rawMin = lv_obj_get_style_min_height(child, LV_PART_MAIN);
+        if (rawMax > 0 || rawMin > 0) {
+            lv_obj_set_flex_grow(child, 1);
+            lv_obj_set_height(child, LV_SIZE_CONTENT);
+        }
+    }
+    
+    // Step 2: let LVGL recalculate
+    lv_obj_update_layout(table);
+    int32_t parentH = lv_obj_get_content_height(table);
+    if (parentH <= 0) return;
+    
+    // Step 3: clamp to min/max
+    bool changed = false;
+    for (uint32_t i = 0; i < count; i++) {
+        lv_obj_t* child = lv_obj_get_child(table, i);
+        if (lv_obj_has_flag(child, LV_OBJ_FLAG_HIDDEN)) continue;
+        int32_t rawMax = lv_obj_get_style_max_height(child, LV_PART_MAIN);
+        int32_t rawMin = lv_obj_get_style_min_height(child, LV_PART_MAIN);
+        int32_t maxH = lv_pct_to_px(rawMax, parentH);
+        int32_t minH = lv_pct_to_px(rawMin, parentH);
+        int32_t curH = lv_obj_get_height(child);
+        
+        if (maxH > 0 && curH > maxH) {
+            lv_obj_set_height(child, maxH);
+            lv_obj_set_flex_grow(child, 0);
+            changed = true;
+        } else if (minH > 0 && curH < minH) {
+            lv_obj_set_height(child, minH);
+            lv_obj_set_flex_grow(child, 0);
+            changed = true;
+        }
+    }
+    if (changed) lv_obj_update_layout(table);
+}
+
 // Parse children of a page (labels, buttons, etc.)
 void parse_children(const char *html, int len, lv_obj_t *parent) {
     // Pre-expand @for directives and template invocations
@@ -1497,7 +1549,6 @@ void parse_children(const char *html, int len, lv_obj_t *parent) {
             // --- Layout container ---
             lv_obj_t *container = lv_obj_create(parent);
             lv_obj_remove_style_all(container);  // clean slate: no theme defaults
-            lv_obj_clear_flag(container, LV_OBJ_FLAG_SCROLLABLE);
             
             // Flex direction: table=column, tr=row, td=none
             if (strcmp(tag, Element::Table) == 0) {
@@ -1512,6 +1563,8 @@ void parse_children(const char *html, int len, lv_obj_t *parent) {
             auto xAttr = getAttr(astart, aend, "x");
             auto yAttr = getAttr(astart, aend, "y");
             auto bgAttr = getAttr(astart, aend, "bgcolor");
+            
+            lv_obj_clear_flag(container, LV_OBJ_FLAG_SCROLLABLE);
             
             // Default size — HTML semantics:
             // table without h: rows size to content

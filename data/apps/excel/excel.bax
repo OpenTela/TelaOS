@@ -253,7 +253,7 @@
       if id and string.find(s, id) then return nil end
       for _, c in ipairs(cells) do s = string.gsub(s, c, tostring(getN(c))) end
       local function doAggregate(name, fn)
-        s = string.gsub(s, name .. "%((.+)%)", function(args) local nums = evalArgs(args); if #nums == 0 then return "0" end; return tostring(fn(nums)) end)
+        s = string.gsub(s, name .. "%((.-)%)", function(args) local nums = evalArgs(args); if #nums == 0 then return "0" end; return tostring(fn(nums)) end)
         s = string.gsub(s, name .. "%(%)$", tostring(fn(allVals())))
         s = string.gsub(s, name, tostring(fn(allVals())))
       end

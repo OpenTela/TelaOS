@@ -520,8 +520,8 @@ static lv_align_t getLvAlign(const P::String& h, const P::String& v) {
 static void applyTextValign(lv_obj_t* lbl, const P::String& valign, int32_t h) {
     if (valign.empty() || valign == "top" || h <= 0) return;
     
-    // h might be lv_pct encoded (large value) — resolve to actual pixels
-    if (h > SCREEN_HEIGHT) {
+    // h might be lv_pct encoded — resolve to actual pixels
+    if (LV_COORD_IS_PCT(h)) {
         lv_obj_update_layout(lbl);
         h = lv_obj_get_height(lbl);
         if (h <= 0) return;
