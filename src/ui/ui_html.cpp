@@ -58,54 +58,12 @@ using namespace UI::StringUtils;
 using namespace UI::XmlUtils;
 using namespace UI::Tag;
 
-// State vars stored in State::store()
-
-P::Array<UI::Timer> timers;
-static P::Array<UI::Style> styles;
-MPArray<UI::Element> elements;
-P::Array<UI::PageGroup> groups;
-
-P::String script_code;
-P::String script_lang = "lua";
-P::String app_version = "0.0";
-P::String app_os_requirement;
-P::String app_icon;
-P::String app_path;  // Path to current app for resources
-P::String ui_default_page;  // <ui default="/page"> — initial page to show
-P::Array<P::String> s_iconPaths;   // Persistent storage for icon paths (LVGL needs valid pointers)
-P::Array<P::String> s_imagePaths;  // Persistent storage for image paths
-
-// Template storage: name (lowercase) -> body HTML
-static P::Map<P::String, P::String> s_templates;
-
-// CSS z-index deferred: CSS runs before store_element, so cache here
-static std::unordered_map<lv_obj_t*, int> s_deferredZIndex;
-
-// Resolve resource path - if relative, prepend app_path/resources/
-// resolve_resource_path moved to ui_widget_builder.cpp
-bool app_readonly = false;
-
-// rgb_to_native() is in ui_html_internal.h
-
-// Global handlers
+// Global handlers (survive across apps — set once by ScriptManager)
 void (*g_onclick_handler)(const char* func_name) = nullptr;
 void (*g_ontap_handler)(const char* func_name, int x, int y) = nullptr;
 void (*g_onhold_handler)(const char* func_name) = nullptr;
 void (*g_onhold_xy_handler)(const char* func_name, int x, int y) = nullptr;
 void (*g_state_change_handler)(const char* var_name, const char* value) = nullptr;
-
-// Flag to prevent recursion when updating widgets from state
-bool g_updating_from_binding = false;
-
-// Standalone pages (not in group)
-P::Array<P::String> page_ids;
-P::Array<lv_obj_t*> page_objs;
-lv_obj_t *g_keyboards[MAX_SCREENS] = {nullptr};
-int page_count = 0;
-static int current_page = 0;
-
-// Current group (-1 = standalone page)
-static int current_group = INVALID_INDEX;
 
 static lv_obj_t *get_screen(void) {
     return lv_screen_active();
@@ -156,7 +114,7 @@ static void parse_timers(const UI::ParsedElement& root) {
         
         if (timer.interval_ms > 0 && !timer.callback.empty()) {
             LOG_D(Log::UI, "timer: %dms -> %s()", timer.interval_ms, timer.callback.c_str());
-            timers.push_back(std::move(timer));
+            g_app->timers.push_back(std::move(timer));
         }
     }
 }
@@ -170,26 +128,26 @@ static void parse_script(const UI::ParsedElement& root) {
     }
     
     auto lang = script->get("language", "lua");
-    script_lang = P::String(lang);
+    g_app->script_lang = P::String(lang);
     // Normalize to lowercase
-    for (char& c : script_lang) c = tolower((unsigned char)c);
+    for (char& c : g_app->script_lang) c = tolower((unsigned char)c);
     
     // Get script content (text inside <script>...</script>)
-    script_code = script->text;
+    g_app->script_code = script->text;
     
-    LOG_D(Log::UI, "script raw text: %d bytes", (int)script_code.size());
+    LOG_D(Log::UI, "script raw text: %d bytes", (int)g_app->script_code.size());
     
     // Trim leading whitespace
-    size_t start = script_code.find_first_not_of(" \t\n\r");
+    size_t start = g_app->script_code.find_first_not_of(" \t\n\r");
     if (start != P::String::npos && start > 0) {
-        script_code.erase(0, start);
+        g_app->script_code.erase(0, start);
     }
     
-    LOG_D(Log::UI, "script: %s (%d bytes)", script_lang.c_str(), (int)script_code.size());
+    LOG_D(Log::UI, "script: %s (%d bytes)", g_app->script_lang.c_str(), (int)g_app->script_code.size());
     
     // Debug: show first 100 chars
-    if (script_code.size() > 0) {
-        auto preview = script_code.substr(0, 100);
+    if (g_app->script_code.size() > 0) {
+        auto preview = g_app->script_code.substr(0, 100);
         LOG_D(Log::UI, "script preview: %.100s...", preview.c_str());
     }
 }
@@ -332,13 +290,13 @@ static void parse_templates(const char* html) {
         const char* trimEnd = bodyEnd;
         while (trimEnd > bodyStart && isspace((unsigned char)*(trimEnd - 1))) trimEnd--;
         
-        s_templates[key] = P::String(bodyStart, trimEnd - bodyStart);
+        g_app->templates[key] = P::String(bodyStart, trimEnd - bodyStart);
         LOG_I(Log::UI, "template: %s -> %d bytes", id.c_str(), (int)(trimEnd - bodyStart));
         
         p = bodyEnd + 11; // strlen("</template>")
     }
     
-    LOG_I(Log::UI, "templates: %d defined", (int)s_templates.size());
+    LOG_I(Log::UI, "templates: %d defined", (int)g_app->templates.size());
 }
 
 // Substitute {varname} with value in text, handling nested {val_{var}_{var2}}
@@ -542,7 +500,7 @@ static P::String expand_all_for(const P::String& html) {
 
 // Pre-process HTML: expand all template invocations (PascalCase tags)
 static P::String expand_all_templates(const P::String& html) {
-    if (s_templates.empty()) return html;
+    if (g_app->templates.empty()) return html;
     
     P::String result;
     const char* p = html.c_str();
@@ -563,8 +521,8 @@ static P::String expand_all_templates(const P::String& html) {
             tagBuf[ti] = '\0';
             
             // Look up template
-            auto it = s_templates.find(P::String(tagBuf));
-            if (it != s_templates.end()) {
+            auto it = g_app->templates.find(P::String(tagBuf));
+            if (it != g_app->templates.end()) {
                 // Found template — parse attributes
                 const char* astart = t;
                 while (t < end && *t != '>' && *t != '/') t++;
@@ -664,21 +622,21 @@ static void parse_head(const char *html) {
     // Read app version
     auto ver = app->get("version");
     if (!ver.empty()) {
-        app_version = P::String(ver);
-        LOG_D(Log::UI, "App version: %s", app_version.c_str());
+        g_app->app_version = P::String(ver);
+        LOG_D(Log::UI, "App version: %s", g_app->app_version.c_str());
     }
     
     // Read OS requirement
     auto os = app->get("os");
     if (!os.empty()) {
-        app_os_requirement = P::String(os);
-        LOG_D(Log::UI, "App requires OS: %s", app_os_requirement.c_str());
+        g_app->app_os_requirement = P::String(os);
+        LOG_D(Log::UI, "App requires OS: %s", g_app->app_os_requirement.c_str());
     }
     
     // Read readonly flag
     auto ro = app->get("readonly");
-    app_readonly = (ro == "true" || ro == "1");
-    if (app_readonly) {
+    g_app->app_readonly = (ro == "true" || ro == "1");
+    if (g_app->app_readonly) {
         LOG_D(Log::UI, "App is readonly");
     }
     
@@ -690,11 +648,11 @@ static void parse_head(const char *html) {
             // System icon: system:puzzle-game -> /system/resources/icons/puzzle-game.png
             auto iconName = icon.substr(7);
             P::String fullPath = P::String(SYS_ICONS) + P::String(iconName) + ".png";
-            app_icon = fullPath.c_str();
+            g_app->app_icon = fullPath.c_str();
         } else {
-            app_icon = P::String(icon).c_str();
+            g_app->app_icon = P::String(icon).c_str();
         }
-        LOG_D(Log::UI, "App icon: %s", app_icon.c_str());
+        LOG_D(Log::UI, "App icon: %s", g_app->app_icon.c_str());
     }
     
     parse_state(*app);
@@ -711,153 +669,18 @@ static void parse_head(const char *html) {
         if (!def.empty()) {
             // Strip leading / if present
             if (def[0] == '/') def = def.substr(1);
-            ui_default_page = P::String(def);
-            LOG_I(Log::UI, "UI default page: %s", ui_default_page.c_str());
+            g_app->ui_default_page = P::String(def);
+            LOG_I(Log::UI, "UI default page: %s", g_app->ui_default_page.c_str());
         }
     }
 }
 
 // ============ END HEAD PARSING ============
 
-int find_page_index(const char *id) {
-    for (int i = 0; i < page_count; i++) {
-        if (page_ids[i] == id) return i;
-    }
-    return INVALID_INDEX;
-}
-
-// ============ COMMON ATTRIBUTES ============
-// Shared attributes that all widgets can have
-
 // CommonAttrs, parseCommonAttrs, ensureId, extractBindVar moved to ui_widget_builder.cpp
 
-// Store element with all possible attributes
-// ============ Element registration ============
-
-int store_element(ElementDesc d) {
-    if (!d.id || !d.id[0]) return INVALID_INDEX;
-    
-    auto el = P::create<UI::Element>();
-    el->id = d.id;
-    el->w.handle = d.obj;
-    _unique_id(d.obj, d.id);  // For testing mock
-    el->is_page = d.is_page;
-    el->href     = (d.href     && d.href[0])     ? d.href     : "";
-    el->onclick  = (d.onclick  && d.onclick[0])  ? d.onclick  : "";
-    el->onchange = (d.onchange && d.onchange[0]) ? d.onchange : "";
-    el->oninput  = (d.oninput  && d.oninput[0])  ? d.oninput  : "";
-    el->bind     = (d.bind     && d.bind[0])     ? d.bind     : "";
-    el->tpl      = (d.tpl && strchr(d.tpl, '{')) ? d.tpl : "";
-    el->classTemplate = (d.classTpl && strchr(d.classTpl, '{')) ? d.classTpl : "";
-    
-    // Parse visibleBind - extract var name from "{varname}"
-    if (d.visibleBind && d.visibleBind[0]) {
-        el->visibleBind = extractBindVar(d.visibleBind);
-        
-        // Apply initial visibility
-        if (!el->visibleBind.empty()) {
-            P::String val = State::store().getString(el->visibleBind);
-            bool visible = (val == "true" || val == "1");
-            if (!visible) {
-                lv_obj_add_flag(d.obj, LV_OBJ_FLAG_HIDDEN);
-            }
-        }
-    }
-    
-    // Parse bgcolorBind - extract var name from "{varname}"
-    if (d.bgcolorBind && d.bgcolorBind[0]) {
-        el->bgcolorBind = extractBindVar(d.bgcolorBind);
-        LOG_D(Log::UI, "store_element: id=%s bgcolorBind=%s (from %s)", d.id, el->bgcolorBind.c_str(), d.bgcolorBind);
-    }
-    
-    // Parse colorBind - extract var name from "{varname}"
-    if (d.colorBind && d.colorBind[0]) {
-        el->colorBind = extractBindVar(d.colorBind);
-    }
-    
-    int idx = (int)elements.size();
-    elements.push_back(std::move(el));
-    
-    // Store z-index from HTML attribute
-    if (d.zIndex != 0 && idx >= 0) {
-        elements[idx]->zIndex = d.zIndex;
-    }
-    
-    // Apply deferred CSS z-index (CSS runs before store_element)
-    if (!s_deferredZIndex.empty() && d.obj) {
-        auto it = s_deferredZIndex.find(d.obj);
-        if (it != s_deferredZIndex.end()) {
-            elements[idx]->zIndex = it->second;
-            s_deferredZIndex.erase(it);
-        }
-    }
-    
-    return idx;
-}
-
-// Page-only shorthand
-int store_page(const char* id, lv_obj_t* obj) {
-    ElementDesc d;
-    d.id = id;
-    d.obj = obj;
-    d.is_page = true;
-    return store_element(d);
-}
-
-void setElementZIndex(lv_obj_t* handle, int z) {
-    for (auto& el : elements) {
-        if (el->w.handle == handle || el->parentObj == handle) {
-            el->zIndex = z;
-            return;
-        }
-    }
-    // Element not stored yet (CSS runs before store_element) — defer
-    s_deferredZIndex[handle] = z;
-}
-
-// Post-render: reorder children by z-index
-// Negative z-index → move to back (most negative first, so it ends up deepest)
-// Positive z-index → move to front (least positive first, most positive ends on top)
-static void applyZIndexOrdering() {
-    // Collect elements with z-index set
-    struct ZEntry { lv_obj_t* obj; int z; };
-    P::Array<ZEntry> negatives, positives;
-    
-    for (const auto& el : elements) {
-        if (el->zIndex == 0 || el->is_page) continue;
-        lv_obj_t* target = el->parentObj ? el->parentObj : el->w.handle;
-        if (!target) continue;
-        
-        if (el->zIndex < 0) negatives.push_back({target, el->zIndex});
-        else                 positives.push_back({target, el->zIndex});
-    }
-    
-    // Negatives: descending order (least negative first → index 0, then most negative → index 0)
-    std::sort(negatives.begin(), negatives.end(), [](const ZEntry& a, const ZEntry& b) {
-        return a.z > b.z;  // -1 before -2
-    });
-    for (auto& e : negatives) {
-        lv_obj_move_to_index(e.obj, 0);
-    }
-    
-    // Positives: ascending order (least positive first → foreground, most positive last → top)
-    std::sort(positives.begin(), positives.end(), [](const ZEntry& a, const ZEntry& b) {
-        return a.z < b.z;  // 1 before 2
-    });
-    for (auto& e : positives) {
-        lv_obj_move_foreground(e.obj);
-    }
-}
-
-lv_obj_t *ui_get_internal(const char *id) {
-    for (const auto& el : elements) {
-        if (el->id == id) return el->obj();
-    }
-    return nullptr;
-}
-
 bool ui_trigger_click(const char *id) {
-    for (const auto& el : elements) {
+    for (const auto& el : g_app->elements) {
         if (el->id == id && !el->onclick.empty() && g_onclick_handler) {
             g_onclick_handler(el->onclick.c_str());
             return true;
@@ -875,7 +698,7 @@ bool ui_call_function(const char *funcName) {
 }
 
 void ui_set_text_internal(const char *id, const char *text) {
-    lv_obj_t *obj = ui_get_internal(id);
+    lv_obj_t *obj = g_app->findElement(id);
     if (!obj) return;
     
     // TODO: Наши шрифты поддерживают только ASCII + кириллицу.
@@ -888,7 +711,7 @@ void ui_set_text_internal(const char *id, const char *text) {
 }
 
 void ui_set_switch(const char *id, bool checked) {
-    lv_obj_t *obj = ui_get_internal(id);
+    lv_obj_t *obj = g_app->findElement(id);
     if (!obj) return;
     if (checked) {
         lv_obj_add_state(obj, LV_STATE_CHECKED);
@@ -898,13 +721,13 @@ void ui_set_switch(const char *id, bool checked) {
 }
 
 void ui_set_slider(const char *id, int value) {
-    lv_obj_t *obj = ui_get_internal(id);
+    lv_obj_t *obj = g_app->findElement(id);
     if (!obj) return;
     lv_slider_set_value(obj, value, LV_ANIM_ON);
 }
 
 void ui_set_input(const char *id, const char *text) {
-    lv_obj_t *obj = ui_get_internal(id);
+    lv_obj_t *obj = g_app->findElement(id);
     if (!obj) return;
     lv_textarea_set_text(obj, text ? text : "");
 }
@@ -955,13 +778,10 @@ static bool template_has_var(const char *tpl, const char *varname) {
     return strstr(tpl, search) != nullptr;
 }
 
-// Update all elements that bind to this variable
+// Update all g_app->elements that bind to this variable
 // Forward declarations
 static void ui_update_bindings_internal(const char *varname, const char *value);
 uint32_t parse_color(const char *s);
-
-// Flag to track if we're inside LVGL callback
-bool s_in_lvgl_callback = false;
 
 // Public function - calls internal directly (we're always in LVGL context)
 void ui_update_bindings(const char *varname, const char *value) {
@@ -970,34 +790,34 @@ void ui_update_bindings(const char *varname, const char *value) {
 
 // Internal function that actually updates bindings
 static void ui_update_bindings_internal(const char *varname, const char *value) {
-    LOG_V(Log::UI, "update_bindings: var=%s val=%s elements=%d", varname, value, (int)elements.size());
+    LOG_V(Log::UI, "update_bindings: var=%s val=%s elements=%d", varname, value, (int)g_app->elements.size());
     
     // First update internal state
     ui_set_state(varname, value);
     
     // Prevent recursion
-    g_updating_from_binding = true;
+    g_app->updating_from_binding = true;
     
-    // Then find and update all elements
-    for (size_t i = 0; i < elements.size(); i++) {
-        if (!elements[i]) {
+    // Then find and update all g_app->elements
+    for (size_t i = 0; i < g_app->elements.size(); i++) {
+        if (!g_app->elements[i]) {
             continue;
         }
         
-        lv_obj_t *obj = elements[i]->obj();
+        lv_obj_t *obj = g_app->elements[i]->obj();
         if (!obj) {
             continue;
         }
         
         // Update templates with {varname}
-        if (template_has_var(elements[i]->tpl.c_str(), varname)) {
-            LOG_V(Log::UI, "update_bindings: updating element %d tpl=%s", (int)i, elements[i]->tpl.c_str());
-            P::String rendered = render_template(elements[i]->tpl.c_str());
+        if (template_has_var(g_app->elements[i]->tpl.c_str(), varname)) {
+            LOG_V(Log::UI, "update_bindings: updating element %d tpl=%s", (int)i, g_app->elements[i]->tpl.c_str());
+            P::String rendered = render_template(g_app->elements[i]->tpl.c_str());
             LOG_V(Log::UI, "update_bindings: rendered=%s", rendered.c_str());
             
             // Custom update handler (e.g. markdown spangroup)
-            if (elements[i]->updateFn) {
-                elements[i]->updateFn(rendered);
+            if (g_app->elements[i]->updateFn) {
+                g_app->elements[i]->updateFn(rendered);
             }
             else if (lv_obj_get_child_cnt(obj) > 0) {
                 lv_obj_t *child = lv_obj_get_child(obj, 0);
@@ -1016,22 +836,22 @@ static void ui_update_bindings_internal(const char *varname, const char *value) 
         }
         
         // Update dynamic class with {varname}
-        if (template_has_var(elements[i]->classTemplate.c_str(), varname)) {
-            P::String renderedClass = render_template(elements[i]->classTemplate.c_str());
+        if (template_has_var(g_app->elements[i]->classTemplate.c_str(), varname)) {
+            P::String renderedClass = render_template(g_app->elements[i]->classTemplate.c_str());
             
-            // For buttons: apply styles to parentObj (the button), not obj (the label inside)
-            lv_obj_t *styleObj = elements[i]->parentObj ? elements[i]->parentObj : obj;
+            // For buttons: apply g_app->styles to parentObj (the button), not obj (the label inside)
+            lv_obj_t *styleObj = g_app->elements[i]->parentObj ? g_app->elements[i]->parentObj : obj;
             if (!styleObj) {
                 continue;
             }
             
-            // Save position and size before removing styles
+            // Save position and size before removing g_app->styles
             lv_coord_t x = lv_obj_get_x(styleObj);
             lv_coord_t y = lv_obj_get_y(styleObj);
             lv_coord_t w = lv_obj_get_width(styleObj);
             lv_coord_t h = lv_obj_get_height(styleObj);
             
-            // Reset styles and reapply class
+            // Reset g_app->styles and reapply class
             lv_obj_remove_style_all(styleObj);
             Widget{styleObj}.applyStyle(renderedClass);
             
@@ -1040,8 +860,8 @@ static void ui_update_bindings_internal(const char *varname, const char *value) 
             lv_obj_set_size(styleObj, w, h);
             
             // For buttons: also update text color on the label inside
-            if (elements[i]->parentObj && elements[i]->obj()) {
-                lv_obj_t *lbl = elements[i]->obj();
+            if (g_app->elements[i]->parentObj && g_app->elements[i]->obj()) {
+                lv_obj_t *lbl = g_app->elements[i]->obj();
                 // Find text color in rendered class
                 std::istringstream iss(renderedClass);
                 P::String cls;
@@ -1053,11 +873,11 @@ static void ui_update_bindings_internal(const char *varname, const char *value) 
                 }
             }
             
-            LOG_V(Log::UI, "Dynamic class update: %s -> %s", elements[i]->classTemplate.c_str(), renderedClass.c_str());
+            LOG_V(Log::UI, "Dynamic class update: %s -> %s", g_app->elements[i]->classTemplate.c_str(), renderedClass.c_str());
         }
         
         // Update widgets with bind=varname
-        if (!elements[i]->bind.empty() && elements[i]->bind == varname) {
+        if (!g_app->elements[i]->bind.empty() && g_app->elements[i]->bind == varname) {
             // Check widget type and update
             if (lv_obj_check_type(obj, &lv_switch_class)) {
                 bool checked = (toBool(value));
@@ -1084,37 +904,37 @@ static void ui_update_bindings_internal(const char *varname, const char *value) 
         }
         
         // Update visibility with visibleBind=varname
-        if (!elements[i]->visibleBind.empty() && elements[i]->visibleBind == varname) {
+        if (!g_app->elements[i]->visibleBind.empty() && g_app->elements[i]->visibleBind == varname) {
             bool visible = (strcmp(value, "true") == 0 || strcmp(value, "1") == 0);
-            UI::setVisible(elements[i]->box(), visible);
-            LOG_V(Log::UI, "Visibility update: %s -> %s", elements[i]->id.c_str(), visible ? "visible" : "hidden");
+            UI::setVisible(g_app->elements[i]->box(), visible);
+            LOG_V(Log::UI, "Visibility update: %s -> %s", g_app->elements[i]->id.c_str(), visible ? "visible" : "hidden");
         }
         
         // Update background color with bgcolorBind=varname
-        if (!elements[i]->bgcolorBind.empty()) {
+        if (!g_app->elements[i]->bgcolorBind.empty()) {
             LOG_V(Log::UI, "  element %s: bgcolorBind=%s (looking for %s)", 
-                     elements[i]->id.c_str(), elements[i]->bgcolorBind.c_str(), varname);
+                     g_app->elements[i]->id.c_str(), g_app->elements[i]->bgcolorBind.c_str(), varname);
         }
-        if (!elements[i]->bgcolorBind.empty() && elements[i]->bgcolorBind == varname) {
-            LOG_V(Log::UI, "Bgcolor update: %s -> %s", elements[i]->id.c_str(), value);
-            UI::setBgColor(elements[i]->box(), parse_color(value));
+        if (!g_app->elements[i]->bgcolorBind.empty() && g_app->elements[i]->bgcolorBind == varname) {
+            LOG_V(Log::UI, "Bgcolor update: %s -> %s", g_app->elements[i]->id.c_str(), value);
+            UI::setBgColor(g_app->elements[i]->box(), parse_color(value));
         }
         
         // Update text color with colorBind=varname
-        if (!elements[i]->colorBind.empty() && elements[i]->colorBind == varname) {
-            UI::setColor(elements[i]->w, parse_color(value));
-            LOG_V(Log::UI, "Color update: %s -> %s", elements[i]->id.c_str(), value);
+        if (!g_app->elements[i]->colorBind.empty() && g_app->elements[i]->colorBind == varname) {
+            UI::setColor(g_app->elements[i]->w, parse_color(value));
+            LOG_V(Log::UI, "Color update: %s -> %s", g_app->elements[i]->id.c_str(), value);
         }
     }
     
-    g_updating_from_binding = false;
+    g_app->updating_from_binding = false;
 }
 
 // Sync all widgets with their bound state values (call after loadState)
 // Find group by id
 static int find_group_index(const char *id) {
-    for (int i = 0; i < (int)groups.size(); i++) {
-        if (groups[i].id == id) return i;
+    for (int i = 0; i < (int)g_app->groups.size(); i++) {
+        if (g_app->groups[i].id == id) return i;
     }
     return INVALID_INDEX;
 }
@@ -1176,39 +996,39 @@ void ui_show_page_internal(const char *path) {
             return;
         }
         
-        int page_idx = find_page_in_group(&groups[grp_idx], page_id.c_str());
+        int page_idx = find_page_in_group(&g_app->groups[grp_idx], page_id.c_str());
         if (page_idx < 0) {
             LOG_W(Log::UI, "Page not found: %s/%s", group_id.c_str(), page_id.c_str());
             return;
         }
         
         // Hide all standalone pages
-        for (int i = 0; i < page_count; i++) {
-            lv_obj_add_flag(page_objs[i], LV_OBJ_FLAG_HIDDEN);
+        for (int i = 0; i < g_app->page_count; i++) {
+            lv_obj_add_flag(g_app->page_objs[i], LV_OBJ_FLAG_HIDDEN);
         }
         
-        // Hide all groups except this one
-        for (int i = 0; i < (int)groups.size(); i++) {
+        // Hide all g_app->groups except this one
+        for (int i = 0; i < (int)g_app->groups.size(); i++) {
             if (i == grp_idx) {
-                lv_obj_clear_flag(groups[i].tileview, LV_OBJ_FLAG_HIDDEN);
-                if (groups[i].indicator_obj) {
-                    lv_obj_clear_flag(groups[i].indicator_obj, LV_OBJ_FLAG_HIDDEN);
+                lv_obj_clear_flag(g_app->groups[i].tileview, LV_OBJ_FLAG_HIDDEN);
+                if (g_app->groups[i].indicator_obj) {
+                    lv_obj_clear_flag(g_app->groups[i].indicator_obj, LV_OBJ_FLAG_HIDDEN);
                 }
             } else {
-                lv_obj_add_flag(groups[i].tileview, LV_OBJ_FLAG_HIDDEN);
-                if (groups[i].indicator_obj) {
-                    lv_obj_add_flag(groups[i].indicator_obj, LV_OBJ_FLAG_HIDDEN);
+                lv_obj_add_flag(g_app->groups[i].tileview, LV_OBJ_FLAG_HIDDEN);
+                if (g_app->groups[i].indicator_obj) {
+                    lv_obj_add_flag(g_app->groups[i].indicator_obj, LV_OBJ_FLAG_HIDDEN);
                 }
             }
         }
         
         // Navigate to tile using tileview API
-        lv_obj_set_tile_id(groups[grp_idx].tileview, page_idx, 0, LV_ANIM_OFF);
-        groups[grp_idx].current_page_idx = page_idx;
-        groups[grp_idx].updateIndicator(page_idx);
+        lv_obj_set_tile_id(g_app->groups[grp_idx].tileview, page_idx, 0, LV_ANIM_OFF);
+        g_app->groups[grp_idx].current_page_idx = page_idx;
+        g_app->groups[grp_idx].updateIndicator(page_idx);
         
-        current_group = grp_idx;
-        current_page = INVALID_INDEX;
+        g_app->current_group = grp_idx;
+        g_app->current_page = INVALID_INDEX;
         
         LOG_I(Log::UI, "Navigate: %s/%s", group_id.c_str(), page_id.c_str());
     } else {
@@ -1216,46 +1036,46 @@ void ui_show_page_internal(const char *path) {
         int grp_idx = find_group_index(p);
         if (grp_idx >= 0) {
             // It's a group - show default page
-            const auto& def = !groups[grp_idx].default_page.empty() 
-                ? groups[grp_idx].default_page : groups[grp_idx].page_ids[0];
-            char _buf[64]; snprintf(_buf, sizeof(_buf), "%s/%s", groups[grp_idx].id.c_str(), def.c_str());
+            const auto& def = !g_app->groups[grp_idx].default_page.empty() 
+                ? g_app->groups[grp_idx].default_page : g_app->groups[grp_idx].page_ids[0];
+            char _buf[64]; snprintf(_buf, sizeof(_buf), "%s/%s", g_app->groups[grp_idx].id.c_str(), def.c_str());
             ui_show_page_internal(_buf);
             return;
         }
         
         // It's a standalone page
-        int idx = find_page_index(p);
+        int idx = g_app->findPage(p);
         if (idx < 0) {
             LOG_W(Log::UI, "Page not found: %s", p);
             return;
         }
         
-        // Hide all groups
-        for (int i = 0; i < (int)groups.size(); i++) {
-            lv_obj_add_flag(groups[i].tileview, LV_OBJ_FLAG_HIDDEN);
-            if (groups[i].indicator_obj) {
-                lv_obj_add_flag(groups[i].indicator_obj, LV_OBJ_FLAG_HIDDEN);
+        // Hide all g_app->groups
+        for (int i = 0; i < (int)g_app->groups.size(); i++) {
+            lv_obj_add_flag(g_app->groups[i].tileview, LV_OBJ_FLAG_HIDDEN);
+            if (g_app->groups[i].indicator_obj) {
+                lv_obj_add_flag(g_app->groups[i].indicator_obj, LV_OBJ_FLAG_HIDDEN);
             }
         }
         
         // Hide keyboards
-        for (int i = 0; i < page_count; i++) {
-            if (g_keyboards[i]) {
-                lv_obj_add_flag(g_keyboards[i], LV_OBJ_FLAG_HIDDEN);
+        for (int i = 0; i < g_app->page_count; i++) {
+            if (g_app->keyboards[i]) {
+                lv_obj_add_flag(g_app->keyboards[i], LV_OBJ_FLAG_HIDDEN);
             }
         }
         
         // Show/hide standalone pages
-        for (int i = 0; i < page_count; i++) {
+        for (int i = 0; i < g_app->page_count; i++) {
             if (i == idx) {
-                lv_obj_clear_flag(page_objs[i], LV_OBJ_FLAG_HIDDEN);
+                lv_obj_clear_flag(g_app->page_objs[i], LV_OBJ_FLAG_HIDDEN);
             } else {
-                lv_obj_add_flag(page_objs[i], LV_OBJ_FLAG_HIDDEN);
+                lv_obj_add_flag(g_app->page_objs[i], LV_OBJ_FLAG_HIDDEN);
             }
         }
         
-        current_group = INVALID_INDEX;
-        current_page = idx;
+        g_app->current_group = INVALID_INDEX;
+        g_app->current_page = idx;
         
         LOG_I(Log::UI, "Navigate: %s", p);
     }
@@ -1267,12 +1087,12 @@ void navigate(const char *href) {
     const char *target = href + 1;
     
     if (strcmp(target, "next") == 0) {
-        if (current_page < page_count - 1) {
-            ui_show_page_internal(page_ids[current_page + 1].c_str());
+        if (g_app->current_page < g_app->page_count - 1) {
+            ui_show_page_internal(g_app->page_ids[g_app->current_page + 1].c_str());
         }
     } else if (strcmp(target, "prev") == 0 || strcmp(target, "back") == 0) {
-        if (current_page > 0) {
-            ui_show_page_internal(page_ids[current_page - 1].c_str());
+        if (g_app->current_page > 0) {
+            ui_show_page_internal(g_app->page_ids[g_app->current_page - 1].c_str());
         }
     } else {
         ui_show_page_internal(target);
@@ -1280,13 +1100,13 @@ void navigate(const char *href) {
 }
 
 const char* ui_get_current_page_id() {
-    if (current_group >= 0 && current_group < (int)groups.size()) {
-        auto& g = groups[current_group];
+    if (g_app->current_group >= 0 && g_app->current_group < (int)g_app->groups.size()) {
+        auto& g = g_app->groups[g_app->current_group];
         if (g.current_page_idx >= 0 && g.current_page_idx < (int)g.page_ids.size())
             return g.page_ids[g.current_page_idx].c_str();
     }
-    if (current_page >= 0 && current_page < page_count)
-        return page_ids[current_page].c_str();
+    if (g_app->current_page >= 0 && g_app->current_page < g_app->page_count)
+        return g_app->page_ids[g_app->current_page].c_str();
     return "";
 }
 
@@ -1601,7 +1421,7 @@ void parse_children(const char *html, int len, lv_obj_t *parent) {
                 ed.id = autoId.c_str();
                 ed.obj = container;
                 ed.visibleBind = hasDynVisible ? visAttr.c_str() : nullptr;
-                store_element(ed);
+                g_app->addElement(ed);
             }
             
             LOG_I(Log::UI, "<%s> id=%s class=%s vis=%s", tag,
@@ -1618,41 +1438,9 @@ void parse_children(const char *html, int len, lv_obj_t *parent) {
 }
 
 void ui_html_init_internal(void) {
-    // Clear all vectors
-    elements.clear();
-    s_deferredZIndex.clear();
-    s_templates.clear();
-    timers.clear();
-    styles.clear();
-    groups.clear();
-    page_ids.clear();
-    page_objs.clear();
-    
-    // Reset state
-    page_count = 0;
-    current_page = 0;
-    current_group = INVALID_INDEX;
-    g_updating_from_binding = false;
-    
-    // Reset script
-    script_lang = "lua";
-    script_code.clear();
-    
-    // Reset app metadata
-    app_icon.clear();
-    
-    // Clear stores
+    g_app->~BaxApp();
+    new (g_app) BaxApp();
     State::store().clear();
-    
-    // Clear keyboards array
-    memset(g_keyboards, 0, sizeof(g_keyboards));
-    
-    // Disable scroll on main screen to prevent "jitter" on touch
-    lv_obj_t* scr = lv_screen_active();
-    if (scr) {
-        lv_obj_clear_flag(scr, LV_OBJ_FLAG_SCROLLABLE);
-    }
-    
     LOG_I(Log::UI, "Init v%s", UI::Engine::version());
 }
 
@@ -1668,9 +1456,9 @@ int ui_html_render_internal(const char *html) {
     parse_head(html);
     LOG_D(Log::UI, "render_internal: parse_head done");
     
-    if (!app_version.empty() && app_version != "0.0") {
+    if (!g_app->app_version.empty() && g_app->app_version != "0.0") {
         LOG_D(Log::UI, "========================================");
-        LOG_D(Log::UI, "  App v%s (engine v%s)", app_version.c_str(), UI::Engine::version());
+        LOG_D(Log::UI, "  App v%s (engine v%s)", g_app->app_version.c_str(), UI::Engine::version());
         LOG_D(Log::UI, "========================================");
     }
     
@@ -1679,7 +1467,7 @@ int ui_html_render_internal(const char *html) {
     static PageContent contents[MAX_PAGE_CONTENTS];
     int content_count = 0;
     
-    LOG_D(Log::UI, "render_internal: Pass 1 - groups");
+    LOG_D(Log::UI, "render_internal: Pass 1 - g_app->groups");
     // Pass 1: Find <group> tags and create tabviews
     p = html;
     while (*p) {
@@ -1696,33 +1484,33 @@ int ui_html_render_internal(const char *html) {
         p++;
         
         // Create new group (use index, not pointer - pointer invalidates on push_back)
-        groups.push_back(UI::PageGroup{});
-        size_t gi = groups.size() - 1;
+        g_app->groups.push_back(UI::PageGroup{});
+        size_t gi = g_app->groups.size() - 1;
         
-        groups[gi].id = getAttr(astart, aend, "id");
-        if (groups[gi].id.empty()) {
+        g_app->groups[gi].id = getAttr(astart, aend, "id");
+        if (g_app->groups[gi].id.empty()) {
             LOG_W(Log::UI, "group without id");
-            groups.pop_back();
+            g_app->groups.pop_back();
             continue;
         }
         
-        groups[gi].default_page = getAttr(astart, aend, "default");
+        g_app->groups[gi].default_page = getAttr(astart, aend, "default");
         
-        groups[gi].orientation = UI::Orientation::Horizontal;
+        g_app->groups[gi].orientation = UI::Orientation::Horizontal;
         {
             auto orient = getAttr(astart, aend, "orientation");
             if (orient == "vertical" || orient == "v") {
-                groups[gi].orientation = UI::Orientation::Vertical;
+                g_app->groups[gi].orientation = UI::Orientation::Vertical;
             }
         }
         
-        groups[gi].indicator = UI::IndicatorType::Scrollbar;
+        g_app->groups[gi].indicator = UI::IndicatorType::Scrollbar;
         {
             auto ind = getAttr(astart, aend, "indicator");
             if (ind == "dots") {
-                groups[gi].indicator = UI::IndicatorType::Dots;
+                g_app->groups[gi].indicator = UI::IndicatorType::Dots;
             } else if (ind == "none") {
-                groups[gi].indicator = UI::IndicatorType::None;
+                g_app->groups[gi].indicator = UI::IndicatorType::None;
             }
         }
         
@@ -1730,15 +1518,15 @@ int ui_html_render_internal(const char *html) {
         const char *group_content_start = p;
         const char *gclose = findTagClose(p, Layout::Group);
         if (!gclose) {
-            LOG_E(Log::UI, "No </group> for %s", groups[gi].id.c_str());
+            LOG_E(Log::UI, "No </group> for %s", g_app->groups[gi].id.c_str());
             break;
         }
         
-        groups[gi].create(get_screen());
+        g_app->groups[gi].create(get_screen());
         
         // Parse pages inside this group
         const char *pp = group_content_start;
-        while (pp < gclose && (int)groups[gi].page_ids.size() < MAX_PAGES_PER_GROUP) {
+        while (pp < gclose && (int)g_app->groups[gi].page_ids.size() < MAX_PAGES_PER_GROUP) {
             const char *pstart = findTagOpen(pp, Layout::Page);
             if (!pstart || pstart >= gclose) break;
             
@@ -1752,18 +1540,18 @@ int ui_html_render_internal(const char *html) {
             
             P::String page_id = getAttr(pastart, paend, "id");
             if (page_id.empty()) {
-                LOG_W(Log::UI, "page without id in group %s", groups[gi].id.c_str());
+                LOG_W(Log::UI, "page without id in group %s", g_app->groups[gi].id.c_str());
                 continue;
             }
             
             const char *page_content_start = pp;
             const char *pclose = findTagClose(pp, Layout::Page);
             if (!pclose || pclose > gclose) {
-                LOG_E(Log::UI, "No </page> for %s in group %s", page_id.c_str(), groups[gi].id.c_str());
+                LOG_E(Log::UI, "No </page> for %s in group %s", page_id.c_str(), g_app->groups[gi].id.c_str());
                 break;
             }
             
-            lv_obj_t *tile = groups[gi].addTile(page_id);
+            lv_obj_t *tile = g_app->groups[gi].addTile(page_id);
             
             // Apply page bgcolor if specified
             auto tileBgcolor = getAttr(pastart, paend, "bgcolor");
@@ -1779,34 +1567,34 @@ int ui_html_render_internal(const char *html) {
             contents[content_count].parent = tile;
             content_count++;
             
-            char _buf[64]; snprintf(_buf, sizeof(_buf), "%s/%s", groups[gi].id.c_str(), page_id.c_str());
+            char _buf[64]; snprintf(_buf, sizeof(_buf), "%s/%s", g_app->groups[gi].id.c_str(), page_id.c_str());
             P::String full_id = _buf;
-            store_page(full_id.c_str(), tile);
+            g_app->addPage(full_id.c_str(), tile);
             
-            LOG_D(Log::UI, "  page: %s (tile %d)", full_id.c_str(), (int)groups[gi].page_ids.size() - 1);
+            LOG_D(Log::UI, "  page: %s (tile %d)", full_id.c_str(), (int)g_app->groups[gi].page_ids.size() - 1);
             
             pp = pclose + tagCloseLen(Layout::Page);
         }
         
-        groups[gi].finalize((int)gi);
+        g_app->groups[gi].finalize((int)gi);
         
         // Hide if not first
-        if (groups.size() > 1 || page_count > 0) {
-            groups[gi].hide();
+        if (g_app->groups.size() > 1 || g_app->page_count > 0) {
+            g_app->groups[gi].hide();
         }
         
-        store_page(groups[gi].id.c_str(), groups[gi].tileview);
-        LOG_D(Log::UI, "group: %s (%d pages, %s)", groups[gi].id.c_str(), (int)groups[gi].page_ids.size(),
-                 groups[gi].isHorizontal() ? "horizontal" : "vertical");
+        g_app->addPage(g_app->groups[gi].id.c_str(), g_app->groups[gi].tileview);
+        LOG_D(Log::UI, "group: %s (%d pages, %s)", g_app->groups[gi].id.c_str(), (int)g_app->groups[gi].page_ids.size(),
+                 g_app->groups[gi].isHorizontal() ? "horizontal" : "vertical");
         
         p = gclose + tagCloseLen(Layout::Group);
     }
     
     LOG_D(Log::UI, "render_internal: Pass 2 - standalone pages");
-    // Pass 2: Find standalone <page> tags (not inside groups)
+    // Pass 2: Find standalone <page> tags (not inside g_app->groups)
     p = html;
     int pass2_iterations = 0;
-    while (*p && page_count < MAX_SCREENS) {
+    while (*p && g_app->page_count < MAX_SCREENS) {
         if (++pass2_iterations > 100) {
             LOG_E(Log::UI, "Pass 2: too many iterations, breaking");
             break;
@@ -1815,7 +1603,7 @@ int ui_html_render_internal(const char *html) {
         const char *pstart = findTagOpen(p, Layout::Page);
         if (!pstart) break;
         
-        // Skip pages inside groups
+        // Skip pages inside g_app->groups
         if (isInsideGroup(html, pstart)) {
             p = pstart + tagOpenLen(Layout::Page);
             while (*p && *p != '>') p++;
@@ -1859,22 +1647,22 @@ int ui_html_render_internal(const char *html) {
         }
         
         // Hide if not first
-        if (page_count > 0 || !groups.empty()) {
+        if (g_app->page_count > 0 || !g_app->groups.empty()) {
             lv_obj_add_flag(scr, LV_OBJ_FLAG_HIDDEN);
         }
         
-        page_ids.push_back(id);
-        page_objs.push_back(scr);
+        g_app->page_ids.push_back(id);
+        g_app->page_objs.push_back(scr);
         
         contents[content_count].start = content_start;
         contents[content_count].len = pclose - content_start;
         contents[content_count].parent = scr;
         content_count++;
         
-        store_page(id.c_str(), scr);
+        g_app->addPage(id.c_str(), scr);
         LOG_I(Log::UI, "page: %s (%d bytes content)", id.c_str(), (int)(pclose - content_start));
         
-        page_count++;
+        g_app->page_count++;
         p = pclose + tagCloseLen(Layout::Page);
     }
     
@@ -1885,14 +1673,14 @@ int ui_html_render_internal(const char *html) {
         parse_children(contents[i].start, contents[i].len, contents[i].parent);
     }
     
-    LOG_I(Log::UI, "Done: %d elements, %d groups, %d standalone pages", 
-             (int)elements.size(), (int)groups.size(), page_count);
+    LOG_I(Log::UI, "Done: %d g_app->elements, %d g_app->groups, %d standalone pages", 
+             (int)g_app->elements.size(), (int)g_app->groups.size(), g_app->page_count);
     
     // Apply <ui default="/page"> — navigate to specified initial page
-    if (!ui_default_page.empty()) {
-        LOG_I(Log::UI, "Navigating to default page: %s", ui_default_page.c_str());
-        applyZIndexOrdering();
-        ui_show_page_internal(ui_default_page.c_str());
+    if (!g_app->ui_default_page.empty()) {
+        LOG_I(Log::UI, "Navigating to default page: %s", g_app->ui_default_page.c_str());
+        g_app->applyZIndex();
+        ui_show_page_internal(g_app->ui_default_page.c_str());
     }
     
     // Memory after UI render
@@ -1901,43 +1689,13 @@ int ui_html_render_internal(const char *html) {
     Serial.print(" PSRAM=");
     Serial.println(heap_caps_get_free_size(MALLOC_CAP_SPIRAM));
     
-    return (int)elements.size();
+    return (int)g_app->elements.size();
 }
 
 void ui_clear_internal(void) {
-    LOG_D(Log::UI, "clear: cleaning screen...");
-    lv_obj_t* scr = get_screen();
-    if (scr) {
-        int child_cnt = lv_obj_get_child_cnt(scr);
-        LOG_D(Log::UI, "clear: removing %d children", child_cnt);
-        lv_obj_clean(scr);
-        // Disable scroll to prevent jitter
-        lv_obj_clear_flag(scr, LV_OBJ_FLAG_SCROLLABLE);
-    }
-    
-    // Clear image paths storage (must be done AFTER lv_obj_clean!)
-    LOG_D(Log::UI, "clear: clearing %d icon paths, %d image paths", 
-          (int)s_iconPaths.size(), (int)s_imagePaths.size());
-    s_iconPaths.clear();
-    s_imagePaths.clear();
-    
-    LOG_D(Log::UI, "clear: clearing elements vector...");
-    elements.clear();
-    s_deferredZIndex.clear();
-    s_templates.clear();
-    page_ids.clear();
-    page_objs.clear();
-    timers.clear();
-    styles.clear();
-    page_count = 0;
-    current_page = 0;
-    current_group = INVALID_INDEX;
-    g_updating_from_binding = false;
-    groups.clear();
-    ui_default_page = "";
-    script_code.clear();
-    app_icon.clear();
+    LOG_D(Log::UI, "clear: destroying app...");
+    g_app->~BaxApp();
+    new (g_app) BaxApp();
     State::store().clear();
-    memset(g_keyboards, 0, sizeof(g_keyboards));
     LOG_D(Log::UI, "clear: done");
 }

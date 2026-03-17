@@ -9,6 +9,7 @@
 
 #include "ui/ui_types.h"
 #include "ui/ui_coords.h"
+#include "ui/bax_app.h"
 #include <cstdint>
 #include <string>
 
@@ -17,8 +18,6 @@ typedef struct _lv_obj_t lv_obj_t;
 
 // ============ Constants ============
 
-constexpr size_t MAX_SCREENS = 16;
-constexpr int INVALID_INDEX = -1;
 constexpr size_t ATTR_VAL_LEN = 64;
 constexpr int KEYBOARD_HEIGHT_PCT = 40;
 constexpr int FULL_SIZE_PCT = 100;
@@ -35,64 +34,26 @@ namespace ClickArea {
     constexpr int IMAGE = 25;
 }
 
-// ============ Shared globals (defined in ui_html.cpp) ============
-
-extern P::Array<UI::Timer> timers;
-extern MPArray<UI::Element> elements;
-extern P::Array<UI::PageGroup> groups;
-extern P::Array<P::String> page_ids;
-extern P::Array<lv_obj_t*> page_objs;
-extern int page_count;
-
-extern P::Array<P::String> s_iconPaths;
-extern P::Array<P::String> s_imagePaths;
-
-extern bool s_in_lvgl_callback;
-
-extern P::String script_code;
-extern P::String script_lang;
-extern P::String app_version;
-extern P::String app_os_requirement;
-extern P::String app_icon;
-extern P::String app_path;
-extern bool app_readonly;
+// ============ Handler callbacks (set by ScriptManager, survive across apps) ============
 
 extern void (*g_onclick_handler)(const char* func_name);
 extern void (*g_ontap_handler)(const char* func_name, int x, int y);
 extern void (*g_onhold_handler)(const char* func_name);
 extern void (*g_onhold_xy_handler)(const char* func_name, int x, int y);
 extern void (*g_state_change_handler)(const char* var_name, const char* value);
-extern bool g_updating_from_binding;
 
-extern lv_obj_t* g_keyboards[MAX_SCREENS];
-
-// ============ Internal functions (defined in ui_html.cpp) ============
+// ============ Internal functions ============
 
 void ui_html_init_internal(void);
 int  ui_html_render_internal(const char* html);
 void ui_clear_internal(void);
-lv_obj_t* ui_get_internal(const char* id);
 void ui_set_text_internal(const char* id, const char* text);
 void ui_show_page_internal(const char* path);
-int  find_page_index(const char* id);
 
-/// Parse coordinate value (px or %) - width based (for x, w)
-/// If parent provided, % is relative to parent; otherwise relative to screen
-/// Parse coordinate value (px or %) - height based (for y, h)
-
-/// Get current state variable value (returns nullptr if not found)
 const char* get_state_value(const char* name);
-
-/// Extract var name from "{varname}" pattern, or pass through plain name
 P::String extractBindVar(const char* bindStr);
-
-/// Navigate to page by href
 void navigate(const char* href);
-
-/// Update all bindings for a state variable
 void ui_update_bindings(const char* varname, const char* value);
-
-/// Render template string, replacing {var} with state values
 P::String render_template(const char* tpl);
 
 /// Descriptor for registering a UI element
@@ -113,14 +74,6 @@ struct ElementDesc {
     int         zIndex      = 0;
 };
 
-/// Register a UI element, returns index in elements[]
-int store_element(ElementDesc d);
-
-/// Set z-index on element by LVGL handle (for CSS)
-void setElementZIndex(lv_obj_t* handle, int z);
-
-/// Shorthand: register a page element
-int store_page(const char* id, lv_obj_t* obj);
 
 // ============ Shared helpers ============
 

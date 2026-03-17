@@ -683,6 +683,21 @@ void Launcher::show(const std::vector<LauncherAppInfo>& apps) {
         createDots(scr, m_numPages);
     }
     
+    // Restore page from before app launch
+    if (m_savedPage > 0 && m_savedPage < m_numPages) {
+        lv_obj_add_flag(m_pages[0], LV_OBJ_FLAG_HIDDEN);
+        lv_obj_clear_flag(m_pages[m_savedPage], LV_OBJ_FLAG_HIDDEN);
+        m_currentPage = m_savedPage;
+        
+        // Update dots
+        if (m_dotsContainer) {
+            for (size_t i = 0; i < m_dots.size(); i++) {
+                lv_obj_set_style_bg_opa(m_dots[i], 
+                    (i == m_savedPage) ? LV_OPA_COVER : LV_OPA_50, 0);
+            }
+        }
+    }
+    
     // Clock timer
     if (m_clockTimer) {
         lv_timer_delete(m_clockTimer);
@@ -719,6 +734,7 @@ void Launcher::release() {
 }
 
 void Launcher::cleanup() {
+    m_savedPage = m_currentPage;
     release();
 }
 

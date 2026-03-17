@@ -16,7 +16,7 @@ namespace UI {
 // ============ Helpers ============
 
 static Element* findCanvas(const char* id) {
-    for (auto& elem : elements) {
+    for (auto& elem : g_app->elements) {
         if (elem->is_canvas && elem->id == id) {
             return elem.get();
         }

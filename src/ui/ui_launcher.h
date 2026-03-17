@@ -81,6 +81,7 @@ private:
     lv_obj_t* m_dotsContainer = nullptr;
     lv_timer_t* m_clockTimer = nullptr;
     size_t m_currentPage = 0;
+    size_t m_savedPage = 0;
     size_t m_numPages = 0;
     
     // Touch tracking
