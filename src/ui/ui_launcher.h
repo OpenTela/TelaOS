@@ -24,7 +24,7 @@ struct LauncherAppInfo {
 /// Launcher UI - displays app grid with pages and clock
 class Launcher {
 public:
-    ~Launcher() { release(); }
+    ~Launcher();
     
     /// Show launcher with given apps
     void show(const std::vector<LauncherAppInfo>& apps);
@@ -65,9 +65,6 @@ private:
     void onTouchStart(int16_t x, int16_t y);
     void onCellClick(size_t appIdx, uint32_t duration);
     void updateClocks();
-    
-    // Private cleanup helper (called from cleanup() and destructor)
-    void release();
     
     // State
     P::Array<LauncherAppInfo> m_apps;

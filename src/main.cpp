@@ -77,7 +77,7 @@ void setup() {
     
     display_lock();
     ui_engine().init();
-    Shade::init();
+    Shade::instance().init();
     display_unlock();
     
     App::Manager::instance().init();

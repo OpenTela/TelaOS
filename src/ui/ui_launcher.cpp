@@ -332,7 +332,7 @@ void Launcher::onGesture(lv_dir_t dir) {
     
     // Swipe down → open shade
     if (dir == LV_DIR_BOTTOM) {
-        Shade::open();
+        Shade::instance().open();
         return;
     }
     
@@ -491,7 +491,7 @@ void Launcher::createAppCell(lv_obj_t* pageObj, size_t appIdx, int x, int y, int
     lv_obj_add_flag(cell, LV_OBJ_FLAG_EVENT_BUBBLE);
     lv_obj_clear_flag(cell, LV_OBJ_FLAG_SCROLLABLE);
     
-    // Heap-allocate callback data (freed in release())
+    // Heap-allocate callback data (freed in ~Launcher())
     auto* cellData = new CellData{this, appIdx};
     m_cellData.push_back(cellData);
     
@@ -707,35 +707,20 @@ void Launcher::show(const std::vector<LauncherAppInfo>& apps) {
     LOG_I(Log::APP, "Launcher shown: %d apps, %d pages", (int)m_apps.size(), (int)m_numPages);
 }
 
-void Launcher::release() {
+Launcher::~Launcher() {
     if (m_clockTimer) {
         lv_timer_delete(m_clockTimer);
         m_clockTimer = nullptr;
     }
-    
-    // Free heap-allocated cell data
-    for (auto* cd : m_cellData) {
-        delete cd;
-    }
-    m_cellData.clear();
-    
-    m_apps.clear();
-    m_pages.clear();
-    m_dots.clear();
-    m_dotsContainer = nullptr;
-    m_icons.clear();
-    m_clockLabels.clear();
-    m_bigDateLabels.clear();
-    m_compactDayLabels.clear();
-    m_compactDateLabels.clear();
-    m_currentPage = 0;
-    m_numPages = 0;
-    m_touchStartX = -1;
+    for (auto* cd : m_cellData) delete cd;
+    // All vectors, strings auto-destroyed
 }
 
 void Launcher::cleanup() {
-    m_savedPage = m_currentPage;
-    release();
+    size_t saved = m_currentPage;
+    this->~Launcher();
+    new (this) Launcher();
+    m_savedPage = saved;
 }
 
 } // namespace UI

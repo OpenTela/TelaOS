@@ -294,7 +294,7 @@ void Manager::init() {
         systemConfig.save();
     }
 
-    Shade::applyConfig();
+    Shade::instance().applyConfig();
 
     scanApps();
 #if defined(PRELOAD_ICONS_TO_PSRAM) && !defined(NO_PNG_ICONS)
@@ -868,7 +868,7 @@ bool Manager::loadApp(const P::String& path) {
         if (fromTop && dy > 0 && dyPct >= SHADE_SWIPE_PCT && dyPct < CONFIRM_SWIPE_PCT && vertical) {
             LOG_D(Log::APP, "Shade! startY=%d%% dy=%d%%", startYPct, dyPct);
             s_appTouchStartY = -1;
-            Shade::open();
+            Shade::instance().open();
             return;
         }
         
