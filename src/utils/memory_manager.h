@@ -15,6 +15,7 @@
  */
 
 #include <cstddef>
+#include <cstdint>
 
 class MemoryManager {
 public:
@@ -25,8 +26,10 @@ public:
         return inst;
     }
 
-    void setMode(Mode m) { m_mode = m; }
+    void setMode(Mode m) { m_mode = m; m_dramLow = false; m_allocCount = 0; }
     Mode mode() const { return m_mode; }
+    
+    void resetPressure() { m_dramLow = false; m_allocCount = 0; }
 
     void* alloc(size_t size);
     void* realloc(void* p, size_t size);
@@ -39,8 +42,11 @@ public:
 private:
     MemoryManager() = default;
     Mode m_mode = Auto;
+    bool m_dramLow = false;
+    uint16_t m_allocCount = 0;
 
     static constexpr size_t DRAM_THRESHOLD = 512;
-    static constexpr size_t DRAM_PRESSURE  = 50000;  // below this, all allocs go to PSRAM
-    static constexpr size_t DRAM_MIN_FREE  = 40000;  // 40KB min free after app load
+    static constexpr size_t DRAM_PRESSURE  = 50000;
+    static constexpr size_t DRAM_MIN_FREE  = 40000;
+    static constexpr uint16_t PRESSURE_CHECK_INTERVAL = 32;
 };

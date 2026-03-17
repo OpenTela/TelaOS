@@ -19,11 +19,17 @@ void* MemoryManager::alloc(size_t size) {
 
         case Auto:
         default: {
-            // Adaptive: when DRAM is low, send everything to PSRAM
-            size_t dramFree = heap_caps_get_free_size(MALLOC_CAP_INTERNAL);
-            if (size <= DRAM_THRESHOLD && dramFree > DRAM_PRESSURE) {
+            if (size <= DRAM_THRESHOLD && !m_dramLow) {
                 void* p = heap_caps_malloc(size, MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT);
-                if (p) return p;
+                if (p) {
+                    if (++m_allocCount >= PRESSURE_CHECK_INTERVAL) {
+                        m_allocCount = 0;
+                        m_dramLow = heap_caps_get_free_size(MALLOC_CAP_INTERNAL) < DRAM_PRESSURE;
+                    }
+                    return p;
+                }
+                // DRAM alloc failed — switch to pressure mode
+                m_dramLow = true;
             }
             return heap_caps_malloc(size, MALLOC_CAP_SPIRAM);
         }

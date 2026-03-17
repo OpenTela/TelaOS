@@ -1925,6 +1925,10 @@ void ui_clear_internal(void) {
     elements.clear();
     s_deferredZIndex.clear();
     s_templates.clear();
+    page_ids.clear();
+    page_objs.clear();
+    timers.clear();
+    styles.clear();
     page_count = 0;
     current_page = 0;
     groups.clear();
