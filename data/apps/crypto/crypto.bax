@@ -1,4 +1,4 @@
-<app version="1.0" os="1.0">
+<app os="1.0" title="Crypto" version="1.0">
   <config>
     <network/>
   </config>

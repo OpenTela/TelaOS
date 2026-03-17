@@ -1,4 +1,4 @@
-<app>
+<app os="1.0" title="Excel" version="1.0">
   <templates>
     <template id="Cell">
       <td><button id="{col}{row}" class="cell" onclick="tap('{col}{row}')" bgcolor="{bg{col}{row}}">{v{col}{row}}</button></td>

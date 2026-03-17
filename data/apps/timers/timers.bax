@@ -1,4 +1,4 @@
-<app version="1.0" os="1.0">
+<app os="1.0" title="Timers" version="1.0">
   <ui default="/main">
     <group id="main" default="stopwatch" orientation="horizontal" indicator="dots">
 

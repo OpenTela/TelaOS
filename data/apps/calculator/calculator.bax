@@ -1,4 +1,4 @@
-<app version="1.1" os="1.0">
+<app os="1.0" title="Calculator" version="1.1">
   <templates>
     <template id="Num">
       <td><button class="btn btn-num" onclick="appendDigit('{n}')">{n}</button></td>

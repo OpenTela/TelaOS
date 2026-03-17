@@ -1,4 +1,4 @@
-<app version="1.0" os="1.0" category="game">
+<app os="1.0" title="Clicker" version="1.0" category="game">
   <ui default="/main">
     <page id="main" bgcolor="#1a1a2e">
       <label align="center" y="8%" color="#ffffff" font="24">КЛИКЕР</label>

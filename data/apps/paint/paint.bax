@@ -1,4 +1,4 @@
-<app version="1.0" os="1.0" category="game">
+<app os="1.0" title="Paint" version="1.0" category="game">
   <ui default="/main">
     <page id="main" bgcolor="#333333">
       <canvas id="canvas" x="5%" y="2%" ondraw="onDraw" w="350" h="300"/>

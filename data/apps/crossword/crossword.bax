@@ -1,4 +1,4 @@
-<app version="1.2" category="game" icon="system:puzzle-game">
+<app os="1.0" title="Crossword" version="1.2" category="game" icon="system:puzzle-game">
   <templates>
     <template id="Cell">
       <td><button id="c{r}{c}" onclick="doTap({r},{c})" class="cell">{v{r}{c}}</button></td>

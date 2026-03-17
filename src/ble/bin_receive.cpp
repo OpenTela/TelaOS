@@ -324,11 +324,31 @@ void process() {
         sendResult(false, "validation failed");
     }
 
+    // Save app name before cleanup clears it
+    P::String appName(s_appName);
+    
     cleanup();
 
     // Refresh launcher so new/updated app appears immediately
     if (saved) {
-        App::Manager::instance().refreshApps();
+        auto& mgr = App::Manager::instance();
+        mgr.refreshApps();
+        
+        // Hot reload: if pushed app is currently running, relaunch it
+        if (!mgr.inLauncher()) {
+            // currentApp = "/apps/name/name.bax" → extract "name"
+            const auto& cur = mgr.currentApp();
+            // Find last '/' before '.bax'
+            size_t lastSlash = cur.rfind('/');
+            size_t dot = cur.rfind('.');
+            if (lastSlash != P::String::npos && dot != P::String::npos && dot > lastSlash) {
+                P::String curName = cur.substr(lastSlash + 1, dot - lastSlash - 1);
+                if (curName == appName) {
+                    LOG_I(Log::APP, "Hot reload: relaunching %s", appName.c_str());
+                    mgr.queueLaunch(appName);
+                }
+            }
+        }
     }
 }
 

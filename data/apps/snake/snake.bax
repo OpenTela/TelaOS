@@ -1,4 +1,4 @@
-<app version="1.0" os="1.0" category="game">
+<app os="1.0" title="Snake" version="1.0" category="game">
   <ui default="/game">
     <page id="game" bgcolor="#1a1a1a">
       <label class="title" align="center" y="2%">Snake Game</label>

@@ -1,4 +1,4 @@
-<app version="1.0" os="1.0">
+<app os="1.0" title="Pomodoro" version="1.0">
   <ui default="/main">
     <group id="main" default="timer" orientation="horizontal" indicator="dots">
 

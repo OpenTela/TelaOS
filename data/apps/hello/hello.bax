@@ -1,4 +1,4 @@
-<app>
+<app os="1.0" title="Hello" version="1.0">
   <ui default="/main">
     <page id="main">
       <label align="center" y="2%" font="32" color="#0ff">

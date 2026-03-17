@@ -1,4 +1,4 @@
-<app version="1.0" category="study" icon="system:puzzle-game">
+<app os="1.0" title="Anki" version="1.0" category="study" icon="system:puzzle-game">
   <ui default="/main">
     <page id="main" bgcolor="#000">
       <!-- Прогресс -->

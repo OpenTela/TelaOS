@@ -1,4 +1,4 @@
-<app title="Word">
+<app os="1.0" title="Word" version="1.0">
   <ui default="/main">
     <page id="main" bgcolor="#000000">
       <label align="center" y="0" w="100%" h="44" bgcolor="#111111" 

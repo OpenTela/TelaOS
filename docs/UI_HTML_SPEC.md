@@ -56,7 +56,7 @@ myapp/
 ## Структура .bax файла
 
 ```html
-<app>
+<app os="1.0" title="My App" version="1.0" category="game" icon="system:puzzle-game">
   <config>
     <network/>  <!-- опционально: включить BLE -->
   </config>
@@ -84,6 +84,21 @@ myapp/
   </style>
 </app>
 ```
+
+### Атрибуты `<app>`
+
+| Атрибут | Описание | Default |
+|---------|----------|---------|
+| `os` | Минимальная версия TelaOS | — |
+| `title` | Название в лаунчере | Имя папки с заглавной |
+| `version` | Версия приложения | — |
+| `category` | Категория (`game`, `study`, ...) | — |
+| `icon` | Иконка (см. ниже) | Авто из `icon.png` или первая буква |
+
+**Иконки (приоритет):**
+1. Файл `icon.png` в папке приложения — используется автоматически, атрибут не нужен
+2. `icon="system:puzzle-game"` — системная из `/system/resources/icons/puzzle-game.png`
+3. Без иконки и без `icon.png` — отображается первая буква title
 
 ---
 
