@@ -1,38 +1,47 @@
-<app version="1.0" category="game" icon="system:puzzle-game">
+<app version="1.2" category="game" icon="system:puzzle-game">
+  <templates>
+    <template id="Cell">
+      <td><button id="c{r}{c}" onclick="tap({r},{c})" class="cell">{v{r}{c}}</button></td>
+    </template>
+    <template id="Row">
+      <tr>
+        <td w="25%"><button id="h{r}" onclick="sel({r})" class="text-muted">{hint{r}}</button></td>
+        <Cell r="{r}" c="1"/>
+        <Cell r="{r}" c="2"/>
+        <Cell r="{r}" c="3"/>
+      </tr>
+    </template>
+    <template id="Key">
+      <td><button onclick="add('{letter}')" class="box-gray">{letter}</button></td>
+    </template>
+  </templates>
+
   <ui default="/main">
     <page id="main" bgcolor="#000">
-      <!-- Классический сканворд 3x3 (магический квадрат!) -->
-
-      <!-- Row 0 -->
-      <button id="h0" x="3%" y="8%" onclick="sel0" class="text-muted">Питомец</button>
-      <button id="c01" x="27%" y="8%" onclick="tap01" class="cell">{v01}</button>
-      <button id="c02" x="51%" y="8%" onclick="tap02" class="cell">{v02}</button>
-      <button id="c03" x="75%" y="8%" onclick="tap03" class="cell">{v03}</button>
-
-      <!-- Row 1 -->
-      <button id="h1" x="3%" y="27%" onclick="sel1" class="text-muted">Жалит</button>
-      <button id="c11" x="27%" y="27%" onclick="tap11" class="cell">{v11}</button>
-      <button id="c12" x="51%" y="27%" onclick="tap12" class="cell">{v12}</button>
-      <button id="c13" x="75%" y="27%" onclick="tap13" class="cell">{v13}</button>
-
-      <!-- Row 2 -->
-      <button id="h2" x="3%" y="46%" onclick="sel2" class="text-muted">Так</button>
-      <button id="c21" x="27%" y="46%" onclick="tap21" class="cell">{v21}</button>
-      <button id="c22" x="51%" y="46%" onclick="tap22" class="cell">{v22}</button>
-      <button id="c23" x="75%" y="46%" onclick="tap23" class="cell">{v23}</button>
-
-      <!-- Вертикальные подсказки -->
-      <label x="27%" y="64%" align="center" class="text-muted-2">Питомец</label>
-      <label x="51%" y="64%" align="center" class="text-muted-2">Жалит</label>
-      <label x="75%" y="64%" align="center" class="text-muted-2">Так</label>
+      <!-- Сетка 3x3 с подсказками -->
+      <table x="3%" y="8%" w="94%" h="55%" cellspacing="2">
+        <Row r="0"/>
+        <Row r="1"/>
+        <Row r="2"/>
+        <tr>
+          <td w="25%"/>
+          <td><label class="text-muted-2">{hint0}</label></td>
+          <td><label class="text-muted-2">{hint1}</label></td>
+          <td><label class="text-muted-2">{hint2}</label></td>
+        </tr>
+      </table>
 
       <!-- Клавиатура -->
-      <button x="3%" y="78%" onclick="kK" class="box-gray">К</button>
-      <button x="19%" y="78%" onclick="kO" class="box-gray">О</button>
-      <button x="35%" y="78%" onclick="kT" class="box-gray">Т</button>
-      <button x="51%" y="78%" onclick="kS" class="box-gray">С</button>
-      <button x="67%" y="78%" onclick="kA" class="box-gray">А</button>
-      <button x="83%" y="78%" onclick="kDel" w="14%" h="24" bgcolor="#a0a0a0" color="#000">←</button>
+      <table x="3%" y="78%" w="94%" h="8%" cellspacing="1%">
+        <tr>
+          <Key letter="К"/>
+          <Key letter="О"/>
+          <Key letter="Т"/>
+          <Key letter="С"/>
+          <Key letter="А"/>
+          <td><button onclick="kDel" class="box-del">←</button></td>
+        </tr>
+      </table>
 
       <button x="35%" y="88%" onclick="nextW" w="30%" h="32" bgcolor="#4caf50" color="#fff">Дальше</button>
     </page>
@@ -45,13 +54,17 @@
   </ui>
 
   <style>
-    .box-gray { bgcolor: #505050; color: #fff; height: 24; width: 15%; }
-    .cell { bgcolor: #333; color: #fff; height: 44; radius: 0; width: 23%; }
-    .text-muted { bgcolor: #1c1c1c; color: #888; font: 16; height: 44; width: 23%; }
-    .text-muted-2 { color: #888; font: 16; width: 23%; }
+    .box-gray { bgcolor: #505050; color: #fff; width: 100%; height: 100%; }
+    .box-del { bgcolor: #a0a0a0; color: #000; width: 100%; height: 100%; }
+    .cell { bgcolor: #333; color: #fff; width: 100%; height: 100%; radius: 0; }
+    .text-muted { bgcolor: #1c1c1c; color: #888; font: 16; width: 100%; height: 100%; }
+    .text-muted-2 { color: #888; font: 16; width: 100%; height: 100%; text-align: center; }
   </style>
 
   <state>
+    <string name="hint0" default="Питомец"/>
+    <string name="hint1" default="Жалит"/>
+    <string name="hint2" default="Так"/>
     <string name="v01" default=""/><string name="v02" default=""/><string name="v03" default=""/>
     <string name="v11" default=""/><string name="v12" default=""/><string name="v13" default=""/>
     <string name="v21" default=""/><string name="v22" default=""/><string name="v23" default=""/>
@@ -137,9 +150,7 @@
         if chkW(i) then done[i]=true else all=false end
       end
       for r = 0, 2 do
-        for c = 1, 3 do
-          color(r,c)
-        end
+        for c = 1, 3 do color(r,c) end
       end
       return all
     end
@@ -160,7 +171,7 @@
       end
     end
 
-    local function tap(r,c)
+    function tap(r,c)
       for i = 1, 6 do
         if not done[i] then
           local wc = words[i][1]
@@ -173,7 +184,7 @@
       end
     end
 
-    local function add(l)
+    function add(l)
       if done[cur] then return end
       local wc = words[cur][1]
       if pos <= 3 then
@@ -201,19 +212,11 @@
       until cur==st
     end
 
-    function sel0() cur=1 pos=1 hl() end
-    function sel1() cur=2 pos=1 hl() end
-    function sel2() cur=3 pos=1 hl() end
-
-    function kK() add("К") end
-    function kO() add("О") end
-    function kT() add("Т") end
-    function kS() add("С") end
-    function kA() add("А") end
-
-    function tap01() tap(0,1) end function tap02() tap(0,2) end function tap03() tap(0,3) end
-    function tap11() tap(1,1) end function tap12() tap(1,2) end function tap13() tap(1,3) end
-    function tap21() tap(2,1) end function tap22() tap(2,2) end function tap23() tap(2,3) end
+    function sel(row)
+      cur = row + 1
+      pos = 1
+      hl()
+    end
 
     function again()
       for i=1,6 do done[i]=false end

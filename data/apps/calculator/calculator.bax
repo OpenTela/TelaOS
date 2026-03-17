@@ -1,38 +1,42 @@
-<app version="1.0" os="1.0">
+<app version="1.1" os="1.0">
+  <templates>
+    <template id="Num">
+      <td><button class="btn btn-num" onclick="appendDigit('{n}')">{n}</button></td>
+    </template>
+    <template id="Func">
+      <td><button class="btn btn-func" onclick="{click}">{label}</button></td>
+    </template>
+    <template id="Op">
+      <td><button class="btn" onclick="{click}" bgcolor="{bg}" color="#fff">{label}</button></td>
+    </template>
+  </templates>
+
   <ui default="/calc">
     <page id="calc" bgcolor="#000000">
-      <!-- Дисплей -->
       <label class="display" align="right" x="12%" y="7%" w="76%" h="10%">{display}</label>
 
-      <!-- Кнопки: table h=75% cellspacing=2%, кнопки заполняют ячейки через CSS -->
       <table x="4%" y="20%" w="92%" h="75%" cellspacing="2%">
         <tr>
-          <td><button class="btn btn-func" onclick="clear">C</button></td>
-          <td><button class="btn btn-func" onclick="negate">+/-</button></td>
-          <td><button class="btn btn-func" onclick="percent">%</button></td>
-          <td><button class="btn" onclick="opDiv" bgcolor="{bgDiv}" color="#fff">/</button></td>
+          <Func click="clear" label="C"/>
+          <Func click="negate" label="+/-"/>
+          <Func click="percent" label="%"/>
+          <Op click="opDiv" bg="{bgDiv}" label="/"/>
         </tr>
         <tr>
-          <td><button class="btn btn-num" onclick="digit7">7</button></td>
-          <td><button class="btn btn-num" onclick="digit8">8</button></td>
-          <td><button class="btn btn-num" onclick="digit9">9</button></td>
-          <td><button class="btn" onclick="opMul" bgcolor="{bgMul}" color="#fff">x</button></td>
+          <Num n="7"/>  <Num n="8"/>  <Num n="9"/>
+          <Op click="opMul" bg="{bgMul}" label="x"/>
         </tr>
         <tr>
-          <td><button class="btn btn-num" onclick="digit4">4</button></td>
-          <td><button class="btn btn-num" onclick="digit5">5</button></td>
-          <td><button class="btn btn-num" onclick="digit6">6</button></td>
-          <td><button class="btn" onclick="opSub" bgcolor="{bgSub}" color="#fff">-</button></td>
+          <Num n="4"/>  <Num n="5"/>  <Num n="6"/>
+          <Op click="opSub" bg="{bgSub}" label="-"/>
         </tr>
         <tr>
-          <td><button class="btn btn-num" onclick="digit1">1</button></td>
-          <td><button class="btn btn-num" onclick="digit2">2</button></td>
-          <td><button class="btn btn-num" onclick="digit3">3</button></td>
-          <td><button class="btn" onclick="opAdd" bgcolor="{bgAdd}" color="#fff">+</button></td>
+          <Num n="1"/>  <Num n="2"/>  <Num n="3"/>
+          <Op click="opAdd" bg="{bgAdd}" label="+"/>
         </tr>
         <tr>
-          <td><button class="btn btn-func" onclick="backspace">DEL</button></td>
-          <td><button class="btn btn-num" onclick="digit0">0</button></td>
+          <Func click="backspace" label="DEL"/>
+          <Num n="0"/>
           <td><button class="btn btn-num" onclick="dot">.</button></td>
           <td><button class="btn btn-eq" onclick="equals">=</button></td>
         </tr>
@@ -76,16 +80,6 @@
       end
     end
 
-    function digit0() appendDigit('0') end
-    function digit1() appendDigit('1') end
-    function digit2() appendDigit('2') end
-    function digit3() appendDigit('3') end
-    function digit4() appendDigit('4') end
-    function digit5() appendDigit('5') end
-    function digit6() appendDigit('6') end
-    function digit7() appendDigit('7') end
-    function digit8() appendDigit('8') end
-    function digit9() appendDigit('9') end
 
     function dot()
       if state.newInput then

@@ -15,7 +15,7 @@ BLE Assistant for TelaOS v1.0
   Ответ:   [id, "ok"|"error", {data}]
 
 Требования:
-  pip install bleak requests
+  pip install bleak requests lz4 Pillow
 
 Запуск:
   python ble_assistant.py              # Поиск FutureClock
@@ -115,13 +115,14 @@ class BLEAssistant:
     async def scan(timeout=5.0):
         """Scan for BLE devices"""
         print(f"Scanning for {timeout}s...")
-        devices = await BleakScanner.discover(timeout=timeout)
+        devices = await BleakScanner.discover(timeout=timeout, return_adv=True)
         
         found = []
-        for d in sorted(devices, key=lambda x: x.rssi, reverse=True):
+        for d, adv in sorted(devices.values(), key=lambda x: x[1].rssi, reverse=True):
             name = d.name or "?"
+            rssi = adv.rssi
             marker = " ◀ " if DEVICE_NAME in (name or "") else "   "
-            print(f"  {d.address}  {d.rssi:4d} dBm  {marker}{name}")
+            print(f"  {d.address}  {rssi:4d} dBm  {marker}{name}")
             if DEVICE_NAME in (name or ""):
                 found.append(d.address)
         
@@ -136,7 +137,7 @@ class BLEAssistant:
             DEVICE_NAME, timeout=timeout
         )
         if device:
-            log("•", f"Found: {device.address} ({device.rssi} dBm)")
+            log("•", f"Found: {device.address}")
             return device.address
         return None
 
@@ -382,26 +383,31 @@ class BLEAssistant:
     async def _exec_cli(self, line):
         """Parse and execute CLI command"""
         parts = line.split(None, 2)
-        if len(parts) < 2:
-            print("  Usage: <subsystem> <cmd> [args...]")
+        if len(parts) < 1:
             return
 
-        subsystem = parts[0]
-        cmd = parts[1]
-        args = []
+        # Single word → default subsystem is "sys"
+        if len(parts) == 1:
+            subsystem = "sys"
+            cmd = parts[0]
+            args = []
+        else:
+            subsystem = parts[0]
+            cmd = parts[1]
+            args = []
 
-        # Parse args from third part
-        if len(parts) > 2:
-            raw = parts[2]
-            # Try JSON array first
-            if raw.startswith("["):
-                try:
-                    args = json.loads(raw)
-                except json.JSONDecodeError:
-                    args = [raw]
-            else:
-                # Split by spaces, respect quotes
-                args = self._split_args(raw)
+            # Parse args from third part
+            if len(parts) > 2:
+                raw = parts[2]
+                # Try JSON array first
+                if raw.startswith("["):
+                    try:
+                        args = json.loads(raw)
+                    except json.JSONDecodeError:
+                        args = [raw]
+                else:
+                    # Split by spaces, respect quotes
+                    args = self._split_args(raw)
 
         # Special: app push <directory>
         if subsystem == "app" and cmd == "push":
@@ -415,7 +421,7 @@ class BLEAssistant:
         global bin_expected_size, bin_buffer
         if subsystem == "sys" and cmd == "screen":
             if not args:
-                args = ["rgb16"]
+                args = ["auto"]
             bin_expected_size = 0
             bin_buffer = bytearray()
 
@@ -432,16 +438,23 @@ class BLEAssistant:
                     break
             
             if len(bin_buffer) >= bin_expected_size:
-                fname = f"screen_{int(time.time())}.bin"
+                raw = bin_buffer[:bin_expected_size]
                 w = data.get("w", 0)
                 h = data.get("h", 0)
                 color = data.get("color", "rgb16")
                 fmt = data.get("format", "raw")
-                fname = f"screen_{w}x{h}_{color}.{fmt}"
+                raw_size = data.get("raw_size", 0)
                 
-                with open(fname, "wb") as f:
-                    f.write(bin_buffer[:bin_expected_size])
-                log("•", f"Saved: {fname} ({bin_expected_size} bytes)")
+                png_name = _decode_screenshot(raw, w, h, color, fmt, raw_size)
+                if png_name:
+                    log("•", f"Saved: {png_name} ({w}x{h}, {color})")
+                else:
+                    # Fallback: save raw binary
+                    os.makedirs("screens", exist_ok=True)
+                    fname = os.path.join("screens", f"screen_{int(time.time())}.{fmt}")
+                    with open(fname, "wb") as f:
+                        f.write(raw)
+                    log("•", f"Saved raw: {fname} ({bin_expected_size} bytes)")
             else:
                 log("✗", f"Binary incomplete: {len(bin_buffer)}/{bin_expected_size}")
 
@@ -546,6 +559,101 @@ class BLEAssistant:
             if not self.connected:
                 log("•", "Reconnecting...")
                 await asyncio.sleep(2)
+
+
+def _decode_screenshot(data, w, h, color, fmt, raw_size):
+    """Decode LZ4-compressed screenshot to PNG. Returns filename or None."""
+    try:
+        import lz4.block
+    except ImportError:
+        log("!", "lz4 not installed (pip install lz4), saving raw")
+        return None
+    try:
+        from PIL import Image
+    except ImportError:
+        log("!", "Pillow not installed (pip install Pillow), saving raw")
+        return None
+    
+    if fmt != "lz4":
+        return None
+    
+    # Decompress LZ4
+    pixels_raw = lz4.block.decompress(bytes(data), uncompressed_size=raw_size)
+    
+    img = Image.new("RGB", (w, h))
+    
+    if color == "pal":
+        # Palette format: [1:count][N*2:palette RGB565][pixels: 4bpp if N<=16, 8bpp if N<=256]
+        pos = 0
+        pal_count = pixels_raw[pos]; pos += 1
+        palette = []
+        for i in range(pal_count):
+            lo = pixels_raw[pos]; hi = pixels_raw[pos + 1]; pos += 2
+            rgb565 = lo | (hi << 8)
+            r = ((rgb565 >> 11) & 0x1F) * 255 // 31
+            g = ((rgb565 >> 5) & 0x3F) * 255 // 63
+            b = (rgb565 & 0x1F) * 255 // 31
+            palette.append((r, g, b))
+        
+        px = img.load()
+        if pal_count <= 16:
+            # 4bpp: 2 pixels per byte (high nibble first)
+            pi = 0
+            for y in range(h):
+                for x in range(w):
+                    byte_idx = pi // 2
+                    if pi % 2 == 0:
+                        idx = (pixels_raw[pos + byte_idx] >> 4) & 0x0F
+                    else:
+                        idx = pixels_raw[pos + byte_idx] & 0x0F
+                    if idx < len(palette):
+                        px[x, y] = palette[idx]
+                    pi += 1
+        else:
+            # 8bpp: 1 pixel per byte
+            for y in range(h):
+                for x in range(w):
+                    idx = pixels_raw[pos + y * w + x]
+                    if idx < len(palette):
+                        px[x, y] = palette[idx]
+    
+    elif color == "rgb16":
+        # RGB565: 2 bytes per pixel (little-endian)
+        px = img.load()
+        for y in range(h):
+            for x in range(w):
+                off = (y * w + x) * 2
+                lo = pixels_raw[off]; hi = pixels_raw[off + 1]
+                rgb565 = lo | (hi << 8)
+                r = ((rgb565 >> 11) & 0x1F) * 255 // 31
+                g = ((rgb565 >> 5) & 0x3F) * 255 // 63
+                b = (rgb565 & 0x1F) * 255 // 31
+                px[x, y] = (r, g, b)
+    
+    elif color == "rgb8":
+        # RGB332: 1 byte per pixel
+        px = img.load()
+        for y in range(h):
+            for x in range(w):
+                v = pixels_raw[y * w + x]
+                r = ((v >> 5) & 0x07) * 255 // 7
+                g = ((v >> 2) & 0x07) * 255 // 7
+                b = (v & 0x03) * 255 // 3
+                px[x, y] = (r, g, b)
+    
+    elif color == "gray":
+        img = Image.frombytes("L", (w, h), bytes(pixels_raw[:w*h]))
+    
+    elif color == "bw":
+        img = Image.frombytes("1", (w, h), bytes(pixels_raw[:(w*h+7)//8]))
+    
+    else:
+        return None
+    
+    os.makedirs("screens", exist_ok=True)
+    fname = os.path.join("screens", f"screen_{int(time.time())}.png")
+    img.save(fname)
+    return fname
 
 
 def _auto_type(s):

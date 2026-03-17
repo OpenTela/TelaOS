@@ -523,9 +523,23 @@ static P::String expand_all_templates(const P::String& html) {
             // Look up template
             auto it = g_app->templates.find(P::String(tagBuf));
             if (it != g_app->templates.end()) {
-                // Found template — parse attributes
+                // Found template — parse attributes (skip quoted values)
                 const char* astart = t;
-                while (t < end && *t != '>' && *t != '/') t++;
+                while (t < end && *t != '>') {
+                    if (*t == '"') {
+                        t++;
+                        while (t < end && *t != '"') t++;
+                        if (t < end) t++;
+                    } else if (*t == '\'') {
+                        t++;
+                        while (t < end && *t != '\'') t++;
+                        if (t < end) t++;
+                    } else if (*t == '/' && t + 1 < end && *(t + 1) == '>') {
+                        break;  // self-close
+                    } else {
+                        t++;
+                    }
+                }
                 const char* aend = t;
                 
                 bool selfClose = (t > p && *t == '/' && t + 1 < end && *(t + 1) == '>');

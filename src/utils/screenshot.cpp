@@ -18,7 +18,7 @@ static ColorFormat parseColorFormat(const char* color) {
     if (strcmp(color, "rgb8") == 0) return COLOR_RGB8;
     if (strcmp(color, "gray") == 0) return COLOR_GRAY;
     if (strcmp(color, "bw") == 0) return COLOR_BW;
-    if (strcmp(color, "pal") == 0) return COLOR_PALETTE;
+    if (strcmp(color, "pal") == 0 || strcmp(color, "auto") == 0) return COLOR_PALETTE;
     return COLOR_RGB16;
 }
 

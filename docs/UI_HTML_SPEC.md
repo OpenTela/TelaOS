@@ -1,11 +1,12 @@
-# UI HTML Specification v0.5
+# UI HTML Specification v0.7
 
 Декларативный язык разметки для создания интерфейсов на ESP32 с LVGL.
 
 ## Changelog
 
+- **v0.7**: `oninput` для input. Canvas: `ondraw`, `ontap`, `onhold`. `onclick` с аргументами. `overflow` для label.
+- **v0.6**: Namespaces (`ui.*`, `app.*`, `net.*`, `timer.*`). Templates + `@for`. `<table>`/`<tr>`/`<td>`. setTimeout порядок аргументов. CSV/YAML API.
 - **v0.5**: z-index (HTML атрибут, CSS, setAttr)
-
 - **v0.4**: Тег `<config>`. Тег `<network/>`
 - **v0.3**: focus(), onenter, onblur, биндинг bgcolor/color, setAttr/getAttr
 - **v0.2**: canvas, image, ресурсы, иконки на кнопках
@@ -59,6 +60,10 @@ myapp/
   <config>
     <network/>  <!-- опционально: включить BLE -->
   </config>
+
+  <templates>
+    <!-- определения шаблонов -->
+  </templates>
   
   <ui default="/main">
     <!-- страницы и группы -->
@@ -73,6 +78,10 @@ myapp/
   <script language="lua">
     -- код скриптов
   </script>
+  
+  <style>
+    /* CSS-подобные стили */
+  </style>
 </app>
 ```
 
@@ -88,7 +97,7 @@ myapp/
 </page>
 ```
 
-Переход: `href="/settings"` или `navigate("/settings")` из Lua.
+Переход: `href="/settings"` или `ui.navigate("/settings")` из Lua.
 
 ### Группы страниц (свайп)
 
@@ -192,7 +201,8 @@ myapp/
 | `radius` | Скругление углов (px) |
 | `z-index` | Порядок наложения (>0 наверх, <0 назад) |
 | `visible` | Видимость (`{var}`) |
-| `class` | CSS класс |
+| `class` | CSS класс (поддерживает `{var}`) |
+| `overflow` | `ellipsis`, `clip`, `scroll` |
 
 ### button
 
@@ -208,16 +218,23 @@ myapp/
 |---------|----------|
 | `x`, `y`, `w`, `h` | Позиция и размер |
 | `align`, `valign` | Позиция элемента |
-| `onclick` | Lua функция при нажатии |
+| `onclick` | Lua выражение при нажатии |
 | `onhold` | Lua функция при удержании |
 | `href` | Навигация на страницу |
 | `icon` | Путь к иконке |
+| `iconsize` | Размер иконки (default: 24) |
 | `bgcolor` | Цвет фона (#RRGGBB или `{var}`) |
 | `color` | Цвет текста (#RRGGBB или `{var}`) |
 | `radius` | Скругление углов |
 | `z-index` | Порядок наложения (>0 наверх, <0 назад) |
 | `visible` | Видимость (`{var}`) |
-| `class` | CSS класс |
+| `class` | CSS класс (поддерживает `{var}`) |
+
+**onclick с аргументами:** если содержит `(`, выполняется как Lua-выражение:
+```html
+<button onclick="appendDigit('7')">7</button>
+<button onclick="doTap(2,3)">Cell</button>
+```
 
 ### slider
 
@@ -256,6 +273,7 @@ myapp/
 | `placeholder` | Текст-подсказка |
 | `password` | Маскировать ввод (true/false) |
 | `onenter` | Lua функция при Enter |
+| `oninput` | Lua функция при каждом нажатии клавиши |
 | `onblur` | Lua функция при потере фокуса |
 | `z-index` | Порядок наложения |
 
@@ -291,6 +309,112 @@ canvas.refresh("draw")
 ```html
 <image x="10" y="10" src="icons/logo.png"/>
 <image x="10" y="10" w="48" h="48" src="icons/icon.png"/>
+```
+
+---
+
+## Table Layout
+
+```html
+<table x="0" y="10%" w="100%" h="60%" cellspacing="2%" bgcolor="#000">
+  <tr h="12%">
+    <td w="20%"><label>Header</label></td>
+    <td><button onclick="doSomething">Click</button></td>
+  </tr>
+</table>
+```
+
+| Тег | Атрибуты | Описание |
+|-----|----------|----------|
+| `<table>` | `x`, `y`, `w`, `h`, `cellspacing`/`gap`, `bgcolor` | Flex-column контейнер |
+| `<tr>` | `h`, `visible`, `bgcolor` | Flex-row (строка) |
+| `<td>` | `w`, `visible`, `bgcolor` | Flex-cell (ячейка). Без `w` → равные доли |
+
+Дочерние виджеты внутри `<td>` заполняют ячейку целиком.
+
+---
+
+## Templates
+
+### Определение
+
+```html
+<templates>
+  <template id="Num">
+    <td><button class="btn" onclick="appendDigit('{n}')">{n}</button></td>
+  </template>
+</templates>
+```
+
+Правила:
+- `id` — PascalCase (начинается с заглавной)
+- `{param}` подставляются из атрибутов вызова
+
+### Вызов
+
+```html
+<Num n="7"/>
+```
+
+### Вложенные шаблоны
+
+```html
+<template id="Cell">
+  <td><button id="{col}{row}" bgcolor="{bg{col}{row}}">{v{col}{row}}</button></td>
+</template>
+
+<template id="DataRow">
+  <tr>
+    <Cell col="A" row="{row}"/>
+    <Cell col="B" row="{row}"/>
+  </tr>
+</template>
+```
+
+Multi-pass: `{bg{col}{row}}` → `{bgA1}` → state binding.
+
+---
+
+## @for Directive
+
+```
+@for(variable in start..end [step N]) {
+  body
+}
+```
+
+### Примеры
+
+```html
+@for(i in 0..9) {
+  <button id="b_{i}">{i}</button>
+}
+
+@for(r in 1..8) {
+  <DataRow row="{r}"/>
+}
+```
+
+### Вложенные циклы
+
+```html
+@for(r in 1..3) {
+  <tr>
+    @for(c in 0..5) {
+      <td><button>R{r}C{c}</button></td>
+    }
+  </tr>
+}
+```
+
+### Pipeline обработки
+
+```
+Raw HTML → parse_templates() → цикл (max 8 проходов):
+  ├── expand @for
+  ├── expand <PascalCase/>
+  └── если стабильно → стоп
+→ Expanded HTML → создание виджетов
 ```
 
 ---
@@ -352,11 +476,15 @@ canvas.refresh("draw")
 
 ```html
 <button onclick="myFunction">Click</button>
+<button onclick="doTap(1,2)">With args</button>
 <button onhold="longPress">Hold me</button>
 <slider onchange="onValueChange"/>
 <switch onchange="onToggle"/>
-<input onenter="onSubmit" onblur="onLostFocus"/>
+<input onenter="onSubmit" oninput="onKeystroke" onblur="onLostFocus"/>
+<canvas id="c" ondraw="paint" ontap="tap" onhold="hold"/>
 ```
+
+**onclick с аргументами:** если значение содержит `(`, вызывается `execute()` (полное Lua-выражение), иначе `call()` (имя функции).
 
 ---
 
@@ -369,7 +497,7 @@ canvas.refresh("draw")
 
 ---
 
-## Скрипты (Lua)
+## Lua API
 
 ```html
 <script language="lua">
@@ -378,74 +506,85 @@ canvas.refresh("draw")
     local m = os.date("%M")
     state.time = h .. ":" .. m
   end
-  
-  function onBrightnessChange()
-    print("Brightness: " .. state.brightness)
-  end
 </script>
 ```
 
-### Доступные API
+### Namespaces
 
-**State:**
-- `state.varName` — чтение/запись переменных
+Все функции доступны через namespace и как глобальные алиасы для обратной совместимости.
 
-**Навигация:**
-- `navigate("/page_id")` — переход на страницу
+#### ui.* — управление интерфейсом
 
-**UI:**
-- `focus("widgetId")` — установить фокус на input
-- `setAttr("id", "attr", "value")` — изменить атрибут
-- `getAttr("id", "attr")` — получить атрибут
+| Функция | Описание |
+|---------|----------|
+| `ui.navigate("/page")` | Переход на страницу |
+| `ui.focus("widgetId")` | Фокус на input |
+| `ui.setAttr("id", "attr", "value")` | Изменить атрибут |
+| `ui.getAttr("id", "attr")` | Получить атрибут |
+| `ui.freeze()` | Заморозить обновления UI |
+| `ui.unfreeze()` | Разморозить обновления UI |
+
+**Алиасы:** `navigate()`, `focus()`, `setAttr()`, `getAttr()`
 
 **setAttr/getAttr атрибуты:** `bgcolor`, `color`, `text`, `visible`, `x`, `y`, `w`, `h`, `z-index`
 
-**Canvas:**
-- `canvas.clear(id, color)`
-- `canvas.rect(id, x, y, w, h, color)`
-- `canvas.pixel(id, x, y, color)`
-- `canvas.line(id, x1, y1, x2, y2, color)`
-- `canvas.circle(id, cx, cy, r, color)`
-- `canvas.refresh(id)`
+#### app.* — управление приложением
 
-**Система:**
-- `print(...)` — вывод в консоль
-- `exit()` — выйти из приложения в launcher
-- `app.launch(name)` — запустить другое приложение
-- `setTimeout(ms, callback)` — однократный таймер
+| Функция | Описание |
+|---------|----------|
+| `app.exit([code[, msg]])` | Выйти в launcher |
+| `app.launch(name)` | Запустить другое приложение |
 
-**Время:**
-- `os.date()` — работает при синхронизированном времени (BLE sync/NTP/RTC)
-- Для счётчика используйте локальную переменную + таймер:
+**Алиас:** `exit()`
+
+#### timer.* — таймеры из Lua
+
+| Функция | Описание |
+|---------|----------|
+| `timer.once(callback, ms)` | Однократный таймер |
+| `timer.interval(callback, ms)` | Повторяющийся таймер |
+| `timer.clear(name)` | Отменить таймер по имени |
+
+`callback` — строка `"funcName"` или function reference.
+
+**Алиас:** `setTimeout(callback, ms)` = `timer.once()`
+
+**⚠️ Порядок аргументов:** callback первый, ms второй.
+
 ```lua
-local sec = 0
-function tick()
-  sec = sec + 1
-  state.time = string.format("%02d:%02d", sec / 60, sec % 60)
-end
+timer.once("gameTick", 200)            -- string callback
+timer.once(function() doStuff() end, 500) -- function callback
+setTimeout("gameTick", 200)            -- alias
 ```
 
-**Сеть (требует `<network/>`):**
-- `fetch(options, callback)` — HTTP запрос через BLE bridge
-- `net.connected()` — проверка BLE подключения (returns bool)
+#### net.* — сеть
+
+| Функция | Описание |
+|---------|----------|
+| `net.fetch(opts, callback)` | HTTP запрос через BLE bridge |
+| `net.connected()` | Проверка BLE подключения (bool) |
+
+**Алиас:** `fetch()`
 
 **Опции fetch:**
+
 | Поле | Описание | Default |
 |------|----------|---------|
 | `url` | URL запроса | required |
 | `method` | HTTP метод | `"GET"` |
 | `body` | Тело запроса | — |
-| `format` | `"json"` — body придёт как Lua таблица | — |
+| `format` | `"json"` — body как Lua таблица | — |
 | `authorize` | `true` — bridge подставит API ключи | `false` |
 | `fields` | Список полей для выборки из JSON | — |
 
 **Ответ callback(r):**
+
 | Поле | Описание |
 |------|----------|
 | `r.status` | HTTP код (200, 404...) |
-| `r.body` | Тело ответа (string или table при `format="json"`) |
+| `r.body` | Тело ответа (string или table) |
 | `r.ok` | `true` если status 200-299 |
-| `r.error` | Текст ошибки (при проблемах) |
+| `r.error` | Текст ошибки |
 
 **Пример:**
 ```lua
@@ -460,6 +599,71 @@ fetch({
   end
 end)
 ```
+
+#### canvas.* — рисование
+
+| Функция | Описание |
+|---------|----------|
+| `canvas.clear(id, color)` | Очистить |
+| `canvas.rect(id, x, y, w, h, color)` | Прямоугольник |
+| `canvas.pixel(id, x, y, color)` | Пиксель |
+| `canvas.line(id, x1, y1, x2, y2, color)` | Линия |
+| `canvas.circle(id, cx, cy, r, color)` | Круг |
+| `canvas.refresh(id)` | Обновить экран |
+
+#### os.* — время
+
+| Функция | Описание |
+|---------|----------|
+| `os.date(fmt)` | Форматированная дата |
+| `os.date("*t")` | Таблица `{year,month,day,hour,min,sec,wday,yday}` |
+| `os.time()` | Unix timestamp (секунды) |
+| `os.time({year,month,day,...})` | Timestamp из таблицы |
+
+**Счётчик без RTC:** локальная переменная + таймер:
+```lua
+local sec = 0
+function tick()
+  sec = sec + 1
+  state.time = string.format("%02d:%02d", sec / 60, sec % 60)
+end
+```
+
+#### json.* — JSON
+
+| Функция | Описание |
+|---------|----------|
+| `json.parse(s)` / `json.decode(s)` | JSON string → Lua table |
+| `json.stringify(t)` / `json.encode(t)` | Lua table → JSON string |
+
+#### CSV.* — работа с CSV
+
+| Функция | Описание |
+|---------|----------|
+| `CSV.load(filename)` | Загрузить из файла |
+| `CSV.loadText(text)` | Парсить из строки |
+| `csv:records(count?)` | Получить записи как dict'ы |
+| `csv:rows(count?)` | Получить записи как массивы |
+| `csv:add(record)` | Добавить запись |
+| `csv:save(onlyNew?)` | Сохранить в файл |
+
+#### YAML.* — работа с YAML
+
+| Функция | Описание |
+|---------|----------|
+| `YAML.load(filename)` | Загрузить из файла |
+| `YAML.loadText(text)` | Парсить из строки |
+| `yaml:get("a.b.c")` | Получить значение |
+| `yaml:set("a.b.c", v)` | Установить значение |
+| `yaml:tree()` | Lua table (reference) |
+| `yaml:save(filename?)` | Сохранить в файл |
+
+#### Прочее
+
+| Функция | Описание |
+|---------|----------|
+| `print(...)` | Вывод в консоль |
+| `state.varName` | Чтение/запись переменных |
 
 ---
 
@@ -482,13 +686,25 @@ end)
 | CSS | Описание |
 |-----|----------|
 | `color` | Цвет текста |
-| `bgcolor` / `background-color` | Цвет фона |
+| `bgcolor` / `background` / `background-color` | Цвет фона |
 | `font` / `font-size` | Размер шрифта |
 | `radius` / `border-radius` | Скругление |
 | `z-index` | Порядок наложения |
 | `width`, `height` | Размер |
 | `left`, `top` | Позиция |
 | `padding` | Отступ (+ `-left`, `-right`, `-top`, `-bottom`) |
+| `opacity` | Прозрачность |
+| `text-align` | Выравнивание текста |
+
+**Селекторы:**
+- `button` — тег
+- `.primary` — класс
+- `button.primary` — compound (тег + класс)
+- `.a, .b` — группировка
+
+**Специфичность:** tag(1) < class(10) < tag.class(11) < tag.class1.class2(21)
+
+**Динамический класс:** `class="{var}"` — CSS пересчитывается при изменении state.
 
 ---
 

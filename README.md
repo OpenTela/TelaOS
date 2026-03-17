@@ -60,6 +60,8 @@ Production apps ship with the firmware in `data/apps/`. The rest live in `experi
 ```
   .bax app (HTML + CSS + Lua)
          ↓
+  Preprocessor ── templates, @for loops, multi-pass expansion
+         ↓
   UI Engine ── parses markup, builds widget tree
   State    ── reactive bindings, two-way sync
   Lua VM   ── sandboxed scripts, timers, canvas API
@@ -94,9 +96,23 @@ A `.bax` file is self-contained — UI, state, logic, styles:
     <network/>              <!-- optional: internet via BLE bridge -->
   </config>
 
+  <templates>
+    <template id="MyButton">
+      <td><button class="{cls}" onclick="{click}">{label}</button></td>
+    </template>
+  </templates>
+
   <ui default="/main">
     <group id="main" orientation="horizontal" indicator="dots">
-      <page id="home">...</page>
+      <page id="home">
+        <!-- Usage: -->
+        <table x="5%" y="80%" w="90%" h="40">
+          <tr>
+            <MyButton cls="primary" click="save" label="Save"/>
+            <MyButton cls="danger" click="reset" label="Reset"/>
+          </tr>
+        </table>
+      </page>
       <page id="settings">...</page>
     </group>
   </ui>
@@ -124,7 +140,30 @@ A `.bax` file is self-contained — UI, state, logic, styles:
 
 ### Widgets
 
-`label`, `button`, `slider`, `switch`, `input`, `canvas`, `image` — with positioning (`x`, `y`, `w`, `h` in px or %), alignment (`align="center center"`), colors, fonts (16/32/48/72px).
+`label`, `button`, `slider`, `switch`, `input`, `canvas`, `image`, `table`/`tr`/`td` — with positioning (`x`, `y`, `w`, `h` in px or %), alignment (`align="center center"`), colors, fonts (16/32/48/72px).
+
+### Templates & Loops
+
+Reusable components and compile-time code generation:
+
+```xml
+<templates>
+  <template id="Cell">
+    <td><button id="{col}{row}" onclick="tap('{col}{row}')">{v{col}{row}}</button></td>
+  </template>
+</templates>
+
+<!-- Generates 8×6 = 48 cells from 3 lines -->
+@for(r in 1..8) {
+  <tr>
+    @for(c in 0..5) {
+      <Cell col="{c}" row="{r}"/>
+    }
+  </tr>
+}
+```
+
+Templates nest, support attribute substitution, and expand in multiple passes.
 
 ### Bindings
 
@@ -144,6 +183,13 @@ navigate("/settings")            -- page navigation
 focus("inputId")                 -- keyboard focus
 setAttr("btn1", "bgcolor", "#f00")  -- imperative styling
 canvas.rect("c", 10, 10, 50, 50, "#ff0000")  -- 2D drawing
+
+-- onclick with arguments (from templates)
+-- <button onclick="tap('A1')"> → calls tap('A1') directly
+function tap(id)
+  state.selected = id
+end
+
 fetch({url="https://...", authorize=true, format="json"}, function(r)
   -- r.body is already a Lua table when format="json"
   -- authorize=true: BLE bridge adds API credentials
@@ -200,7 +246,7 @@ assistant> app push myapp
 ```
 src/
 ├── core/           # app manager, state store, script engine
-├── ui/             # HTML parser, CSS parser, widget builder, launcher
+├── ui/             # HTML parser, CSS parser, widget builder, launcher, BaxApp
 ├── engines/lua/    # Lua VM, timers, fetch, canvas bindings
 ├── console/        # command protocol (Serial + BLE transport)
 ├── ble/            # BLE bridge, binary transfer
@@ -222,12 +268,12 @@ scripts/            # build scripts (icons, resources)
 
 ## Memory architecture
 
-LVGL objects live in PSRAM (8MB). DRAM is reserved for fast draw operations (custom allocator, 512B threshold). Display buffer auto-sizes at boot.
+LVGL objects live in PSRAM (8MB). DRAM is reserved for fast draw operations (adaptive allocator with pressure detection). Display buffer auto-sizes based on app complexity — shrinks for heavy apps like Excel, restores for simple ones.
 
 ```
 DRAM (320KB total)
-  ├── draw temps, masks (<512B allocs)
-  ├── display buffer (28-112KB adaptive)
+  ├── draw temps, masks (<512B allocs, adaptive threshold)
+  ├── display buffer (28-112KB, auto-sized per app)
   └── BLE stack (~40KB when active)
 
 PSRAM (8MB)
@@ -236,104 +282,180 @@ PSRAM (8MB)
   └── screenshot buffer
 ```
 
+App state is owned by `BaxApp` — a single RAII object. Switching apps destroys the old one (all LVGL widgets, vectors, strings freed automatically via destructor), then constructs a fresh one. No manual `.clear()` lists.
+
 ## Examples
 
 <details>
-<summary><b>Pomodoro timer</b> — multi-page, dynamic CSS classes, sliders</summary>
+<summary><b>Dice</b> — minimal app (20 lines)</summary>
 
 ```xml
 <app>
   <ui default="/main">
-    <group id="main" default="timer" orientation="horizontal" indicator="dots">
-      <page id="timer">
-        <label class="{modeClass}" align="center" y="8%">{mode}</label>
-        <label align="center" y="25%" color="#fff" font="72">{timeDisplay}</label>
-        <button class="{startBtnClass}" x="10%" y="68%" w="38%" h="45" onclick="toggleTimer">
-          {startBtnText}
-        </button>
-        <button class="btn btn-stop" x="52%" y="68%" w="38%" h="45" onclick="resetTimer">
-          Reset
-        </button>
-      </page>
+    <page id="main" bgcolor="#1a1a2e">
+      <label align="center" y="8%" color="#fff" font="24">DICE</label>
+      <label align="center" y="40%" color="#f1c40f" font="72">{result}</label>
+      <button align="center" y="70%" w="70%" h="60" bgcolor="#e74c3c" onclick="roll">ROLL</button>
+    </page>
+  </ui>
+  <state>
+    <string name="result" default="?"/>
+  </state>
+  <script language="lua">
+    function roll()
+      state.result = tostring(math.random(1, 6))
+    end
+  </script>
+</app>
+```
+</details>
 
-      <page id="settings">
-        <label align="center" y="5%" color="#fff" font="32">Settings</label>
-        <label x="5%" y="18%" color="#888">Work: {workMins} min</label>
-        <slider x="5%" y="25%" w="90%" min="1" max="60" bind="workMins"/>
-        <label x="5%" y="38%" color="#888">Break: {breakMins} min</label>
-        <slider x="5%" y="45%" w="90%" min="1" max="30" bind="breakMins"/>
-      </page>
-    </group>
+<details>
+<summary><b>Calculator</b> — templates, table layout, CSS</summary>
+
+```xml
+<app>
+  <templates>
+    <template id="Num">
+      <td><button class="btn btn-num" onclick="appendDigit('{n}')">{n}</button></td>
+    </template>
+    <template id="Func">
+      <td><button class="btn btn-func" onclick="{click}">{label}</button></td>
+    </template>
+    <template id="Op">
+      <td><button class="btn" onclick="{click}" bgcolor="{bg}" color="#fff">{label}</button></td>
+    </template>
+  </templates>
+
+  <ui default="/calc">
+    <page id="calc" bgcolor="#000">
+      <label class="display" align="right" x="12%" y="7%" w="76%" h="10%">{display}</label>
+
+      <table x="4%" y="20%" w="92%" h="75%" cellspacing="2%">
+        <tr>
+          <Func click="clear" label="C"/>
+          <Func click="negate" label="+/-"/>
+          <Func click="percent" label="%"/>
+          <Op click="opDiv" bg="{bgDiv}" label="/"/>
+        </tr>
+        <tr>
+          <Num n="7"/>  <Num n="8"/>  <Num n="9"/>
+          <Op click="opMul" bg="{bgMul}" label="x"/>
+        </tr>
+        <tr>
+          <Num n="4"/>  <Num n="5"/>  <Num n="6"/>
+          <Op click="opSub" bg="{bgSub}" label="-"/>
+        </tr>
+        <tr>
+          <Num n="1"/>  <Num n="2"/>  <Num n="3"/>
+          <Op click="opAdd" bg="{bgAdd}" label="+"/>
+        </tr>
+        <tr>
+          <Func click="backspace" label="DEL"/>
+          <Num n="0"/>
+          <td><button class="btn btn-num" onclick="dot">.</button></td>
+          <td><button class="btn btn-eq" onclick="equals">=</button></td>
+        </tr>
+      </table>
+    </page>
   </ui>
 
   <state>
-    <string name="mode" default="WORK"/>
-    <string name="modeClass" default="mode-work"/>
-    <string name="timeDisplay" default="25:00"/>
-    <string name="startBtnText" default="Start"/>
-    <string name="startBtnClass" default="btn btn-start"/>
-    <int name="workMins" default="25"/>
-    <int name="breakMins" default="5"/>
-    <int name="timeLeft" default="1500"/>
-    <bool name="running" default="false"/>
+    <string name="display" default="0"/>
+    <string name="op" default=""/>
+    <float name="prev" default="0"/>
+    <bool name="newInput" default="true"/>
+    <string name="bgAdd" default="#ff9500"/>
+    <string name="bgSub" default="#ff9500"/>
+    <string name="bgMul" default="#ff9500"/>
+    <string name="bgDiv" default="#ff9500"/>
   </state>
 
-  <timer interval="1000" call="tick"/>
-
   <script language="lua">
-    function formatTime(s)
-      return string.format('%02d:%02d', math.floor(s/60), s%60)
+    local OP_NORMAL = "#ff9500"
+    local OP_ACTIVE = "#ffc966"
+
+    local function resetOpBtns()
+      state.bgAdd = OP_NORMAL; state.bgSub = OP_NORMAL
+      state.bgMul = OP_NORMAL; state.bgDiv = OP_NORMAL
     end
 
-    function tick()
-      if not state.running then return end
-      state.timeLeft = state.timeLeft - 1
-      state.timeDisplay = formatTime(state.timeLeft)
-      if state.timeLeft <= 0 then
-        if state.mode == 'WORK' then
-          state.mode = 'BREAK'
-          state.modeClass = 'mode-break'
-          state.timeLeft = state.breakMins * 60
-        else
-          state.mode = 'WORK'
-          state.modeClass = 'mode-work'
-          state.timeLeft = state.workMins * 60
-        end
-        state.timeDisplay = formatTime(state.timeLeft)
+    function appendDigit(d)
+      if state.newInput then
+        state.display = d; state.newInput = false; resetOpBtns()
+      else
+        state.display = (state.display == '0') and d or (state.display .. d)
       end
     end
 
-    function toggleTimer()
-      state.running = not state.running
-      state.startBtnText = state.running and 'Pause' or 'Start'
-      state.startBtnClass = state.running and 'btn btn-pause' or 'btn btn-start'
+    function dot()
+      if state.newInput then
+        state.display = '0.'; state.newInput = false; resetOpBtns()
+      elseif not string.find(state.display, '%.') then
+        state.display = state.display .. '.'
+      end
     end
 
-    function resetTimer()
-      state.running = false
-      state.mode = 'WORK'
-      state.modeClass = 'mode-work'
-      state.timeLeft = state.workMins * 60
-      state.timeDisplay = formatTime(state.timeLeft)
-      state.startBtnText = 'Start'
-      state.startBtnClass = 'btn btn-start'
+    function clear()
+      state.display = '0'; state.op = ''; state.prev = 0
+      state.newInput = true; resetOpBtns()
+    end
+
+    function backspace()
+      state.display = #state.display > 1
+        and string.sub(state.display, 1, -2) or '0'
+    end
+
+    function negate()
+      state.display = tostring(-(tonumber(state.display) or 0))
+    end
+
+    function percent()
+      state.display = tostring((tonumber(state.display) or 0) / 100)
+    end
+
+    function setOp(newOp, bgVar)
+      if state.op ~= '' and not state.newInput then equals() end
+      state.prev = tonumber(state.display) or 0
+      state.op = newOp; state.newInput = true
+      resetOpBtns(); state[bgVar] = OP_ACTIVE
+    end
+
+    function opAdd() setOp('+', 'bgAdd') end
+    function opSub() setOp('-', 'bgSub') end
+    function opMul() setOp('*', 'bgMul') end
+    function opDiv() setOp('/', 'bgDiv') end
+
+    function equals()
+      local a, b = state.prev, tonumber(state.display) or 0
+      local r = b
+      if state.op == '+' then r = a + b
+      elseif state.op == '-' then r = a - b
+      elseif state.op == '*' then r = a * b
+      elseif state.op == '/' then
+        if b == 0 then state.display = 'Err'; state.op = ''; return end
+        r = a / b
+      end
+      state.display = (r == math.floor(r))
+        and tostring(math.floor(r)) or string.format('%.6g', r)
+      state.op = ''; state.newInput = true; resetOpBtns()
     end
   </script>
 
   <style>
-    .mode-work { color: #e74c3c; font: 32; }
-    .mode-break { color: #2ecc71; font: 32; }
-    .btn { radius: 8; }
-    .btn-start { background: #2ecc71; color: #fff; }
-    .btn-pause { background: #f39c12; color: #000; }
-    .btn-stop { background: #e74c3c; color: #fff; }
+    button { width: 100%; height: 100%; }
+    .display { background: #1c1c1c; color: #fff; font-size: 32; border-radius: 8; }
+    .btn { border-radius: 12px; }
+    .btn-num { background: #505050; color: #fff; }
+    .btn-func { background: #a0a0a0; color: #000; }
+    .btn-eq { background: #ff9500; color: #fff; }
   </style>
 </app>
 ```
 </details>
 
 <details>
-<summary><b>Weather</b> — network fetch, JSON parsing, BLE bridge</summary>
+<summary><b>Weather</b> — internet via BLE bridge, JSON parsing</summary>
 
 ```xml
 <app>
@@ -344,7 +466,7 @@ PSRAM (8MB)
   <ui default="/main">
     <page id="main">
       <label align="center" y="10%" color="#fff" font="48">{city}</label>
-      <label align="center" y="30%" color="#fff" font="72">{temp}°C</label>
+      <label align="center" y="30%" color="#fff" font="72">{temp}</label>
       <label align="center" y="50%" color="#888">{description}</label>
       <label visible="{isLoading}" align="center" y="70%" color="#ff0">Loading...</label>
       <button align="center" y="80%" w="50%" h="40" bgcolor="#06f" onclick="refresh">
@@ -362,183 +484,21 @@ PSRAM (8MB)
 
   <script language="lua">
     function refresh()
-      if not net.connected() then
-        state.description = "No BLE!"
-        return
-      end
-
       state.isLoading = "true"
       fetch({
-        url = "https://api.openweathermap.org/data/2.5/weather?q="
-              .. state.city,
-        authorize = true,
-        format = "json",
+        url = "https://api.openweathermap.org/data/2.5/weather?q=" .. state.city,
+        authorize = true, format = "json",
         fields = {"main.temp", "weather[0].description"}
       }, function(r)
         state.isLoading = "false"
         if r.ok then
           state.temp = math.floor(r.body["main.temp"]) .. "°C"
           state.description = r.body["weather[0].description"]
-        else
-          state.description = r.error or ("Error " .. r.status)
         end
       end)
     end
 
     refresh()
-  </script>
-</app>
-```
-</details>
-
-<details>
-<summary><b>Snake game</b> — canvas rendering, touch input, game loop</summary>
-
-```xml
-<app>
-  <ui default="/game">
-    <page id="game" bgcolor="#1a1a1a">
-      <canvas id="c" x="5%" y="5%" w="350" h="350" ontap="handleTap"/>
-      <label align="center" y="88%" color="#fff">Score: {score}</label>
-      <button x="5%" y="93%" w="43%" h="30" bgcolor="#2ecc71" onclick="startGame">START</button>
-      <button x="52%" y="93%" w="43%" h="30" bgcolor="#e74c3c" onclick="stopGame">STOP</button>
-    </page>
-  </ui>
-
-  <state>
-    <int name="score" default="0"/>
-  </state>
-
-  <timer interval="150" call="tick"/>
-
-  <script language="lua">
-    local W, H, CELL = 350, 350, 14
-    local snake, food, dir, running = {}, {}, {}, false
-
-    function startGame()
-      snake = {{x=10,y=10},{x=9,y=10},{x=8,y=10}}
-      dir = {x=1, y=0}
-      state.score = 0
-      running = true
-      placeFood()
-    end
-
-    function stopGame() running = false end
-
-    function placeFood()
-      food = {x=math.random(0,W/CELL-1), y=math.random(0,H/CELL-1)}
-    end
-
-    function handleTap(x, y)
-      if not running then return end
-      local cx = W / 2
-      local cy = H / 2
-      local dx, dy = x - cx, y - cy
-      if math.abs(dx) > math.abs(dy) then
-        dir = dx > 0 and {x=1,y=0} or {x=-1,y=0}
-      else
-        dir = dy > 0 and {x=0,y=1} or {x=0,y=-1}
-      end
-    end
-
-    function tick()
-      if not running then return end
-      local head = {x=snake[1].x+dir.x, y=snake[1].y+dir.y}
-      if head.x<0 or head.y<0 or head.x>=W/CELL or head.y>=H/CELL then
-        running = false; return
-      end
-      table.insert(snake, 1, head)
-      if head.x==food.x and head.y==food.y then
-        state.score = state.score + 1
-        placeFood()
-      else
-        table.remove(snake)
-      end
-      render()
-    end
-
-    function render()
-      canvas.clear("c", "#1a1a1a")
-      canvas.rect("c", food.x*CELL, food.y*CELL, CELL-1, CELL-1, "#e74c3c")
-      for i, s in ipairs(snake) do
-        local color = i == 1 and "#2ecc71" or "#27ae60"
-        canvas.rect("c", s.x*CELL, s.y*CELL, CELL-1, CELL-1, color)
-      end
-      canvas.refresh("c")
-    end
-
-    render()
-  </script>
-</app>
-```
-</details>
-
-<details>
-<summary><b>Flappy Bird</b> — physics, collision, canvas animation</summary>
-
-```xml
-<app>
-  <ui default="/game">
-    <page id="game" bgcolor="#87CEEB">
-      <canvas id="screen" x="5%" y="10%" w="350" h="280"/>
-      <label align="center" y="80%" color="#000">Score: {score}</label>
-      <button x="5%" y="91%" w="43%" h="40" bgcolor="#f60" onclick="jump">JUMP</button>
-      <button x="52%" y="91%" w="43%" h="40" bgcolor="#0a0" onclick="startGame">START</button>
-    </page>
-  </ui>
-
-  <state>
-    <int name="score" default="0"/>
-    <float name="birdY" default="140"/>
-    <float name="birdVel" default="0"/>
-    <int name="pipeX" default="400"/>
-    <int name="pipeGap" default="120"/>
-    <bool name="running" default="false"/>
-  </state>
-
-  <timer interval="33" call="tick"/>
-
-  <script language="lua">
-    local W, H = 350, 280
-    local GRAVITY, JUMP_VEL = 0.8, -10
-
-    function render()
-      canvas.clear("screen", 0x87CEEB)
-      canvas.rect("screen", 0, H-20, W, 20, 0x8B4513)
-      local gy = state.pipeGap
-      canvas.rect("screen", state.pipeX, 0, 50, gy-40, 0x00AA00)
-      canvas.rect("screen", state.pipeX, gy+40, 50, H, 0x00AA00)
-      canvas.rect("screen", 50, state.birdY-10, 20, 20, 0xFFFF00)
-      canvas.refresh("screen")
-    end
-
-    function tick()
-      if not state.running then return end
-      state.birdVel = state.birdVel + GRAVITY
-      state.birdY = state.birdY + state.birdVel
-      state.pipeX = state.pipeX - 4
-      if state.pipeX < -50 then
-        state.pipeX = W
-        state.pipeGap = math.random(60, H-80)
-        state.score = state.score + 1
-      end
-      if state.birdY < 10 or state.birdY > H-30 then
-        state.running = false
-      end
-      render()
-    end
-
-    function jump()
-      if state.running then state.birdVel = JUMP_VEL end
-    end
-
-    function startGame()
-      state.score = 0; state.birdY = 140; state.birdVel = 0
-      state.pipeX = 400; state.running = true
-      render()
-    end
-
-    render()
   </script>
 </app>
 ```
