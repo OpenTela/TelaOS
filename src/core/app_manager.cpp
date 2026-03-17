@@ -16,6 +16,7 @@
 #include "engines/lua/lua_system.h"
 #include "engines/bf/bf_engine.h"
 #include "utils/log_config.h"
+#include "utils/memory_manager.h"
 #include "_generated_icons.h"
 #include "esp_heap_caps.h"
 #include <Arduino.h>
@@ -624,10 +625,17 @@ void Manager::showLauncher() {
     
     LOG_I(Log::APP, "Heap before launcher: %d bytes", (int)ESP.getFreeHeap());
     
-    // Restore display buffer to boot level — launcher needs smooth swipe rendering
+    // Restore display buffer — try boot level, fall back to smaller if fragmented
+    int curLines = display_get_buffer_lines();
     int bootLines = display_get_boot_lines();
-    if (display_get_buffer_lines() < bootLines) {
-        display_set_buffer((DisplayBuffer)bootLines);
+    if (curLines < bootLines) {
+        static const DisplayBuffer chain[] = { BufferMax, BufferOptimal, BufferSmall };
+        for (int i = 0; i < 3; i++) {
+            int target = static_cast<int>(chain[i]);
+            if (target <= curLines) break;  // already at or above this level
+            if (target > bootLines) continue;  // don't exceed boot ceiling
+            if (display_set_buffer(chain[i])) break;  // success
+        }
     }
     
     // Convert AppInfo to LauncherAppInfo
@@ -742,6 +750,11 @@ bool Manager::loadApp(const P::String& path) {
     f.close();
     
     display_lock();
+    
+    // Pre-render: shrink buffer to maximize contiguous DRAM for LVGL allocations
+    if (display_get_buffer_lines() > (int)BufferSmall) {
+        display_set_buffer(BufferSmall);
+    }
     
     P::String appDir(path.data(), path.rfind('/'));
     ui_engine().setAppPath(appDir.c_str());
@@ -897,6 +910,34 @@ bool Manager::loadApp(const P::String& path) {
     s_appState = AppState::APP_RUNNING;
     LOG_I(Log::APP, "State: APP_RUNNING | App loaded!");
     
+    // Auto-optimize display buffer based on DRAM pressure
+    {
+        size_t freeDRAM = heap_caps_get_free_size(MALLOC_CAP_INTERNAL);
+        int curLines = display_get_buffer_lines();
+        int bootLines = display_get_boot_lines();
+        
+        if (freeDRAM < 40000 && curLines > (int)BufferSmall) {
+            // Low DRAM — shrink
+            LOG_W(Log::APP, "DRAM low (%d bytes), shrinking display buffer %d -> %d lines",
+                  (int)freeDRAM, curLines, (int)BufferSmall);
+            display_set_buffer(BufferSmall);
+            lv_obj_invalidate(lv_screen_active());
+        } else if (curLines < bootLines) {
+            // Buffer below boot level — try to grow back
+            static const DisplayBuffer chain[] = { BufferMax, BufferOptimal, BufferSmall };
+            for (int i = 0; i < 3; i++) {
+                int target = static_cast<int>(chain[i]);
+                if (target <= curLines) break;
+                if (target > bootLines) continue;
+                if (display_set_buffer(chain[i])) {
+                    LOG_I(Log::APP, "Display buffer restored: %d -> %d lines", curLines, target);
+                    lv_obj_invalidate(lv_screen_active());
+                    break;
+                }
+            }
+        }
+    }
+    
     uint32_t dramFree = heap_caps_get_free_size(MALLOC_CAP_INTERNAL);
     uint32_t psramFree = heap_caps_get_free_size(MALLOC_CAP_SPIRAM);
     uint32_t psramTotal = heap_caps_get_total_size(MALLOC_CAP_SPIRAM);
@@ -949,7 +990,13 @@ void Manager::processPendingLaunch() {
         int bootLines = display_get_boot_lines();
         if (currentLines < bootLines) {
             Serial.printf("[Cleanup] Restoring buffer: %d -> %d lines\n", currentLines, bootLines);
-            display_set_buffer((DisplayBuffer)bootLines);
+            static const DisplayBuffer chain[] = { BufferMax, BufferOptimal, BufferSmall };
+            for (int i = 0; i < 3; i++) {
+                int target = static_cast<int>(chain[i]);
+                if (target <= currentLines) break;
+                if (target > bootLines) continue;
+                if (display_set_buffer(chain[i])) break;
+            }
         }
         
         Serial.printf("[After] Buffer: %d lines, DRAM: %u\n",

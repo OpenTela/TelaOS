@@ -1,13 +1,13 @@
 <app>
   <ui default="/main">
     <page id="main">
-      <label x="0" y="0" w="100%" h="10%" bgcolor="#1b5e20"/>
-      <label x="1%" y="2%" color="#a5d6a7" font="16">{cell}</label>
-      <label x="8%" y="1%" w="55%" h="8%" bgcolor="#2e7d32"/>
-      <label x="10%" y="2%" color="#fff" font="16">{val}</label>
-      <button x="70%" y="1%" onclick="delRow" w="8%" h="8%" bgcolor="#388e3c" font="32">-</button>
-      <label x="81%" y="3%" w="3%" color="#a5d6a7" font="16">{rows}</label>
-      <button x="85%" y="1%" onclick="addRow" w="8%" h="8%" bgcolor="#388e3c" font="32">+</button>
+      <label x="0" y="0" w="480" h="48" bgcolor="#1b5e20"/>
+      <label x="5" y="10" color="#a5d6a7" font="16">{cell}</label>
+      <label x="38" y="5" w="264" h="38" bgcolor="#2e7d32"/>
+      <label x="48" y="10" color="#fff" font="16">{val}</label>
+      <button x="336" y="5" onclick="delRow" w="38" h="38" bgcolor="#388e3c" font="32">-</button>
+      <label x="389" y="14" w="14" color="#a5d6a7" font="16">{rows}</label>
+      <button x="408" y="5" onclick="addRow" w="38" h="38" bgcolor="#388e3c" font="32">+</button>
       <input id="edit" x="200%" y="0" bind="val" onenter="apply" oninput="onType" w="1" h="1"/>
       <table x="0" y="11%" w="100%" h="43%" cellspacing="1" bgcolor="#000">
         <tr h="12%">
@@ -287,6 +287,10 @@
       state.val = (state.val or "") .. k
       if state.cell ~= "" then D[state.cell] = string.upper(state.val); refreshCell(state.cell) end
     end
+    local function fnKey(name)
+      local v = state.val or ""
+      if string.sub(v, 1, 1) == "=" then key(name) else key("=" .. name) end
+    end
     function onType()
       if state.cell ~= "" then D[state.cell] = string.upper(state.val or ""); refreshCell(state.cell) end
     end
@@ -338,17 +342,17 @@ function tapA8() tap("A8") end     function tapB8() tap("B8") end     function t
         if state.cell ~= "" then D[state.cell] = string.upper(state.val); refreshCell(state.cell) end
       end
     end
-    function fSum() key("SUM") end  function fAvg() key("AVG") end
-    function fMin() key("MIN") end  function fMax() key("MAX") end  function fCount() key("CNT") end
-    function fAbs() key("ABS(") end  function fRound() key("ROUND(") end
-    function fPow() key("POW(") end  function fMod() key("MOD(") end  function fSqrt() key("SQRT(") end
+    function fSum() fnKey("SUM(") end  function fAvg() fnKey("AVG(") end
+    function fMin() fnKey("MIN(") end  function fMax() fnKey("MAX(") end  function fCount() fnKey("CNT(") end
+    function fAbs() fnKey("ABS(") end  function fRound() fnKey("ROUND(") end
+    function fPow() fnKey("POW(") end  function fMod() fnKey("MOD(") end  function fSqrt() fnKey("SQRT(") end
     state["bgA1"] = SELECTED
   </script>
 
   <style>
     button { color: #fff; }
-    .hdr { width: 100%; height: 100%; color: #666; text-align: center; font-size: 16; }
-    .rownum { width: 100%; height: 100%; color: #666; text-align: center; font-size: 16; }
+    .hdr { width: 100%; height: 100%; color: #666; text-align: center center; font-size: 16; }
+    .rownum { width: 100%; height: 100%; color: #666; text-align: center center; font-size: 16; }
     .cell { width: 100%; height: 100%; border-radius: 0; }
     .kb { width: 100%; height: 100%; }
     .btn-gray { bgcolor: #505050; }
