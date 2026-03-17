@@ -729,9 +729,11 @@ bool Manager::loadApp(const P::String& path) {
     }
     
     cleanupScreen();
+    WidgetCallbacks::cleanup();
     
     ui_engine().clear();
     lv_image_cache_drop(NULL);
+    MemoryManager::instance().resetPressure();
     
     LOG_I(Log::APP, "Heap after cleanup: %d bytes", (int)ESP.getFreeHeap());
     
@@ -750,11 +752,6 @@ bool Manager::loadApp(const P::String& path) {
     f.close();
     
     display_lock();
-    
-    // Pre-render: shrink buffer to maximize contiguous DRAM for LVGL allocations
-    if (display_get_buffer_lines() > (int)BufferSmall) {
-        display_set_buffer(BufferSmall);
-    }
     
     P::String appDir(path.data(), path.rfind('/'));
     ui_engine().setAppPath(appDir.c_str());

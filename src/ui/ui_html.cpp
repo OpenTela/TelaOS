@@ -1931,8 +1931,13 @@ void ui_clear_internal(void) {
     styles.clear();
     page_count = 0;
     current_page = 0;
-    groups.clear();
     current_group = INVALID_INDEX;
+    g_updating_from_binding = false;
+    groups.clear();
     ui_default_page = "";
+    script_code.clear();
+    app_icon.clear();
+    State::store().clear();
+    memset(g_keyboards, 0, sizeof(g_keyboards));
     LOG_D(Log::UI, "clear: done");
 }
