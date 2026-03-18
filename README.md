@@ -10,6 +10,13 @@ Smartwatch OS where apps are just HTML + Lua scripting. Write a complete app in 
 - 📱 **[TelaPhone](https://github.com/OpenTela/TelaPhone)** — Android companion with AI-powered code generation
 - 💻 **[TelaIDE](https://github.com/OpenTela/TelaIDE)** — Desktop IDE with real-time emulator
 
+[![TelaOS ESP32 smartwatch operating system launcher](docs/screens/preview/launcher.png)](docs/screens/launcher.png)
+[![Pomodoro timer productivity app for ESP32 smartwatch](docs/screens/preview/pomodoro.png)](docs/screens/pomodoro.png)
+[![Cryptocurrency ticker application ESP32](docs/screens/preview/crypto.png)](docs/screens/crypto.png)
+[![ESP32 Word processor and Markdown editor application](docs/screens/preview/markdown.png)](docs/screens/markdown.png)
+[![ESP32 Excel spreadsheet application on TelaOS](docs/screens/preview/excel.png)](docs/screens/excel.png)
+[![ESP32 Excel main keyboard](docs/screens/preview/excel-2.png)](docs/screens/excel-2.png)
+
 **Application example:**
 ```xml
 <app>
