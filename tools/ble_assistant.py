@@ -366,7 +366,7 @@ class BLEAssistant:
                 line = await asyncio.get_event_loop().run_in_executor(
                     None, lambda: input("assistant> ")
                 )
-            except (EOFError, KeyboardInterrupt):
+            except (EOFError, KeyboardInterrupt, asyncio.CancelledError):
                 break
 
             line = line.strip()
@@ -553,7 +553,10 @@ class BLEAssistant:
                 while self.connected:
                     await asyncio.sleep(1)
             else:
-                await self.cli_loop()
+                try:
+                    await self.cli_loop()
+                except (asyncio.CancelledError, OSError):
+                    pass
                 break
 
             if not self.connected:
@@ -696,17 +699,27 @@ async def main():
 
     await assistant.run()
     
-    if assistant.client and assistant.connected:
-        await assistant.client.disconnect()
+    try:
+        if assistant.client and assistant.connected:
+            await assistant.client.disconnect()
+    except Exception:
+        pass
     
     log("•", "Done")
 
 
 async def shutdown(assistant):
-    if assistant.client and assistant.connected:
-        await assistant.client.disconnect()
-    sys.exit(0)
+    try:
+        if assistant.client and assistant.connected:
+            await assistant.client.disconnect()
+    except Exception:
+        pass
+    log("•", "Bye")
+    os._exit(0)
 
 
 if __name__ == "__main__":
-    asyncio.run(main())
+    try:
+        asyncio.run(main())
+    except (KeyboardInterrupt, asyncio.CancelledError, SystemExit):
+        pass
