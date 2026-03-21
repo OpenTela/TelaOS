@@ -28,9 +28,9 @@ static void tileview_changed_cb(lv_event_t* e) {
     lv_obj_t* tv = (lv_obj_t*)lv_event_get_target(e);
     int grp_idx = (int)(intptr_t)lv_event_get_user_data(e);
     
-    if (grp_idx < 0 || grp_idx >= (int)g_core.app().groups.size()) return;
+    if (grp_idx < 0 || grp_idx >= g_core.app().groupCount()) return;
     
-    UI::PageGroup* grp = &g_core.app().groups[grp_idx];
+    UI::PageGroup* grp = &g_core.app().group(grp_idx);
     
     lv_obj_t* active_tile = lv_tileview_get_tile_act(tv);
     int new_idx = 0;
@@ -65,7 +65,7 @@ void PageGroup::create(lv_obj_t* parent) {
 }
 
 lv_obj_t* PageGroup::addTile(const P::String& pageId) {
-    int col = (int)g_core.app().page_ids.size();
+    int col = (int)g_core.app().pageCount();
     
     // Determine swipe directions
     int dirs_int = 0;
@@ -86,9 +86,8 @@ lv_obj_t* PageGroup::addTile(const P::String& pageId) {
     lv_obj_set_style_bg_opa(tile, LV_OPA_TRANSP, 0);
     lv_obj_set_scrollbar_mode(tile, LV_SCROLLBAR_MODE_OFF);
     
-    g_core.app().page_ids.push_back(pageId);
-    g_core.app().page_objs.push_back(tile);
-    
+    g_core.app().pushPage(pageId.c_str(), tile);
+
     return tile;
 }
 

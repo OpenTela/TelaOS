@@ -60,9 +60,9 @@ void Core::initDynamicApp(const char* appPath) {
     m_app.~DynamicApp();
     new (&m_app) DynamicApp();
     m_store.clear();
-    m_app.app_path = appPath ? appPath : "";
+    m_app.setAppPath(appPath ? appPath : "");
     if (appPath) {
-        LOG_I(Log::UI, "Init v%s | path=%s", version(), m_app.app_path.c_str());
+        LOG_I(Log::UI, "Init v%s | path=%s", version(), m_app.appPath().c_str());
     } else {
         LOG_I(Log::UI, "Init v%s | UI reset", version());
     }
@@ -99,7 +99,7 @@ const char* Core::currentPageId() const {
 }
 
 bool Core::isKeyboardVisible() const {
-    for (int i = 0; i < g_core.app().page_count; i++) {
+    for (int i = 0; i < g_core.app().pageCount(); i++) {
         if (g_core.app().keyboards[i] && !lv_obj_has_flag(g_core.app().keyboards[i], LV_OBJ_FLAG_HIDDEN)) {
             return true;
         }
@@ -108,7 +108,7 @@ bool Core::isKeyboardVisible() const {
 }
 
 void Core::dismissKeyboard() {
-    for (int i = 0; i < g_core.app().page_count; i++) {
+    for (int i = 0; i < g_core.app().pageCount(); i++) {
         if (g_core.app().keyboards[i]) {
             lv_obj_add_flag(g_core.app().keyboards[i], LV_OBJ_FLAG_HIDDEN);
         }
@@ -118,43 +118,43 @@ void Core::dismissKeyboard() {
 // ============ Timer getters ============
 
 int Core::timerCount() const {
-    return static_cast<int>(g_core.app().timers.size());
+    return static_cast<int>(g_core.app().timerCount());
 }
 
 int Core::timerInterval(int i) const {
-    return (i < static_cast<int>(g_core.app().timers.size())) ? g_core.app().timers[i].interval_ms : 0;
+    return (i < static_cast<int>(g_core.app().timerCount())) ? g_core.app().timer(i).interval_ms : 0;
 }
 
 const char* Core::timerCallback(int i) const {
-    return (i < static_cast<int>(g_core.app().timers.size())) ? g_core.app().timers[i].callback.c_str() : nullptr;
+    return (i < static_cast<int>(g_core.app().timerCount())) ? g_core.app().timer(i).callback.c_str() : nullptr;
 }
 
 // ============ Script getters ============
 
 const char* Core::scriptCode() const {
-    return g_core.app().script_code.c_str();
+    return g_core.app().scriptCode().c_str();
 }
 
 const char* Core::scriptLang() const {
-    return g_core.app().script_lang.c_str();
+    return g_core.app().scriptLang().c_str();
 }
 
 // ============ App metadata ============
 
 const char* Core::appVersion() const {
-    return g_core.app().app_version.c_str();
+    return g_core.app().appVersion().c_str();
 }
 
 const char* Core::appOsRequirement() const {
-    return g_core.app().app_os_requirement.c_str();
+    return g_core.app().appOsRequirement().c_str();
 }
 
 const char* Core::appIcon() const {
-    return g_core.app().app_icon.c_str();
+    return g_core.app().appIcon().c_str();
 }
 
 bool Core::appReadonly() const {
-    return g_core.app().app_readonly;
+    return g_core.app().appReadonly();
 }
 
 // ============ State getters ============
@@ -208,7 +208,7 @@ void Core::setStateChangeHandler(StateChangeHandler handler) {
 // ============ Widget sync ============
 
 void Core::syncWidgetValues() {
-    g_core.app().updating_from_binding = true;
+    g_core.app().beginBinding();
     
     for (size_t i = 0; i < g_core.app().elements.size(); i++) {
         if (g_core.app().elements[i]->bind.empty()) continue;
@@ -232,7 +232,7 @@ void Core::syncWidgetValues() {
         }
     }
     
-    g_core.app().updating_from_binding = false;
+    g_core.app().endBinding();
     LOG_I(Log::UI, "Widget values synced from state");
 }
 
@@ -258,8 +258,8 @@ bool UI::focusInput(const char* id) {
     int page_idx = -1;
     lv_obj_t* parent = lv_obj_get_parent(obj);
     while (parent) {
-        for (int i = 0; i < g_core.app().page_count; i++) {
-            if (g_core.app().page_objs[i] == parent) {
+        for (int i = 0; i < g_core.app().pageCount(); i++) {
+            if (g_core.app().pageObj(i) == parent) {
                 page_idx = i;
                 break;
             }

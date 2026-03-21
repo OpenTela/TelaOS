@@ -58,8 +58,8 @@ static P::String resolve_resource_path(const P::String& src) {
     }
     
     // Relative path - prepend app resources folder
-    if (!g_core.app().app_path.empty()) {
-        char buf[128]; snprintf(buf, sizeof(buf), "%s/resources/%s", g_core.app().app_path.c_str(), src.c_str());
+    if (!g_core.app().appPath().empty()) {
+        char buf[128]; snprintf(buf, sizeof(buf), "%s/resources/%s", g_core.app().appPath().c_str(), src.c_str());
         return buf;
     }
     
@@ -130,7 +130,7 @@ static bool stripLiteral(P::String& text) {
 }
 
 static void button_click_handler(lv_event_t *e) {
-    g_core.app().in_lvgl_callback = true;
+    g_core.app().beginCallback();
     
     int idx = (int)(intptr_t)lv_event_get_user_data(e);
     lv_event_code_t code = lv_event_get_code(e);
@@ -140,7 +140,7 @@ static void button_click_handler(lv_event_t *e) {
     
     if (idx < 0 || idx >= (int)g_core.app().elements.size()) {
         LOG_E(Log::UI, "button_event: invalid idx!");
-        g_core.app().in_lvgl_callback = false;
+        g_core.app().endCallback();
         return;
     }
     
@@ -154,7 +154,7 @@ static void button_click_handler(lv_event_t *e) {
             LOG_I(Log::UI, "onhold: %s()", g_core.app().elements[idx]->onhold.c_str());
             g_onhold_handler(g_core.app().elements[idx]->onhold.c_str());
         }
-        g_core.app().in_lvgl_callback = false;
+        g_core.app().endCallback();
         return;
     }
     
@@ -172,12 +172,12 @@ static void button_click_handler(lv_event_t *e) {
         }
     }
     
-    g_core.app().in_lvgl_callback = false;
+    g_core.app().endCallback();
 }
 
 // Switch event handler - UI updates directly
 static void switch_event_handler(lv_event_t *e) {
-    if (g_core.app().updating_from_binding) return;
+    if (g_core.app().isUpdatingFromBinding()) return;
     
     int idx = (int)(intptr_t)lv_event_get_user_data(e);
     if (idx < 0 || idx >= (int)g_core.app().elements.size()) return;
@@ -205,7 +205,7 @@ static void switch_event_handler(lv_event_t *e) {
 
 // Slider event handler - live UI updates with throttle
 static void slider_event_handler(lv_event_t *e) {
-    if (g_core.app().updating_from_binding) return;
+    if (g_core.app().isUpdatingFromBinding()) return;
     
     int idx = (int)(intptr_t)lv_event_get_user_data(e);
     if (idx < 0 || idx >= (int)g_core.app().elements.size()) return;
@@ -251,7 +251,7 @@ static void slider_event_handler(lv_event_t *e) {
 
 // Input (textarea) event handler — fires on every character
 static void input_event_handler(lv_event_t *e) {
-    if (g_core.app().updating_from_binding) return;
+    if (g_core.app().isUpdatingFromBinding()) return;
     
     int idx = (int)(intptr_t)lv_event_get_user_data(e);
     if (idx < 0 || idx >= (int)g_core.app().elements.size()) return;
@@ -317,8 +317,8 @@ static void input_defocus_handler(lv_event_t *e) {
     // Walk up parent chain to find page
     lv_obj_t *obj = lv_obj_get_parent(ta);
     while (obj) {
-        for (int i = 0; i < g_core.app().page_count; i++) {
-            if (g_core.app().page_objs[i] == obj && g_core.app().keyboards[i]) {
+        for (int i = 0; i < g_core.app().pageCount(); i++) {
+            if (g_core.app().pageObj(i) == obj && g_core.app().keyboards[i]) {
                 lv_obj_add_flag(g_core.app().keyboards[i], LV_OBJ_FLAG_HIDDEN);
                 return;
             }
@@ -335,8 +335,8 @@ static void input_focus_handler(lv_event_t *e) {
     int page_idx = INVALID_INDEX;
     lv_obj_t *obj = lv_obj_get_parent(ta);
     while (obj) {
-        for (int i = 0; i < g_core.app().page_count; i++) {
-            if (g_core.app().page_objs[i] == obj) {
+        for (int i = 0; i < g_core.app().pageCount(); i++) {
+            if (g_core.app().pageObj(i) == obj) {
                 page_idx = i;
                 break;
             }
@@ -349,7 +349,7 @@ static void input_focus_handler(lv_event_t *e) {
         LOG_W(Log::UI, "input_focus_handler: page not found for ta=%p", ta);
         return;
     }
-    lv_obj_t *parent = g_core.app().page_objs[page_idx];
+    lv_obj_t *parent = g_core.app().pageObj(page_idx);
     LOG_I(Log::UI, "input_focus_handler: page_idx=%d parent=%p", page_idx, parent);
     
     // Create keyboard for this page if needed
@@ -807,8 +807,7 @@ void create_button(const char *astart, const char *aend, const char *content, lv
     const char* iconPath = nullptr;
     if (hasIcon) {
         P::String resolvedPath = resolve_resource_path(iconAttr);
-        g_core.app().iconPaths.push_back("C:" + resolvedPath);
-        iconPath = g_core.app().iconPaths.back().c_str();
+        iconPath = g_core.app().addIconPath("C:" + resolvedPath);
         LOG_D(Log::UI, "Button icon: %s", iconPath);
     }
     
@@ -1122,8 +1121,7 @@ void create_image(const char *astart, const char *aend, lv_obj_t *parent) {
     P::String imgPath = resolve_resource_path(src);
     
     // Using global g_core.app().imagePaths (cleared on ui_clear)
-    g_core.app().imagePaths.push_back("C:" + imgPath);
-    const char* lvglPath = g_core.app().imagePaths.back().c_str();
+    const char* lvglPath = g_core.app().addImagePath("C:" + imgPath);
     
     // Create via Image widget struct
     Image widget = { .src = lvglPath };
@@ -1436,7 +1434,7 @@ void create_markdown(const char *astart, const char *aend, const char *content, 
 // ============ SELECT / DROPDOWN ============
 
 static void dropdown_event_handler(lv_event_t *e) {
-    if (g_core.app().updating_from_binding) return;
+    if (g_core.app().isUpdatingFromBinding()) return;
 
     int idx = (int)(intptr_t)lv_event_get_user_data(e);
     if (idx < 0 || idx >= (int)g_core.app().elements.size()) return;
