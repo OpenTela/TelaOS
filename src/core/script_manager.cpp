@@ -146,7 +146,7 @@ void ScriptManager::loadScript() {
 
 void ScriptManager::setupTimers() {
     auto& ui = g_core;
-    int count = ui.timerCount();
+    int count = ui.timersCount();
     
     LOG_D(Log::LUA, "Setting up %d timers:", count);
     

@@ -296,7 +296,7 @@ static void parse_templates(const char* html) {
         p = bodyEnd + 11; // strlen("</template>")
     }
     
-    LOG_I(Log::UI, "templates: %d defined", g_core.app().templateCount());
+    LOG_I(Log::UI, "templates: %d defined", g_core.app().templatesCount());
 }
 
 // Substitute {varname} with value in text, handling nested {val_{var}_{var2}}
@@ -1025,12 +1025,12 @@ void ui_show_page_internal(const char *path) {
         }
         
         // Hide all standalone pages
-        for (int i = 0; i < g_core.app().pageCount(); i++) {
+        for (int i = 0; i < g_core.app().pagesCount(); i++) {
             lv_obj_add_flag(g_core.app().pageObj(i), LV_OBJ_FLAG_HIDDEN);
         }
         
         // Hide all groups except this one
-        for (int i = 0; i < g_core.app().groupCount(); i++) {
+        for (int i = 0; i < g_core.app().groupsCount(); i++) {
             if (i == grp_idx) {
                 lv_obj_clear_flag(g_core.app().group(i).tileview, LV_OBJ_FLAG_HIDDEN);
                 if (g_core.app().group(i).indicator_obj) {
@@ -1073,7 +1073,7 @@ void ui_show_page_internal(const char *path) {
         }
         
         // Hide all groups
-        for (int i = 0; i < g_core.app().groupCount(); i++) {
+        for (int i = 0; i < g_core.app().groupsCount(); i++) {
             lv_obj_add_flag(g_core.app().group(i).tileview, LV_OBJ_FLAG_HIDDEN);
             if (g_core.app().group(i).indicator_obj) {
                 lv_obj_add_flag(g_core.app().group(i).indicator_obj, LV_OBJ_FLAG_HIDDEN);
@@ -1081,14 +1081,14 @@ void ui_show_page_internal(const char *path) {
         }
         
         // Hide keyboards
-        for (int i = 0; i < g_core.app().pageCount(); i++) {
+        for (int i = 0; i < g_core.app().pagesCount(); i++) {
             if (g_core.app().keyboards[i]) {
                 lv_obj_add_flag(g_core.app().keyboards[i], LV_OBJ_FLAG_HIDDEN);
             }
         }
         
         // Show/hide standalone pages
-        for (int i = 0; i < g_core.app().pageCount(); i++) {
+        for (int i = 0; i < g_core.app().pagesCount(); i++) {
             if (i == idx) {
                 lv_obj_clear_flag(g_core.app().pageObj(i), LV_OBJ_FLAG_HIDDEN);
             } else {
@@ -1109,7 +1109,7 @@ void navigate(const char *href) {
     const char *target = href + 1;
     
     if (strcmp(target, "next") == 0) {
-        if (g_core.app().currentPage() < g_core.app().pageCount() - 1) {
+        if (g_core.app().currentPage() < g_core.app().pagesCount() - 1) {
             ui_show_page_internal(g_core.app().pageId(g_core.app().currentPage() + 1).c_str());
         }
     } else if (strcmp(target, "prev") == 0 || strcmp(target, "back") == 0) {
@@ -1122,12 +1122,12 @@ void navigate(const char *href) {
 }
 
 const char* ui_get_current_page_id() {
-    if (g_core.app().currentGroup() >= 0 && g_core.app().currentGroup() < g_core.app().groupCount()) {
+    if (g_core.app().currentGroup() >= 0 && g_core.app().currentGroup() < g_core.app().groupsCount()) {
         auto& g = g_core.app().group(g_core.app().currentGroup());
         if (g.current_page_idx >= 0 && g.current_page_idx < (int)g.page_ids.size())
             return g.page_ids[g.current_page_idx].c_str();
     }
-    if (g_core.app().currentPage() >= 0 && g_core.app().currentPage() < g_core.app().pageCount())
+    if (g_core.app().currentPage() >= 0 && g_core.app().currentPage() < g_core.app().pagesCount())
         return g_core.app().pageId(g_core.app().currentPage()).c_str();
     return "";
 }
@@ -1501,7 +1501,7 @@ int ui_html_render_internal(const char *html) {
         p++;
         
         // Create new group (use index, not pointer - pointer invalidates on push_back)
-        size_t gi = g_core.app().groupCount();
+        size_t gi = g_core.app().groupsCount();
         g_core.app().addGroup();
         
         g_core.app().group(gi).id = getAttr(astart, aend, "id");
@@ -1596,7 +1596,7 @@ int ui_html_render_internal(const char *html) {
         g_core.app().group(gi).finalize((int)gi);
         
         // Hide if not first
-        if (g_core.app().groupCount() > 1 || g_core.app().pageCount() > 0) {
+        if (g_core.app().groupsCount() > 1 || g_core.app().pagesCount() > 0) {
             g_core.app().group(gi).hide();
         }
         
@@ -1611,7 +1611,7 @@ int ui_html_render_internal(const char *html) {
     // Pass 2: Find standalone <page> tags (not inside groups)
     p = html;
     int pass2_iterations = 0;
-    while (*p && g_core.app().pageCount() < MAX_SCREENS) {
+    while (*p && g_core.app().pagesCount() < MAX_SCREENS) {
         if (++pass2_iterations > 100) {
             LOG_E(Log::UI, "Pass 2: too many iterations, breaking");
             break;
@@ -1664,7 +1664,7 @@ int ui_html_render_internal(const char *html) {
         }
         
         // Hide if not first
-        if (g_core.app().pageCount() > 0 || g_core.app().groupCount() > 0) {
+        if (g_core.app().pagesCount() > 0 || g_core.app().groupsCount() > 0) {
             lv_obj_add_flag(scr, LV_OBJ_FLAG_HIDDEN);
         }
         
@@ -1687,7 +1687,7 @@ int ui_html_render_internal(const char *html) {
     }
     
     LOG_I(Log::UI, "Done: %d g_core.app().elements, %d groups, %d standalone pages", 
-             (int)g_core.app().elements.size(), g_core.app().groupCount(), g_core.app().pageCount());
+             (int)g_core.app().elements.size(), g_core.app().groupsCount(), g_core.app().pagesCount());
     
     // Apply <ui default="/page"> — navigate to specified initial page
     if (!g_core.app().defaultPage().empty()) {

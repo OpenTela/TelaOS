@@ -28,7 +28,7 @@ static void tileview_changed_cb(lv_event_t* e) {
     lv_obj_t* tv = (lv_obj_t*)lv_event_get_target(e);
     int grp_idx = (int)(intptr_t)lv_event_get_user_data(e);
     
-    if (grp_idx < 0 || grp_idx >= g_core.app().groupCount()) return;
+    if (grp_idx < 0 || grp_idx >= g_core.app().groupsCount()) return;
     
     UI::PageGroup* grp = &g_core.app().group(grp_idx);
     
@@ -65,7 +65,7 @@ void PageGroup::create(lv_obj_t* parent) {
 }
 
 lv_obj_t* PageGroup::addTile(const P::String& pageId) {
-    int col = (int)g_core.app().pageCount();
+    int col = (int)g_core.app().pagesCount();
     
     // Determine swipe directions
     int dirs_int = 0;

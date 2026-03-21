@@ -99,7 +99,7 @@ const char* Core::currentPageId() const {
 }
 
 bool Core::isKeyboardVisible() const {
-    for (int i = 0; i < g_core.app().pageCount(); i++) {
+    for (int i = 0; i < g_core.app().pagesCount(); i++) {
         if (g_core.app().keyboards[i] && !lv_obj_has_flag(g_core.app().keyboards[i], LV_OBJ_FLAG_HIDDEN)) {
             return true;
         }
@@ -108,7 +108,7 @@ bool Core::isKeyboardVisible() const {
 }
 
 void Core::dismissKeyboard() {
-    for (int i = 0; i < g_core.app().pageCount(); i++) {
+    for (int i = 0; i < g_core.app().pagesCount(); i++) {
         if (g_core.app().keyboards[i]) {
             lv_obj_add_flag(g_core.app().keyboards[i], LV_OBJ_FLAG_HIDDEN);
         }
@@ -117,16 +117,16 @@ void Core::dismissKeyboard() {
 
 // ============ Timer getters ============
 
-int Core::timerCount() const {
-    return static_cast<int>(g_core.app().timerCount());
+int Core::timersCount() const {
+    return static_cast<int>(g_core.app().timersCount());
 }
 
 int Core::timerInterval(int i) const {
-    return (i < static_cast<int>(g_core.app().timerCount())) ? g_core.app().timer(i).interval_ms : 0;
+    return (i < static_cast<int>(g_core.app().timersCount())) ? g_core.app().timer(i).interval_ms : 0;
 }
 
 const char* Core::timerCallback(int i) const {
-    return (i < static_cast<int>(g_core.app().timerCount())) ? g_core.app().timer(i).callback.c_str() : nullptr;
+    return (i < static_cast<int>(g_core.app().timersCount())) ? g_core.app().timer(i).callback.c_str() : nullptr;
 }
 
 // ============ Script getters ============
@@ -258,7 +258,7 @@ bool UI::focusInput(const char* id) {
     int page_idx = -1;
     lv_obj_t* parent = lv_obj_get_parent(obj);
     while (parent) {
-        for (int i = 0; i < g_core.app().pageCount(); i++) {
+        for (int i = 0; i < g_core.app().pagesCount(); i++) {
             if (g_core.app().pageObj(i) == parent) {
                 page_idx = i;
                 break;

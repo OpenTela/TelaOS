@@ -317,7 +317,7 @@ static void input_defocus_handler(lv_event_t *e) {
     // Walk up parent chain to find page
     lv_obj_t *obj = lv_obj_get_parent(ta);
     while (obj) {
-        for (int i = 0; i < g_core.app().pageCount(); i++) {
+        for (int i = 0; i < g_core.app().pagesCount(); i++) {
             if (g_core.app().pageObj(i) == obj && g_core.app().keyboards[i]) {
                 lv_obj_add_flag(g_core.app().keyboards[i], LV_OBJ_FLAG_HIDDEN);
                 return;
@@ -335,7 +335,7 @@ static void input_focus_handler(lv_event_t *e) {
     int page_idx = INVALID_INDEX;
     lv_obj_t *obj = lv_obj_get_parent(ta);
     while (obj) {
-        for (int i = 0; i < g_core.app().pageCount(); i++) {
+        for (int i = 0; i < g_core.app().pagesCount(); i++) {
             if (g_core.app().pageObj(i) == obj) {
                 page_idx = i;
                 break;
@@ -807,7 +807,7 @@ void create_button(const char *astart, const char *aend, const char *content, lv
     const char* iconPath = nullptr;
     if (hasIcon) {
         P::String resolvedPath = resolve_resource_path(iconAttr);
-        iconPath = g_core.app().addIconPath("C:" + resolvedPath);
+        iconPath = g_core.app().addIconPath(resolvedPath);
         LOG_D(Log::UI, "Button icon: %s", iconPath);
     }
     
@@ -1121,7 +1121,7 @@ void create_image(const char *astart, const char *aend, lv_obj_t *parent) {
     P::String imgPath = resolve_resource_path(src);
     
     // Using global g_core.app().imagePaths (cleared on ui_clear)
-    const char* lvglPath = g_core.app().addImagePath("C:" + imgPath);
+    const char* lvglPath = g_core.app().addImagePath(imgPath);
     
     // Create via Image widget struct
     Image widget = { .src = lvglPath };

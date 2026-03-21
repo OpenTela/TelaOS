@@ -53,7 +53,7 @@ public:
     void dismissKeyboard();          // Hide all keyboards
     
     // Head section getters
-    int timerCount() const;
+    int timersCount() const;
     int timerInterval(int i) const;
     const char* timerCallback(int i) const;
     

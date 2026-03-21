@@ -38,7 +38,7 @@ public:
     void applyZIndex();
 
     // --- Page accessors ---
-    int            pageCount()   const { return page_count; }
+    int            pagesCount()   const { return page_count; }
     int            currentPage() const { return page_count > 0 ? current_page : INVALID_INDEX; }
     int            currentGroup() const { return current_group; }
     lv_obj_t*      pageObj(int i) const { return (i >= 0 && i < page_count) ? page_objs[i] : nullptr; }
@@ -52,7 +52,7 @@ public:
                    }
 
     // --- Element accessors ---
-    int            elementCount() const { return (int)elements.size(); }
+    int            elementsCount() const { return (int)elements.size(); }
     UI::Element*   elementAt(int i) const { return elements[i].get(); }
 
     // --- Keyboard accessors ---
@@ -60,7 +60,7 @@ public:
     lv_obj_t*      keyboard(int i) const { return keyboards[i]; }
 
     // --- Group accessors ---
-    int             groupCount()   const { return (int)groups.size(); }
+    int             groupsCount()   const { return (int)groups.size(); }
     UI::PageGroup&  group(int i)         { return groups[i]; }
     UI::PageGroup&  addGroup()           { groups.push_back(UI::PageGroup{}); return groups.back(); }
     void            popGroup()           { groups.pop_back(); }
@@ -77,7 +77,7 @@ public:
     void setScriptLang(const P::String& lang) { script_lang = lang; }
 
     // --- Timer accessors ---
-    int               timerCount()             const { return (int)timers.size(); }
+    int               timersCount()             const { return (int)timers.size(); }
     const UI::Timer&  timer(int i)             const { return timers[i]; }
     void              addTimer(UI::Timer t)          { timers.push_back(std::move(t)); }
 
@@ -96,14 +96,15 @@ public:
     void setAppReadonly(bool v)                   { app_readonly = v; }
 
     // --- Resource path storage (LVGL needs stable pointers) ---
-    const char* addIconPath(const P::String& p)  { iconPaths.push_back(p);  return iconPaths.back().c_str(); }
-    const char* addImagePath(const P::String& p) { imagePaths.push_back(p); return imagePaths.back().c_str(); }
+    // Paths are stored with LVGL "C:" prefix for LittleFS; caller passes raw path
+    const char* addIconPath(const P::String& p)  { return addPath(iconPaths, p); }
+    const char* addImagePath(const P::String& p) { return addPath(imagePaths, p); }
 
     // Elements & pages (raw access needed by UI layer)
     MPArray<UI::Element> elements;
 
     // --- Template accessors ---
-    int  templateCount() const { return (int)templates.size(); }
+    int  templatesCount() const { return (int)templates.size(); }
     bool hasTemplates()  const { return !templates.empty(); }
     void setTemplate(const P::String& name, const P::String& body) { templates[name] = body; }
     const P::String* findTemplate(const P::String& name) const {
@@ -147,6 +148,20 @@ private:
     // Templates & z-index
     P::Map<P::String, P::String> templates;
     std::unordered_map<lv_obj_t*, int> deferredZIndex;
+    // Helpers
+    static bool isRooted(const P::String& p) {
+        return p.size() >= 2 && p[1] == ':';  // already has LVGL drive prefix e.g. "C:"
+    }
+    const char* addPath(P::Array<P::String>& paths, const P::String& p) {
+        if (isRooted(p)) {
+            paths.push_back(p);
+        } else {
+            P::String full("C:");
+            full += p;
+            paths.push_back(full);
+        }
+        return paths.back().c_str();
+    }
     // Pages
     P::Array<UI::PageGroup> groups;
     P::Array<P::String>  page_ids;
