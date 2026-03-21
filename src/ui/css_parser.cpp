@@ -15,6 +15,7 @@
 #include "ui/css_parser.h"
 #include "ui/ui_coords.h"
 #include "ui/ui_html_internal.h"
+#include "core/core.h"
 
 // From ui_widget_builder.cpp — parse "17%", "50", "12.5%" → pixels
 
@@ -216,7 +217,7 @@ void Css::applyProps(Widget& w, const P::Map<P::String, P::String>& props) const
             w.applyRadius(parseSizeValue(value));
         } else if (name == "z-index") {
             if (!w.handle) continue;
-            g_app->setZIndex(w.handle, atoi(value.c_str()));
+            g_core.app().setZIndex(w.handle, atoi(value.c_str()));
         } else if (name == "width" || name == "w") {
             int v = parse_size(value.c_str()); if (v != 0) lv_obj_set_width(w.handle, v);
         } else if (name == "height" || name == "h") {

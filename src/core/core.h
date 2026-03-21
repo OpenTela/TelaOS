@@ -1,14 +1,16 @@
 /**
- * ui_engine.h - HTML UI engine for LVGL (C++17)
+ * core/core.h - Central owner of UI state, Store, and rendering
  * 
- * Main class for parsing and rendering HTML-like UI markup.
- * Uses singleton pattern for global access.
+ * Core owns DynamicApp (UI state) and Store.
+ * Single global instance g_core defined in main.cpp.
  */
 
 #ifndef UI_ENGINE_H
 #define UI_ENGINE_H
 
 #include "ui/ui_types.h"
+#include "ui/dynamic_app.h"
+#include "core/state_store.h"
 #include <string>
 #include <string_view>
 #include <vector>
@@ -18,59 +20,27 @@
 // Forward declaration for LVGL
 typedef struct _lv_obj_t lv_obj_t;
 
-namespace UI {
-
-// ============ DATA STRUCTURES ============
-// Timer, Style, Element определены в ui_types.h
-
-enum class IndicatorType { Scrollbar = 0, Dots = 1, None = 2 };
-
-struct PageGroup {
-    P::String id;
-    P::String default_page;
-    Orientation orientation = Orientation::Horizontal;
-    IndicatorType indicator = IndicatorType::Scrollbar;
-    lv_obj_t *tileview = nullptr;
-    lv_obj_t *indicator_obj = nullptr;
-    lv_obj_t *screen = nullptr;          // parent screen, set by create()
-    P::Array<P::String> page_ids;
-    P::Array<lv_obj_t*> page_objs;
-    int current_page_idx = 0;
-    
-    bool isHorizontal() const { return orientation == Orientation::Horizontal; }
-    
-    /// Create tileview on parent screen (reads indicator field for scrollbar mode)
-    void create(lv_obj_t* parent);
-    
-    /// Add a tile (page) to the group, returns tile lv_obj
-    lv_obj_t* addTile(const P::String& pageId);
-    
-    /// Finalize after all tiles added: create indicators, bind events
-    void finalize(int grpIdx);
-    
-    /// Update indicator to highlight active page
-    void updateIndicator(int activeIdx);
-    
-    /// Hide tileview + indicator
-    void hide();
-};
-
 // ============ UI ENGINE CLASS ============
 
-class Engine {
+class Core {
 public:
-    // Singleton access
-    static Engine& instance();
-    
-    // Delete copy/move
-    Engine(const Engine&) = delete;
-    Engine& operator=(const Engine&) = delete;
+    Core() = default;
+
+    // Delete copy/move — Engine is unique
+    Core(const Core&) = delete;
+    Core& operator=(const Core&) = delete;
     
     // Lifecycle
-    void init();
+    void initDynamicApp(const char* appPath);   // HTML app: placement new reset + set path
+    void    resetUI();                              // Launcher/native: reset LVGL objects only
     int render(const char* html);
-    void clear();
-    
+
+    // App state accessor — ref prevents assignment
+    DynamicApp& app() { return m_app; }
+
+    // State store accessor
+    Store& store() { return m_store; }
+
     // Element access
     lv_obj_t* get(const char* id);
     void setText(const char* id, const char* text);
@@ -127,13 +97,10 @@ public:
     const char* appOsRequirement() const;
     const char* appIcon() const;
     bool appReadonly() const;
-    
-    // App resources path
-    void setAppPath(const char* path);
-    const char* appPath() const;
 
 private:
-    Engine() = default;
+    DynamicApp m_app{};
+    Store      m_store{"State"};
 }; // class Engine
 
 /// Get currently focused textarea (set by focusInput, used by ui type)
@@ -144,13 +111,16 @@ bool getWidgetCenter(const char* id, int& cx, int& cy);
 bool triggerClick(const char* widgetId);   // Call widget's onclick handler
 bool callFunction(const char* funcName);   // Call Lua function by name
 
-/// Set focus to input widget (opens keyboard). Returns false if not found.
-bool focusInput(const char* id);
+namespace UI {
+    /// Set focus to input widget (opens keyboard). Returns false if not found.
+    bool focusInput(const char* id);
 
-/// Imperative attribute access
-bool setWidgetAttr(const char* id, const char* attr, const char* value);
-P::String getWidgetAttr(const char* id, const char* attr);
+    /// Imperative attribute access
+    bool setWidgetAttr(const char* id, const char* attr, const char* value);
+    P::String getWidgetAttr(const char* id, const char* attr);
+}
 
-} // namespace UI
+/// Global core instance — defined in main.cpp
+extern Core g_core;
 
 #endif // UI_ENGINE_H

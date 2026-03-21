@@ -9,7 +9,7 @@
 
 #include "ui/ui_types.h"
 #include "ui/ui_coords.h"
-#include "ui/bax_app.h"
+#include "ui/dynamic_app.h"
 #include <cstdint>
 #include <string>
 
@@ -44,11 +44,9 @@ extern void (*g_state_change_handler)(const char* var_name, const char* value);
 
 // ============ Internal functions ============
 
-void ui_html_init_internal(void);
-int  ui_html_render_internal(const char* html);
-void ui_clear_internal(void);
 void ui_set_text_internal(const char* id, const char* text);
 void ui_show_page_internal(const char* path);
+int  ui_html_render_internal(const char* html);
 
 const char* get_state_value(const char* name);
 P::String extractBindVar(const char* bindStr);
@@ -98,7 +96,8 @@ void create_input(const char* astart, const char* aend, const char* content, lv_
 void create_image(const char* astart, const char* aend, lv_obj_t* parent);
 void create_canvas(const char* astart, const char* aend, lv_obj_t* parent);
 void create_markdown(const char* astart, const char* aend, const char* content, lv_obj_t* parent);
-void create_tabs(const char* astart, const char* aend, const char* content, lv_obj_t* parent);
+void create_tabs    (const char* astart, const char* aend, const char* content, lv_obj_t* parent);
+void create_select  (const char* astart, const char* aend, const char* content, lv_obj_t* parent);
 
 // Layout: table/tr/td (recursive child parsing)
 void parse_children(const char *html, int len, lv_obj_t *parent);

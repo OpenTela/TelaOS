@@ -1,13 +1,12 @@
 #pragma once
 /**
- * BaxApp — Loaded application state (RAII)
+ * DynamicApp — Loaded application state (RAII)
  *
  * Single owner of all per-app UI state. Destroyed on app switch,
  * all members auto-freed by destructors. No manual .clear() lists.
  */
 
 #include "ui/ui_types.h"
-#include "ui/ui_engine.h"
 #include <cstdint>
 #include <unordered_map>
 
@@ -17,14 +16,16 @@ typedef struct _lv_obj_t lv_obj_t;
 constexpr size_t MAX_SCREENS = 16;
 constexpr int INVALID_INDEX = -1;
 
-class BaxApp {
+class DynamicApp {
 public:
-    BaxApp() = default;
-    ~BaxApp();
-    
-    // Non-copyable
-    BaxApp(const BaxApp&) = delete;
-    BaxApp& operator=(const BaxApp&) = delete;
+    DynamicApp() = default;
+    ~DynamicApp();
+
+    // Non-copyable, non-movable — owned exclusively by Core as a direct field
+    DynamicApp(const DynamicApp&) = delete;
+    DynamicApp& operator=(const DynamicApp&) = delete;
+    DynamicApp(DynamicApp&&) = delete;
+    DynamicApp& operator=(DynamicApp&&) = delete;
 
     // --- Lookups ---
     int        findPage(const char* id) const;
@@ -77,5 +78,3 @@ public:
     bool in_lvgl_callback = false;
 };
 
-/// Global app instance
-extern BaxApp* g_app;

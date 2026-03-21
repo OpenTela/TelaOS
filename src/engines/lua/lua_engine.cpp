@@ -1,5 +1,6 @@
 #include "engines/lua/lua_engine.h"
 #include "engines/lua/lua_system.h"
+#include "core/core.h"
 #include "engines/lua/lua_timer.h"
 #include "engines/lua/lua_fetch.h"
 #include "engines/lua/lua_ui.h"
@@ -271,7 +272,7 @@ void LuaEngine::syncLuaState(const char* key) {
 
 void LuaEngine::setState(const char* key, const char* value) {
     // Skip if unchanged
-    P::String oldVal = State::store().getAsString(key);
+    P::String oldVal = g_core.store().getAsString(key);
     if (oldVal == value) return;
     
     BaseScriptEngine::setState(key, value);
@@ -296,7 +297,7 @@ void LuaEngine::setStateSilent(const char* key, const char* value) {
 // ============ Lua internals ============
 
 void LuaEngine::pushTypedValue(lua_State* L, const char* key) {
-    auto& store = State::store();
+    auto& store = g_core.store();
     VarType type = store.getType(key);
     
     switch (type) {
@@ -335,7 +336,7 @@ void LuaEngine::createStateTable() {
 int LuaEngine::lua_state_index(lua_State* L) {
     const char* key = luaL_checkstring(L, 2);
     
-    auto& store = State::store();
+    auto& store = g_core.store();
     VarType type = store.getType(key);
     
     switch (type) {
@@ -391,7 +392,7 @@ int LuaEngine::lua_state_newindex(lua_State* L) {
     
     // Update StateStore + notify UI
     if (s_instance) {
-        auto& store = State::store();
+        auto& store = g_core.store();
         VarType type = store.getType(key);
         
         switch (vtype) {

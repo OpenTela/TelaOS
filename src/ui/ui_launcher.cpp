@@ -3,7 +3,7 @@
  */
 
 #include "ui/ui_launcher.h"
-#include "ui/ui_engine.h"
+#include "core/core.h"
 #include "ui/ui_shade.h"
 #include "core/sys_paths.h"
 #include "widgets/widget_common.h"

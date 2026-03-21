@@ -5,7 +5,7 @@
  * Replaces C-style strstr/strcmp parsing with clean C++17 API
  */
 
-#include "ui/ui_engine.h"  // For StyleProperty
+#include "ui/ui_types.h"
 #include "utils/psram_alloc.h"
 #include <string_view>
 #include <optional>

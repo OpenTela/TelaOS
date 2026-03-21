@@ -12,7 +12,7 @@
 #endif
 #include "core/app_manager.h"
 #include "core/state_store.h"
-#include "ui/ui_engine.h"
+#include "core/core.h"
 #include "ui/ui_touch.h"
 #include "utils/screenshot.h"
 #include "utils/log_config.h"
@@ -71,7 +71,7 @@ static Result execUi(const char* cmd, JsonArray args) {
         const char* page = argStr(args, 0);
         if (!page[0]) return Result::errInvalid("Usage: ui nav <page>");
         
-        UI::Engine::instance().showPage(page);
+        g_core.showPage(page);
         LOG_I(Log::UI, "ui nav %s", page);
         return Result::ok();
     }
@@ -98,7 +98,7 @@ static Result execUi(const char* cmd, JsonArray args) {
             }
         }
         
-        State::store().setFromString(widget, value);
+        g_core.store().setFromString(widget, value);
         LOG_I(Log::UI, "ui set %s = %s", widget, value.c_str());
         return Result::ok();
     }
@@ -110,7 +110,7 @@ static Result execUi(const char* cmd, JsonArray args) {
         
         auto r = Result::ok();
         r.data["name"] = widget;
-        r.data["value"] = State::store().getString(widget).c_str();
+        r.data["value"] = g_core.store().getString(widget).c_str();
         return r;
     }
     
@@ -120,7 +120,7 @@ static Result execUi(const char* cmd, JsonArray args) {
         const char* value = argStr(args, 1);
         if (!widget[0]) return Result::errInvalid("Usage: ui text <widget> <value>");
         
-        State::store().set(widget, value);
+        g_core.store().set(widget, value);
         return Result::ok();
     }
     
@@ -138,7 +138,7 @@ static Result execUi(const char* cmd, JsonArray args) {
         const char* func = argStr(args, 0);
         if (!func[0]) return Result::errInvalid("Usage: ui call <function>");
         
-        if (!UI::callFunction(func))
+        if (!callFunction(func))
             return Result::errInvalid("No script handler registered");
         return Result::ok();
     }
@@ -152,10 +152,10 @@ static Result execUi(const char* cmd, JsonArray args) {
             // Widget ID mode — try onclick first, fallback to coordinate tap
             const char* wid = argStr(args, 0);
             if (!wid[0]) return Result::errInvalid("Usage: ui tap <widgetId> | <x> <y>");
-            if (UI::triggerClick(wid))
+            if (triggerClick(wid))
                 return Result::ok();
             // No onclick — try coordinate-based tap
-            if (!UI::getWidgetCenter(wid, x, y))
+            if (!getWidgetCenter(wid, x, y))
                 return Result::errInvalid("Widget not found");
         }
         
@@ -175,7 +175,7 @@ static Result execUi(const char* cmd, JsonArray args) {
             // Widget ID mode: hold <widgetId> [ms]
             const char* wid = argStr(args, 0);
             if (!wid[0]) return Result::errInvalid("Usage: ui hold <widgetId> [ms] | <x> <y> [ms]");
-            if (!UI::getWidgetCenter(wid, x, y))
+            if (!getWidgetCenter(wid, x, y))
                 return Result::errInvalid("Widget not found");
             ms = argInt(args, 1, 500);
         } else {
@@ -251,7 +251,7 @@ static Result execUi(const char* cmd, JsonArray args) {
             if (!text[0]) return Result::errInvalid("Usage: ui type [widgetId] <text>");
         }
         
-        lv_obj_t* focused = UI::getFocusedTextarea();
+        lv_obj_t* focused = getFocusedTextarea();
         if (!focused) {
             lv_group_t* grp = lv_group_get_default();
             if (grp) focused = lv_group_get_focused(grp);
@@ -413,7 +413,7 @@ static Result execSys(const char* cmd, JsonArray args) {
         
         // Store lang if provided
         if (lang[0]) {
-            State::store().set("sys.lang", lang);
+            g_core.store().set("sys.lang", lang);
             LOG_I(Log::APP, "Sync: lang=%s", lang);
         }
         

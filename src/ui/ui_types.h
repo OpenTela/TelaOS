@@ -42,6 +42,7 @@ namespace Tag {
         constexpr const char* Markdown = "markdown";
         constexpr const char* Tabs = "tabs";
         constexpr const char* Tab = "tab";
+        constexpr const char* Select = "select";
         constexpr const char* Table = "table";
         constexpr const char* Tr = "tr";
         constexpr const char* Td = "td";
@@ -127,7 +128,9 @@ struct Element {
     int canvasHeight = 0;
     
     bool is_page = false;
-    bool is_canvas = false;
+    bool is_canvas   = false;
+    bool is_dropdown = false;
+    P::Array<P::String> dropdownValues;   // value[i] ↔ lv_dropdown index i
     int zIndex = 0;
     uint32_t last_update = 0;
     
@@ -159,5 +162,29 @@ using Style = Modern::Style;
 using Element = Modern::Element;
 using Variable = Modern::Variable;
 using StyleProperty = Modern::StyleProperty;
+
+
+enum class IndicatorType { Scrollbar = 0, Dots = 1, None = 2 };
+
+struct PageGroup {
+    P::String id;
+    P::String default_page;
+    Orientation orientation = Orientation::Horizontal;
+    IndicatorType indicator = IndicatorType::Scrollbar;
+    lv_obj_t *tileview = nullptr;
+    lv_obj_t *indicator_obj = nullptr;
+    lv_obj_t *screen = nullptr;
+    P::Array<P::String> page_ids;
+    P::Array<lv_obj_t*> page_objs;
+    int current_page_idx = 0;
+
+    bool isHorizontal() const { return orientation == Orientation::Horizontal; }
+
+    void create(lv_obj_t* parent);
+    lv_obj_t* addTile(const P::String& pageId);
+    void finalize(int grpIdx);
+    void updateIndicator(int activeIdx);
+    void hide();
+};
 
 } // namespace UI

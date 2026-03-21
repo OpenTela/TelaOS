@@ -1,22 +1,21 @@
 /**
- * ui_canvas.cpp - Canvas drawing API for UI::Engine
+ * ui_canvas.cpp - Canvas drawing API for Core
  * 
  * Extracted from ui_html.cpp — pixel-level drawing on canvas widgets.
  */
 
 #include "lvgl.h"
-#include "ui/ui_engine.h"
+#include "core/core.h"
 #include "ui/ui_html_internal.h"
 #include "utils/log_config.h"
 
 static const char* TAG = "ui_canvas";
 
-namespace UI {
 
 // ============ Helpers ============
 
-static Element* findCanvas(const char* id) {
-    for (auto& elem : g_app->elements) {
+static UI::Element* findCanvas(const char* id) {
+    for (auto& elem : g_core.app().elements) {
         if (elem->is_canvas && elem->id == id) {
             return elem.get();
         }
@@ -27,7 +26,7 @@ static Element* findCanvas(const char* id) {
 
 // ============ Canvas API ============
 
-bool Engine::canvasClear(const char* id, uint32_t color) {
+bool Core::canvasClear(const char* id, uint32_t color) {
     auto* elem = findCanvas(id);
     if (!elem || !elem->canvasBuffer) return false;
     
@@ -45,7 +44,7 @@ bool Engine::canvasClear(const char* id, uint32_t color) {
     return true;
 }
 
-bool Engine::canvasRect(const char* id, int x, int y, int w, int h, uint32_t color) {
+bool Core::canvasRect(const char* id, int x, int y, int w, int h, uint32_t color) {
     auto* elem = findCanvas(id);
     if (!elem || !elem->canvasBuffer) {
         LOG_W(Log::UI, "canvasRect: canvas '%s' not found", id);
@@ -74,7 +73,7 @@ bool Engine::canvasRect(const char* id, int x, int y, int w, int h, uint32_t col
     return true;
 }
 
-bool Engine::canvasPixel(const char* id, int x, int y, uint32_t color) {
+bool Core::canvasPixel(const char* id, int x, int y, uint32_t color) {
     auto* elem = findCanvas(id);
     if (!elem || !elem->canvasBuffer) return false;
     
@@ -91,7 +90,7 @@ bool Engine::canvasPixel(const char* id, int x, int y, uint32_t color) {
     return true;
 }
 
-bool Engine::canvasCircle(const char* id, int cx, int cy, int r, uint32_t color) {
+bool Core::canvasCircle(const char* id, int cx, int cy, int r, uint32_t color) {
     auto* elem = findCanvas(id);
     if (!elem || !elem->canvasBuffer) return false;
     
@@ -118,7 +117,7 @@ bool Engine::canvasCircle(const char* id, int cx, int cy, int r, uint32_t color)
     return true;
 }
 
-bool Engine::canvasLine(const char* id, int x1, int y1, int x2, int y2, uint32_t color, int thickness) {
+bool Core::canvasLine(const char* id, int x1, int y1, int x2, int y2, uint32_t color, int thickness) {
     auto* elem = findCanvas(id);
     if (!elem || !elem->canvasBuffer) return false;
     
@@ -164,7 +163,7 @@ bool Engine::canvasLine(const char* id, int x1, int y1, int x2, int y2, uint32_t
     return true;
 }
 
-bool Engine::canvasRefresh(const char* id) {
+bool Core::canvasRefresh(const char* id) {
     auto* elem = findCanvas(id);
     if (!elem) return false;
     
@@ -172,4 +171,3 @@ bool Engine::canvasRefresh(const char* id) {
     return true;
 }
 
-} // namespace UI

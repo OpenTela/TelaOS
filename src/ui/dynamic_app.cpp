@@ -1,17 +1,14 @@
-#include "ui/bax_app.h"
+#include "ui/dynamic_app.h"
 #include "ui/ui_html_internal.h"
+#include "core/core.h"
 #include "core/state_store.h"
 #include "utils/log_config.h"
 #include <lvgl.h>
 #include <algorithm>
 
-static const char* TAG = "BaxApp";
+static const char* TAG = "DynamicApp";
 
-// Static storage — placement new resets without changing address
-static BaxApp s_app;
-BaxApp* g_app = &s_app;
-
-BaxApp::~BaxApp() {
+DynamicApp::~DynamicApp() {
     // Clean LVGL widgets FIRST — they reference iconPaths/imagePaths
     lv_obj_t* scr = lv_screen_active();
     if (scr) {
@@ -21,21 +18,21 @@ BaxApp::~BaxApp() {
     // Then all vectors, strings, maps auto-destroyed by default destructors
 }
 
-int BaxApp::findPage(const char* id) const {
+int DynamicApp::findPage(const char* id) const {
     for (int i = 0; i < page_count; i++) {
         if (page_ids[i] == id) return i;
     }
     return INVALID_INDEX;
 }
 
-lv_obj_t* BaxApp::findElement(const char* id) const {
+lv_obj_t* DynamicApp::findElement(const char* id) const {
     for (const auto& el : elements) {
         if (el->id == id) return el->obj();
     }
     return nullptr;
 }
 
-int BaxApp::addElement(ElementDesc& d) {
+int DynamicApp::addElement(ElementDesc& d) {
     if (!d.id || !d.id[0]) return INVALID_INDEX;
     
     auto el = P::create<UI::Element>();
@@ -55,7 +52,7 @@ int BaxApp::addElement(ElementDesc& d) {
     if (d.visibleBind && d.visibleBind[0]) {
         el->visibleBind = extractBindVar(d.visibleBind);
         if (!el->visibleBind.empty()) {
-            P::String val = State::store().getString(el->visibleBind);
+            P::String val = g_core.store().getString(el->visibleBind);
             bool visible = (val == "true" || val == "1");
             if (!visible) lv_obj_add_flag(d.obj, LV_OBJ_FLAG_HIDDEN);
         }
@@ -91,7 +88,7 @@ int BaxApp::addElement(ElementDesc& d) {
     return idx;
 }
 
-int BaxApp::addPage(const char* id, lv_obj_t* obj) {
+int DynamicApp::addPage(const char* id, lv_obj_t* obj) {
     ElementDesc d = {};
     d.id = id;
     d.obj = obj;
@@ -99,7 +96,7 @@ int BaxApp::addPage(const char* id, lv_obj_t* obj) {
     return addElement(d);
 }
 
-void BaxApp::setZIndex(lv_obj_t* handle, int z) {
+void DynamicApp::setZIndex(lv_obj_t* handle, int z) {
     for (auto& el : elements) {
         if (el->w.handle == handle || el->parentObj == handle) {
             el->zIndex = z;
@@ -109,7 +106,7 @@ void BaxApp::setZIndex(lv_obj_t* handle, int z) {
     deferredZIndex[handle] = z;
 }
 
-void BaxApp::applyZIndex() {
+void DynamicApp::applyZIndex() {
     struct ZEntry { lv_obj_t* obj; int z; };
     P::Array<ZEntry> negatives, positives;
     

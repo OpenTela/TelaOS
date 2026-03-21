@@ -28,7 +28,7 @@ void warnIfNumericString(const P::String& name, const P::String& def);
 
 class Store {
 public:
-    explicit Store(const char* tag = "Store") : m_tag(tag) {}
+    explicit Store(const char* tag) : m_tag(tag) {}
     
     // ============ DEFINE ============
     
@@ -259,7 +259,7 @@ public:
     }
     
     void dump() const {
-        if (Log::get(Log::STATE) >= Log::Debug) OS_LOGD("State", "=== %s (%d vars) ===", m_tag, (int)m_vars.size());
+        if (Log::get(Log::STATE) >= Log::Debug) OS_LOGD("State", "=== Store (%d vars) ===", (int)m_vars.size());
         for (const auto& name : m_names) {
             auto* var = getVar(name);
             if (var) {
@@ -272,10 +272,10 @@ public:
     }
 
 private:
-    const char* m_tag;
     P::Map<P::String, Variable> m_vars;
     P::Array<P::String> m_names;
     std::function<void(const P::String&, const VarValue&)> m_onChange;
+    const char* m_tag = "Store";
     
     static P::String valueToString(const VarValue& v) {
         return std::visit([](auto&& val) -> P::String {
@@ -297,15 +297,6 @@ private:
         }, v);
     }
 };
-
-// ============ GLOBAL INSTANCES ============
-
-namespace State {
-    inline Store& store() {
-        static Store s("State");
-        return s;
-    }
-}
 
 // ============ C API ============
 

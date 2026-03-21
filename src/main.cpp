@@ -10,11 +10,14 @@
 #include "core/app_manager.h"
 #include "core/state_store.h"
 #include "ui/ui_task.h"
-#include "ui/ui_engine.h"
+#include "core/core.h"
 #include "utils/task_queue.h"
 #include "console/console.h"
 #include "console/serial_transport.h"
 #include "core/call_queue.h"
+
+/// Global Core instance — single owner of DynamicApp and Store
+Core g_core;
 #include "ble/ble_bridge.h"
 #include "ble/bin_transfer.h"
 #include "ble/bin_receive.h"
@@ -63,7 +66,7 @@ void setup() {
     
     Serial.printf("[Heap] After Display: %d bytes free\n", ESP.getFreeHeap());
     
-    State::store().onChange([](const P::String& name, const VarValue& value) {
+    g_core.store().onChange([](const P::String& name, const VarValue& value) {
         P::String strVal = std::visit([](auto&& v) -> P::String {
             using T = std::decay_t<decltype(v)>;
             if constexpr (std::is_same_v<T, P::String>) return v;
@@ -76,7 +79,6 @@ void setup() {
     });
     
     display_lock();
-    ui_engine().init();
     Shade::instance().init();
     display_unlock();
     

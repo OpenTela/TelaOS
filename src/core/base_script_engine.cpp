@@ -1,5 +1,6 @@
 #include "core/base_script_engine.h"
 #include "core/state_store.h"
+#include "core/core.h"
 #include "utils/log_config.h"
 #include <cstring>
 
@@ -13,14 +14,14 @@ void BaseScriptEngine::setState(const char* key, const char* value) {
 }
 
 void BaseScriptEngine::setState(const char* key, int value) {
-    State::store().setInt(key, value, false);
+    g_core.store().setInt(key, value, false);
     char buf[16];
     snprintf(buf, sizeof(buf), "%d", value);
     notifyState(key, buf);
 }
 
 void BaseScriptEngine::setState(const char* key, bool value) {
-    State::store().setBool(key, value, false);
+    g_core.store().setBool(key, value, false);
     notifyState(key, value ? "true" : "false");
 }
 
@@ -29,16 +30,16 @@ void BaseScriptEngine::setStateSilent(const char* key, const char* value) {
 }
 
 const char* BaseScriptEngine::getStateString(const char* key) {
-    m_getBuffer = State::store().getAsString(key);
+    m_getBuffer = g_core.store().getAsString(key);
     return m_getBuffer.c_str();
 }
 
 int BaseScriptEngine::getStateInt(const char* key) {
-    return State::store().getInt(key);
+    return g_core.store().getInt(key);
 }
 
 bool BaseScriptEngine::getStateBool(const char* key) {
-    return State::store().getBool(key);
+    return g_core.store().getBool(key);
 }
 
 // --- Config ---

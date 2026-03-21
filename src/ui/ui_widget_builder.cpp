@@ -10,7 +10,7 @@
  */
 
 #include "lvgl.h"
-#include "ui/ui_engine.h"
+#include "core/core.h"
 #include "ui/ui_html_internal.h"
 #include "ui/xml_utils.h"
 #include "ui/css_parser.h"
@@ -58,8 +58,8 @@ static P::String resolve_resource_path(const P::String& src) {
     }
     
     // Relative path - prepend app resources folder
-    if (!g_app->app_path.empty()) {
-        char buf[128]; snprintf(buf, sizeof(buf), "%s/resources/%s", g_app->app_path.c_str(), src.c_str());
+    if (!g_core.app().app_path.empty()) {
+        char buf[128]; snprintf(buf, sizeof(buf), "%s/resources/%s", g_core.app().app_path.c_str(), src.c_str());
         return buf;
     }
     
@@ -130,89 +130,89 @@ static bool stripLiteral(P::String& text) {
 }
 
 static void button_click_handler(lv_event_t *e) {
-    g_app->in_lvgl_callback = true;
+    g_core.app().in_lvgl_callback = true;
     
     int idx = (int)(intptr_t)lv_event_get_user_data(e);
     lv_event_code_t code = lv_event_get_code(e);
     
     LOG_D(Log::UI, "button_event: idx=%d code=%d elements=%d heap=%lu", 
-             idx, (int)code, (int)g_app->elements.size(), (unsigned long)heap_caps_get_free_size(MALLOC_CAP_8BIT));
+             idx, (int)code, (int)g_core.app().elements.size(), (unsigned long)heap_caps_get_free_size(MALLOC_CAP_8BIT));
     
-    if (idx < 0 || idx >= (int)g_app->elements.size()) {
+    if (idx < 0 || idx >= (int)g_core.app().elements.size()) {
         LOG_E(Log::UI, "button_event: invalid idx!");
-        g_app->in_lvgl_callback = false;
+        g_core.app().in_lvgl_callback = false;
         return;
     }
     
     LOG_I(Log::UI, "button_event: id=%s onclick='%s' onhold='%s' href='%s'", 
-             g_app->elements[idx]->id.c_str(), g_app->elements[idx]->onclick.c_str(), 
-             g_app->elements[idx]->onhold.c_str(), g_app->elements[idx]->href.c_str());
+             g_core.app().elements[idx]->id.c_str(), g_core.app().elements[idx]->onclick.c_str(), 
+             g_core.app().elements[idx]->onhold.c_str(), g_core.app().elements[idx]->href.c_str());
     
     // Handle LONG_PRESSED -> onhold
     if (code == LV_EVENT_LONG_PRESSED) {
-        if (!g_app->elements[idx]->onhold.empty() && g_onhold_handler) {
-            LOG_I(Log::UI, "onhold: %s()", g_app->elements[idx]->onhold.c_str());
-            g_onhold_handler(g_app->elements[idx]->onhold.c_str());
+        if (!g_core.app().elements[idx]->onhold.empty() && g_onhold_handler) {
+            LOG_I(Log::UI, "onhold: %s()", g_core.app().elements[idx]->onhold.c_str());
+            g_onhold_handler(g_core.app().elements[idx]->onhold.c_str());
         }
-        g_app->in_lvgl_callback = false;
+        g_core.app().in_lvgl_callback = false;
         return;
     }
     
     // Handle CLICKED -> onclick
     if (code == LV_EVENT_CLICKED) {
         // Handle onclick first (call Lua function)
-        if (!g_app->elements[idx]->onclick.empty() && g_onclick_handler) {
-            LOG_I(Log::UI, "onclick: %s()", g_app->elements[idx]->onclick.c_str());
-            g_onclick_handler(g_app->elements[idx]->onclick.c_str());
+        if (!g_core.app().elements[idx]->onclick.empty() && g_onclick_handler) {
+            LOG_I(Log::UI, "onclick: %s()", g_core.app().elements[idx]->onclick.c_str());
+            g_onclick_handler(g_core.app().elements[idx]->onclick.c_str());
         }
         
         // Then handle href (navigation)
-        if (!g_app->elements[idx]->href.empty()) {
-            navigate(g_app->elements[idx]->href.c_str());
+        if (!g_core.app().elements[idx]->href.empty()) {
+            navigate(g_core.app().elements[idx]->href.c_str());
         }
     }
     
-    g_app->in_lvgl_callback = false;
+    g_core.app().in_lvgl_callback = false;
 }
 
 // Switch event handler - UI updates directly
 static void switch_event_handler(lv_event_t *e) {
-    if (g_app->updating_from_binding) return;
+    if (g_core.app().updating_from_binding) return;
     
     int idx = (int)(intptr_t)lv_event_get_user_data(e);
-    if (idx < 0 || idx >= (int)g_app->elements.size()) return;
+    if (idx < 0 || idx >= (int)g_core.app().elements.size()) return;
     
-    lv_obj_t *sw = g_app->elements[idx]->obj();
+    lv_obj_t *sw = g_core.app().elements[idx]->obj();
     bool checked = lv_obj_has_state(sw, LV_STATE_CHECKED);
     const char *val = checked ? "true" : "false";
     
     // Update state and UI directly
-    if (!g_app->elements[idx]->bind.empty()) {
-        ui_update_bindings(g_app->elements[idx]->bind.c_str(), val);
+    if (!g_core.app().elements[idx]->bind.empty()) {
+        ui_update_bindings(g_core.app().elements[idx]->bind.c_str(), val);
         // Sync Lua state so onchange can read current value
         if (g_state_change_handler) {
-            g_state_change_handler(g_app->elements[idx]->bind.c_str(), val);
+            g_state_change_handler(g_core.app().elements[idx]->bind.c_str(), val);
         }
     }
     
     // Call onchange Lua handler
-    if (!g_app->elements[idx]->onchange.empty() && g_onclick_handler) {
-        g_onclick_handler(g_app->elements[idx]->onchange.c_str());
+    if (!g_core.app().elements[idx]->onchange.empty() && g_onclick_handler) {
+        g_onclick_handler(g_core.app().elements[idx]->onchange.c_str());
     }
     
-    LOG_I(Log::UI, "switch %s: %s", g_app->elements[idx]->id.c_str(), checked ? "ON" : "OFF");
+    LOG_I(Log::UI, "switch %s: %s", g_core.app().elements[idx]->id.c_str(), checked ? "ON" : "OFF");
 }
 
 // Slider event handler - live UI updates with throttle
 static void slider_event_handler(lv_event_t *e) {
-    if (g_app->updating_from_binding) return;
+    if (g_core.app().updating_from_binding) return;
     
     int idx = (int)(intptr_t)lv_event_get_user_data(e);
-    if (idx < 0 || idx >= (int)g_app->elements.size()) return;
+    if (idx < 0 || idx >= (int)g_core.app().elements.size()) return;
     
     lv_event_code_t code = lv_event_get_code(e);
     
-    lv_obj_t *slider = g_app->elements[idx]->obj();
+    lv_obj_t *slider = g_core.app().elements[idx]->obj();
     int value = lv_slider_get_value(slider);
     char val_str[SMALL_BUF_LEN];
     snprintf(val_str, sizeof(val_str), "%d", value);
@@ -220,79 +220,79 @@ static void slider_event_handler(lv_event_t *e) {
     if (code == LV_EVENT_VALUE_CHANGED) {
         // Throttle UI updates during drag
         uint32_t now = lv_tick_get();
-        if (now - g_app->elements[idx]->last_update < SLIDER_THROTTLE_MS) {
+        if (now - g_core.app().elements[idx]->last_update < SLIDER_THROTTLE_MS) {
             return;
         }
-        g_app->elements[idx]->last_update = now;
+        g_core.app().elements[idx]->last_update = now;
         
         // Update UI only (no Lua) during drag
-        if (!g_app->elements[idx]->bind.empty()) {
-            ui_update_bindings(g_app->elements[idx]->bind.c_str(), val_str);
+        if (!g_core.app().elements[idx]->bind.empty()) {
+            ui_update_bindings(g_core.app().elements[idx]->bind.c_str(), val_str);
         }
     }
     else if (code == LV_EVENT_RELEASED) {
-        LOG_I(Log::UI, "slider %s: value=%d", g_app->elements[idx]->id.c_str(), value);
+        LOG_I(Log::UI, "slider %s: value=%d", g_core.app().elements[idx]->id.c_str(), value);
         // Final update
-        if (!g_app->elements[idx]->bind.empty()) {
-            ui_update_bindings(g_app->elements[idx]->bind.c_str(), val_str);
+        if (!g_core.app().elements[idx]->bind.empty()) {
+            ui_update_bindings(g_core.app().elements[idx]->bind.c_str(), val_str);
         }
         
         // Sync Lua state
-        if (!g_app->elements[idx]->bind.empty() && g_state_change_handler) {
-            g_state_change_handler(g_app->elements[idx]->bind.c_str(), val_str);
+        if (!g_core.app().elements[idx]->bind.empty() && g_state_change_handler) {
+            g_state_change_handler(g_core.app().elements[idx]->bind.c_str(), val_str);
         }
         
         // Call Lua onchange handler
-        if (!g_app->elements[idx]->onchange.empty() && g_onclick_handler) {
-            g_onclick_handler(g_app->elements[idx]->onchange.c_str());
+        if (!g_core.app().elements[idx]->onchange.empty() && g_onclick_handler) {
+            g_onclick_handler(g_core.app().elements[idx]->onchange.c_str());
         }
     }
 }
 
 // Input (textarea) event handler — fires on every character
 static void input_event_handler(lv_event_t *e) {
-    if (g_app->updating_from_binding) return;
+    if (g_core.app().updating_from_binding) return;
     
     int idx = (int)(intptr_t)lv_event_get_user_data(e);
-    if (idx < 0 || idx >= (int)g_app->elements.size()) return;
+    if (idx < 0 || idx >= (int)g_core.app().elements.size()) return;
     
-    lv_obj_t *ta = g_app->elements[idx]->obj();
+    lv_obj_t *ta = g_core.app().elements[idx]->obj();
     const char *text = lv_textarea_get_text(ta);
     if (!text) return;
     
     // Update state and UI directly
-    if (!g_app->elements[idx]->bind.empty()) {
-        ui_update_bindings(g_app->elements[idx]->bind.c_str(), text);
+    if (!g_core.app().elements[idx]->bind.empty()) {
+        ui_update_bindings(g_core.app().elements[idx]->bind.c_str(), text);
     }
     
     // Sync Lua state so oninput handler can read current value
-    if (!g_app->elements[idx]->bind.empty() && g_state_change_handler) {
-        g_state_change_handler(g_app->elements[idx]->bind.c_str(), text);
+    if (!g_core.app().elements[idx]->bind.empty() && g_state_change_handler) {
+        g_state_change_handler(g_core.app().elements[idx]->bind.c_str(), text);
     }
     
     // Call oninput Lua handler (HTML standard: fires on every input)
-    if (!g_app->elements[idx]->oninput.empty() && g_onclick_handler) {
-        g_onclick_handler(g_app->elements[idx]->oninput.c_str());
+    if (!g_core.app().elements[idx]->oninput.empty() && g_onclick_handler) {
+        g_onclick_handler(g_core.app().elements[idx]->oninput.c_str());
     }
 }
 
 // Input defocus - sync Lua state and call onchange
 static void input_complete_handler(lv_event_t *e) {
     int idx = (int)(intptr_t)lv_event_get_user_data(e);
-    if (idx < 0 || idx >= (int)g_app->elements.size()) return;
+    if (idx < 0 || idx >= (int)g_core.app().elements.size()) return;
     
-    lv_obj_t *ta = g_app->elements[idx]->obj();
+    lv_obj_t *ta = g_core.app().elements[idx]->obj();
     const char *text = lv_textarea_get_text(ta);
     if (!text) return;
     
     // Sync Lua state
-    if (!g_app->elements[idx]->bind.empty() && g_state_change_handler) {
-        g_state_change_handler(g_app->elements[idx]->bind.c_str(), text);
+    if (!g_core.app().elements[idx]->bind.empty() && g_state_change_handler) {
+        g_state_change_handler(g_core.app().elements[idx]->bind.c_str(), text);
     }
     
     // Call onchange Lua handler
-    if (!g_app->elements[idx]->onchange.empty() && g_onclick_handler) {
-        g_onclick_handler(g_app->elements[idx]->onchange.c_str());
+    if (!g_core.app().elements[idx]->onchange.empty() && g_onclick_handler) {
+        g_onclick_handler(g_core.app().elements[idx]->onchange.c_str());
     }
 }
 
@@ -317,9 +317,9 @@ static void input_defocus_handler(lv_event_t *e) {
     // Walk up parent chain to find page
     lv_obj_t *obj = lv_obj_get_parent(ta);
     while (obj) {
-        for (int i = 0; i < g_app->page_count; i++) {
-            if (g_app->page_objs[i] == obj && g_app->keyboards[i]) {
-                lv_obj_add_flag(g_app->keyboards[i], LV_OBJ_FLAG_HIDDEN);
+        for (int i = 0; i < g_core.app().page_count; i++) {
+            if (g_core.app().page_objs[i] == obj && g_core.app().keyboards[i]) {
+                lv_obj_add_flag(g_core.app().keyboards[i], LV_OBJ_FLAG_HIDDEN);
                 return;
             }
         }
@@ -335,8 +335,8 @@ static void input_focus_handler(lv_event_t *e) {
     int page_idx = INVALID_INDEX;
     lv_obj_t *obj = lv_obj_get_parent(ta);
     while (obj) {
-        for (int i = 0; i < g_app->page_count; i++) {
-            if (g_app->page_objs[i] == obj) {
+        for (int i = 0; i < g_core.app().page_count; i++) {
+            if (g_core.app().page_objs[i] == obj) {
                 page_idx = i;
                 break;
             }
@@ -349,22 +349,22 @@ static void input_focus_handler(lv_event_t *e) {
         LOG_W(Log::UI, "input_focus_handler: page not found for ta=%p", ta);
         return;
     }
-    lv_obj_t *parent = g_app->page_objs[page_idx];
+    lv_obj_t *parent = g_core.app().page_objs[page_idx];
     LOG_I(Log::UI, "input_focus_handler: page_idx=%d parent=%p", page_idx, parent);
     
     // Create keyboard for this page if needed
-    if (!g_app->keyboards[page_idx]) {
-        g_app->keyboards[page_idx] = lv_keyboard_create(parent);
-        lv_obj_add_event_cb(g_app->keyboards[page_idx], keyboard_event_handler, LV_EVENT_ALL, nullptr);
-        lv_obj_set_size(g_app->keyboards[page_idx], lv_pct(FULL_SIZE_PCT), lv_pct(KEYBOARD_HEIGHT_PCT));
-        lv_obj_align(g_app->keyboards[page_idx], LV_ALIGN_BOTTOM_MID, 0, 0);
-        lv_obj_add_flag(g_app->keyboards[page_idx], LV_OBJ_FLAG_GESTURE_BUBBLE);
-        lv_obj_add_flag(g_app->keyboards[page_idx], LV_OBJ_FLAG_EVENT_BUBBLE);
-        lv_obj_set_style_text_font(g_app->keyboards[page_idx], UI::Font::get(), LV_PART_ITEMS);
+    if (!g_core.app().keyboards[page_idx]) {
+        g_core.app().keyboards[page_idx] = lv_keyboard_create(parent);
+        lv_obj_add_event_cb(g_core.app().keyboards[page_idx], keyboard_event_handler, LV_EVENT_ALL, nullptr);
+        lv_obj_set_size(g_core.app().keyboards[page_idx], lv_pct(FULL_SIZE_PCT), lv_pct(KEYBOARD_HEIGHT_PCT));
+        lv_obj_align(g_core.app().keyboards[page_idx], LV_ALIGN_BOTTOM_MID, 0, 0);
+        lv_obj_add_flag(g_core.app().keyboards[page_idx], LV_OBJ_FLAG_GESTURE_BUBBLE);
+        lv_obj_add_flag(g_core.app().keyboards[page_idx], LV_OBJ_FLAG_EVENT_BUBBLE);
+        lv_obj_set_style_text_font(g_core.app().keyboards[page_idx], UI::Font::get(), LV_PART_ITEMS);
     }
     
-    lv_keyboard_set_textarea(g_app->keyboards[page_idx], ta);
-    lv_obj_clear_flag(g_app->keyboards[page_idx], LV_OBJ_FLAG_HIDDEN);
+    lv_keyboard_set_textarea(g_core.app().keyboards[page_idx], ta);
+    lv_obj_clear_flag(g_core.app().keyboards[page_idx], LV_OBJ_FLAG_HIDDEN);
 }
 
 uint32_t parse_color(const char *s) {
@@ -669,14 +669,14 @@ void create_label(const char *astart, const char *aend, const char *content, lv_
     // Dynamic color bindings — initial values from state
     if (hasDynamicColor) {
         P::String varName = extractBindVar(colorAttr.c_str());
-        P::String initVal = State::store().getString(varName);
+        P::String initVal = g_core.store().getString(varName);
         if (!initVal.empty()) {
             lv_obj_set_style_text_color(lbl, lv_color_hex(parse_color(initVal.c_str())), LV_PART_MAIN);
         }
     }
     if (hasDynamicBgcolor) {
         P::String varName = extractBindVar(bgcolorAttr.c_str());
-        P::String initVal = State::store().getString(varName);
+        P::String initVal = g_core.store().getString(varName);
         if (!initVal.empty()) {
             lv_obj_set_style_bg_color(lbl, lv_color_hex(parse_color(initVal.c_str())), LV_PART_MAIN);
             lv_obj_set_style_bg_opa(lbl, LV_OPA_COVER, LV_PART_MAIN);
@@ -693,7 +693,7 @@ void create_label(const char *astart, const char *aend, const char *content, lv_
         d.bgcolorBind = hasDynamicBgcolor        ? bgcolorAttr.c_str()    : nullptr;
         d.colorBind   = hasDynamicColor          ? colorAttr.c_str()      : nullptr;
         d.zIndex      = attrs.zIndex;
-        g_app->addElement(d);
+        g_core.app().addElement(d);
     }
 }
 
@@ -803,12 +803,12 @@ void create_button(const char *astart, const char *aend, const char *content, lv
     if (fontSize == 0 && flat.font > 0) fontSize = flat.font;
     if (colorAttr.empty() && !flat.color.empty()) colorAttr = flat.color;
     
-    // Prepare icon path with proper lifetime (g_app->iconPaths persists until ui_clear)
+    // Prepare icon path with proper lifetime (g_core.app().iconPaths persists until ui_clear)
     const char* iconPath = nullptr;
     if (hasIcon) {
         P::String resolvedPath = resolve_resource_path(iconAttr);
-        g_app->iconPaths.push_back("C:" + resolvedPath);
-        iconPath = g_app->iconPaths.back().c_str();
+        g_core.app().iconPaths.push_back("C:" + resolvedPath);
+        iconPath = g_core.app().iconPaths.back().c_str();
         LOG_D(Log::UI, "Button icon: %s", iconPath);
     }
     
@@ -861,7 +861,7 @@ void create_button(const char *astart, const char *aend, const char *content, lv
     if (!bgcolorAttr.empty()) {
         if (hasDynamicBgcolor) {
             P::String varName = extractBindVar(bgcolorAttr.c_str());
-            P::String initVal = State::store().getString(varName);
+            P::String initVal = g_core.store().getString(varName);
             if (!initVal.empty()) {
                 UI::setBgColor(widget, parse_color(initVal.c_str()));
             }
@@ -882,7 +882,7 @@ void create_button(const char *astart, const char *aend, const char *content, lv
     if (!colorAttr.empty() && widget.label.handle) {
         if (hasDynamicColor) {
             P::String varName = extractBindVar(colorAttr.c_str());
-            P::String initVal = State::store().getString(varName);
+            P::String initVal = g_core.store().getString(varName);
             if (!initVal.empty()) {
                 UI::setColor(widget.label, parse_color(initVal.c_str()));
             }
@@ -904,15 +904,15 @@ void create_button(const char *astart, const char *aend, const char *content, lv
     bd.bgcolorBind = hasDynamicBgcolor        ? bgcolorAttr.c_str()    : nullptr;
     bd.colorBind   = hasDynamicColor          ? colorAttr.c_str()      : nullptr;
     bd.zIndex      = attrs.zIndex;
-    int idx = g_app->addElement(bd);
+    int idx = g_core.app().addElement(bd);
     
-    if (idx >= 0 && idx < (int)g_app->elements.size()) {
-        g_app->elements[idx]->parentObj = btn;
-        g_app->elements[idx]->onhold = onhold;
+    if (idx >= 0 && idx < (int)g_core.app().elements.size()) {
+        g_core.app().elements[idx]->parentObj = btn;
+        g_core.app().elements[idx]->onhold = onhold;
         
         // For buttons, apply visibility to the button, not the label
-        if (!g_app->elements[idx]->visibleBind.empty()) {
-            P::String visVal = State::store().getString(g_app->elements[idx]->visibleBind);
+        if (!g_core.app().elements[idx]->visibleBind.empty()) {
+            P::String visVal = g_core.store().getString(g_core.app().elements[idx]->visibleBind);
             bool visible = (visVal == "true" || visVal == "1");
             if (!visible) {
                 lv_obj_add_flag(btn, LV_OBJ_FLAG_HIDDEN);
@@ -969,7 +969,7 @@ void create_switch(const char *astart, const char *aend, lv_obj_t *parent) {
     sd.bind        = bind.c_str();
     sd.visibleBind = attrs.hasDynamicVisible ? attrs.visible.c_str() : nullptr;
     sd.zIndex      = attrs.zIndex;
-    int idx = g_app->addElement(sd);
+    int idx = g_core.app().addElement(sd);
     
     widget.on(LV_EVENT_VALUE_CHANGED, switch_event_handler, idx);
 }
@@ -1021,7 +1021,7 @@ void create_slider(const char *astart, const char *aend, lv_obj_t *parent) {
     sld.bind        = bind.c_str();
     sld.visibleBind = attrs.hasDynamicVisible ? attrs.visible.c_str() : nullptr;
     sld.zIndex      = attrs.zIndex;
-    int idx = g_app->addElement(sld);
+    int idx = g_core.app().addElement(sld);
     
     widget.on(LV_EVENT_VALUE_CHANGED, slider_event_handler, idx);
     widget.on(LV_EVENT_RELEASED, slider_event_handler, idx);
@@ -1099,7 +1099,7 @@ void create_input(const char *astart, const char *aend, const char *content, lv_
     ind.bind        = bind.c_str();
     ind.visibleBind = attrs.hasDynamicVisible ? attrs.visible.c_str() : nullptr;
     ind.zIndex      = attrs.zIndex;
-    int idx = g_app->addElement(ind);
+    int idx = g_core.app().addElement(ind);
     
     widget.on(LV_EVENT_VALUE_CHANGED, input_event_handler, idx);
     widget.on(LV_EVENT_FOCUSED, input_focus_handler, idx);
@@ -1121,9 +1121,9 @@ void create_image(const char *astart, const char *aend, lv_obj_t *parent) {
     
     P::String imgPath = resolve_resource_path(src);
     
-    // Using global g_app->imagePaths (cleared on ui_clear)
-    g_app->imagePaths.push_back("C:" + imgPath);
-    const char* lvglPath = g_app->imagePaths.back().c_str();
+    // Using global g_core.app().imagePaths (cleared on ui_clear)
+    g_core.app().imagePaths.push_back("C:" + imgPath);
+    const char* lvglPath = g_core.app().imagePaths.back().c_str();
     
     // Create via Image widget struct
     Image widget = { .src = lvglPath };
@@ -1152,7 +1152,7 @@ void create_image(const char *astart, const char *aend, lv_obj_t *parent) {
         imd.onclick     = onclick.c_str();
         imd.visibleBind = attrs.hasDynamicVisible ? attrs.visible.c_str() : nullptr;
         imd.zIndex      = attrs.zIndex;
-        int idx = g_app->addElement(imd);
+        int idx = g_core.app().addElement(imd);
         widget.on(LV_EVENT_CLICKED, button_click_handler, idx);
     } else if (!attrs.id.empty() || attrs.hasDynamicVisible) {
         ensureId(attrs, "_img", false);
@@ -1161,7 +1161,7 @@ void create_image(const char *astart, const char *aend, lv_obj_t *parent) {
         imd2.obj         = img;
         imd2.visibleBind = attrs.hasDynamicVisible ? attrs.visible.c_str() : nullptr;
         imd2.zIndex      = attrs.zIndex;
-        g_app->addElement(imd2);
+        g_core.app().addElement(imd2);
     }
 }
 
@@ -1170,8 +1170,8 @@ static void canvas_touch_handler(lv_event_t* e) {
     lv_obj_t* canvas = (lv_obj_t*)lv_event_get_target(e);
     int idx = (int)(intptr_t)lv_event_get_user_data(e);
     
-    if (idx < 0 || idx >= (int)g_app->elements.size()) return;
-    auto& elem = g_app->elements[idx];
+    if (idx < 0 || idx >= (int)g_core.app().elements.size()) return;
+    auto& elem = g_core.app().elements[idx];
     if (!elem->is_canvas) return;
     
     lv_event_code_t code = lv_event_get_code(e);
@@ -1291,7 +1291,7 @@ void create_canvas(const char *astart, const char *aend, lv_obj_t *parent) {
         }
         
         if (!elem->visibleBind.empty()) {
-            P::String visVal = State::store().getString(elem->visibleBind);
+            P::String visVal = g_core.store().getString(elem->visibleBind);
             bool visible = (visVal == "true" || visVal == "1");
             if (!visible) {
                 lv_obj_add_flag(canvas, LV_OBJ_FLAG_HIDDEN);
@@ -1299,8 +1299,8 @@ void create_canvas(const char *astart, const char *aend, lv_obj_t *parent) {
         }
     }
     
-    int idx = g_app->elements.size();
-    g_app->elements.push_back(std::move(elem));
+    int idx = g_core.app().elements.size();
+    g_core.app().elements.push_back(std::move(elem));
     
     // Add touch handler if ondraw, ontap or onhold specified
     if (!ondraw.empty() || !ontap.empty() || !onhold.empty()) {
@@ -1420,7 +1420,7 @@ void create_markdown(const char *astart, const char *aend, const char *content, 
             elem->visibleBind = vb;
         }
         if (!elem->visibleBind.empty()) {
-            P::String visVal = State::store().getString(elem->visibleBind);
+            P::String visVal = g_core.store().getString(elem->visibleBind);
             bool visible = (visVal == "true" || visVal == "1");
             if (!visible) {
                 lv_obj_add_flag(spangroup, LV_OBJ_FLAG_HIDDEN);
@@ -1428,7 +1428,165 @@ void create_markdown(const char *astart, const char *aend, const char *content, 
         }
     }
     
-    g_app->elements.push_back(std::move(elem));
+    g_core.app().elements.push_back(std::move(elem));
 }
 
 #endif // LV_USE_SPAN
+
+// ============ SELECT / DROPDOWN ============
+
+static void dropdown_event_handler(lv_event_t *e) {
+    if (g_core.app().updating_from_binding) return;
+
+    int idx = (int)(intptr_t)lv_event_get_user_data(e);
+    if (idx < 0 || idx >= (int)g_core.app().elements.size()) return;
+
+    lv_obj_t *dd = g_core.app().elements[idx]->obj();
+    uint16_t sel = lv_dropdown_get_selected(dd);
+
+    const auto& values = g_core.app().elements[idx]->dropdownValues;
+    if (sel >= values.size()) return;
+
+    const char* val = values[sel].c_str();
+
+    LOG_I(Log::UI, "dropdown %s: index=%d value=%s",
+          g_core.app().elements[idx]->id.c_str(), (int)sel, val);
+
+    if (!g_core.app().elements[idx]->bind.empty()) {
+        ui_update_bindings(g_core.app().elements[idx]->bind.c_str(), val);
+        if (g_state_change_handler) {
+            g_state_change_handler(g_core.app().elements[idx]->bind.c_str(), val);
+        }
+    }
+
+    if (!g_core.app().elements[idx]->onchange.empty() && g_onclick_handler) {
+        g_onclick_handler(g_core.app().elements[idx]->onchange.c_str());
+    }
+}
+
+struct SelectOptions {
+    P::Array<P::String> values;
+    P::Array<P::String> labels;
+    P::String           lvglStr;   // "Label1\nLabel2\n..."
+};
+
+static SelectOptions parse_options(const char* content) {
+    SelectOptions out;
+    if (!content) return out;
+
+    const char* p = content;
+    while (*p) {
+        const char* tag = strstr(p, "<option");
+        if (!tag) break;
+
+        const char* attrStart = tag + 7;
+        const char* gt = strchr(attrStart, '>');
+        if (!gt) break;
+
+        char valBuf[64] = {};
+        bool hasValue = getAttr(attrStart, gt, "value", valBuf, sizeof(valBuf));
+
+        const char* textStart = gt + 1;
+        const char* close = strstr(textStart, "</option>");
+        if (!close) { p = gt + 1; continue; }
+
+        P::String label = trimmed(P::String(textStart, close - textStart));
+        if (contains(label, '{')) label = render_template(label.c_str());
+
+        P::String value = hasValue ? P::String(valBuf) : label;
+        if (contains(value, '{')) value = render_template(value.c_str());
+
+        out.values.push_back(value);
+        out.labels.push_back(label);
+        if (!out.lvglStr.empty()) out.lvglStr += '\n';
+        out.lvglStr += label;
+
+        p = close + 9;
+    }
+    return out;
+}
+
+void create_select(const char *astart, const char *aend, const char *content, lv_obj_t *parent) {
+    auto attrs    = parseCommonAttrs(astart, aend);
+    auto bind     = getAttr(astart, aend, "bind");
+    auto onchange = getAttr(astart, aend, "onchange");
+
+    int32_t x = getAttrCoordW(astart, aend, "x", 0, parent);
+    int32_t y = getAttrCoordH(astart, aend, "y", 0, parent);
+    int32_t w = getAttrSize(astart, aend, "w");
+    int32_t h = getAttrSize(astart, aend, "h");
+
+    ensureId(attrs, "_sel", !bind.empty() || !onchange.empty());
+
+    SelectOptions opts = parse_options(content);
+    if (opts.values.empty()) {
+        LOG_W(Log::UI, "create_select: no <option> found, skipping");
+        return;
+    }
+
+    lv_obj_t* dd = lv_dropdown_create(parent);
+    lv_dropdown_set_options(dd, opts.lvglStr.c_str());
+
+    // Initial selection from state
+    int initIdx = 0;
+    if (!bind.empty()) {
+        if (const char* sv = get_state_value(bind.c_str()); sv && sv[0]) {
+            for (int i = 0; i < (int)opts.values.size(); ++i) {
+                if (opts.values[i] == sv) { initIdx = i; break; }
+            }
+        }
+    }
+    lv_dropdown_set_selected(dd, (uint16_t)initIdx);
+
+    set_pos(dd, x, y);
+    if (w != 0) lv_obj_set_width(dd, w);
+    if (h != 0) lv_obj_set_height(dd, h);
+
+    // CSS cascade
+    {
+        P::String cls = attrs.hasDynamicClass
+            ? render_template(attrs.cssClass.c_str())
+            : attrs.cssClass;
+        Widget{dd}.applyCss("select", attrs.id.c_str(), cls.c_str());
+    }
+
+    // Inline visual overrides
+    P::String bgcolorAttr = getAttr(astart, aend, "bgcolor");
+    P::String colorAttr   = getAttr(astart, aend, "color");
+    if (!bgcolorAttr.empty()) {
+        lv_obj_set_style_bg_color(dd, lv_color_hex(parse_color(bgcolorAttr.c_str())), 0);
+        lv_obj_set_style_bg_opa(dd, LV_OPA_COVER, 0);
+    }
+    if (!colorAttr.empty()) {
+        lv_obj_set_style_text_color(dd, lv_color_hex(parse_color(colorAttr.c_str())), 0);
+    }
+
+    ElementDesc sd;
+    sd.id          = attrs.id.c_str();
+    sd.obj         = dd;
+    sd.bind        = bind.c_str();
+    sd.onchange    = onchange.c_str();
+    sd.visibleBind = attrs.hasDynamicVisible ? attrs.visible.c_str() : nullptr;
+    sd.zIndex      = attrs.zIndex;
+    int elemIdx = g_core.app().addElement(sd);
+
+    if (elemIdx >= 0 && elemIdx < (int)g_core.app().elements.size()) {
+        g_core.app().elements[elemIdx]->is_dropdown    = true;
+        g_core.app().elements[elemIdx]->dropdownValues = std::move(opts.values);
+
+        if (attrs.hasDynamicVisible && !attrs.visible.empty()) {
+            P::String vb  = extractBindVar(attrs.visible.c_str());
+            P::String vis = g_core.store().getString(vb);
+            if (vis != "true" && vis != "1") {
+                lv_obj_add_flag(dd, LV_OBJ_FLAG_HIDDEN);
+            }
+        }
+    }
+
+    Widget{dd}.on(LV_EVENT_VALUE_CHANGED, dropdown_event_handler, elemIdx);
+
+    LOG_I(Log::UI, "create_select: id=%s bind=%s options=%d init=%d",
+          attrs.id.c_str(), bind.c_str(),
+          elemIdx >= 0 ? (int)g_core.app().elements[elemIdx]->dropdownValues.size() : 0,
+          initIdx);
+}

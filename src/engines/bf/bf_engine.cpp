@@ -1,5 +1,6 @@
 #include "engines/bf/bf_engine.h"
 #include "core/state_store.h"
+#include "core/core.h"
 #include "utils/log_config.h"
 #include <cstring>
 #include <vector>
@@ -72,7 +73,7 @@ bool BfEngine::run() {
     }
     
     // Read stdin from state
-    P::String stdinBuf = State::store().getAsString("_stdin");
+    P::String stdinBuf = g_core.store().getAsString("_stdin");
     int stdinPos = 0;
     
     // Execute

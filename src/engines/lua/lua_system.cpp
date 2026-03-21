@@ -1,6 +1,6 @@
 #include "engines/lua/lua_system.h"
 #include "utils/log_config.h"
-#include "ui/ui_engine.h"
+#include "core/core.h"
 #include <string>
 
 namespace LuaSystem {
@@ -64,7 +64,7 @@ static uint32_t parseColor(lua_State* L, int idx) {
 static int lua_canvas_clear(lua_State* L) {
     const char* id = luaL_checkstring(L, 1);
     uint32_t color = parseColor(L, 2);
-    UI::Engine::instance().canvasClear(id, color);
+    g_core.canvasClear(id, color);
     return 0;
 }
 
@@ -75,7 +75,7 @@ static int lua_canvas_rect(lua_State* L) {
     int w = (int)luaL_checkinteger(L, 4);
     int h = (int)luaL_checkinteger(L, 5);
     uint32_t color = parseColor(L, 6);
-    UI::Engine::instance().canvasRect(id, x, y, w, h, color);
+    g_core.canvasRect(id, x, y, w, h, color);
     return 0;
 }
 
@@ -84,7 +84,7 @@ static int lua_canvas_pixel(lua_State* L) {
     int x = (int)luaL_checkinteger(L, 2);
     int y = (int)luaL_checkinteger(L, 3);
     uint32_t color = parseColor(L, 4);
-    UI::Engine::instance().canvasPixel(id, x, y, color);
+    g_core.canvasPixel(id, x, y, color);
     return 0;
 }
 
@@ -94,7 +94,7 @@ static int lua_canvas_circle(lua_State* L) {
     int cy = (int)luaL_checkinteger(L, 3);
     int r = (int)luaL_checkinteger(L, 4);
     uint32_t color = parseColor(L, 5);
-    UI::Engine::instance().canvasCircle(id, cx, cy, r, color);
+    g_core.canvasCircle(id, cx, cy, r, color);
     return 0;
 }
 
@@ -106,13 +106,13 @@ static int lua_canvas_line(lua_State* L) {
     int y2 = (int)luaL_checkinteger(L, 5);
     uint32_t color = parseColor(L, 6);
     int thickness = (int)luaL_optinteger(L, 7, 1);
-    UI::Engine::instance().canvasLine(id, x1, y1, x2, y2, color, thickness);
+    g_core.canvasLine(id, x1, y1, x2, y2, color, thickness);
     return 0;
 }
 
 static int lua_canvas_refresh(lua_State* L) {
     const char* id = luaL_checkstring(L, 1);
-    UI::Engine::instance().canvasRefresh(id);
+    g_core.canvasRefresh(id);
     return 0;
 }
 

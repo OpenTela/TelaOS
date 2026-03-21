@@ -620,7 +620,7 @@ void Manager::showLauncher() {
     
     WidgetCallbacks::cleanup();
     cleanupScreen();
-    ui_engine().clear();
+    g_core.resetUI();
     lv_image_cache_drop(NULL);
     
     LOG_I(Log::APP, "Heap before launcher: %d bytes", (int)ESP.getFreeHeap());
@@ -697,7 +697,7 @@ bool Manager::launchNative(NativeApp* app) {
     m_launcher.cleanup();
     WidgetCallbacks::cleanup();
     cleanupScreen();
-    ui_engine().clear();
+    g_core.resetUI();
     lv_image_cache_drop(NULL);
     
     LOG_I(Log::APP, "Heap after cleanup: %d bytes", (int)ESP.getFreeHeap());
@@ -730,8 +730,7 @@ bool Manager::loadApp(const P::String& path) {
     
     cleanupScreen();
     WidgetCallbacks::cleanup();
-    
-    ui_engine().clear();
+
     lv_image_cache_drop(NULL);
     MemoryManager::instance().resetPressure();
     
@@ -752,11 +751,11 @@ bool Manager::loadApp(const P::String& path) {
     f.close();
     
     display_lock();
-    
+
     P::String appDir(path.data(), path.rfind('/'));
-    ui_engine().setAppPath(appDir.c_str());
-    
-    int count = ui_engine().render(html.c_str());
+    g_core.initDynamicApp(appDir.c_str());
+
+    int count = g_core.render(html.c_str());
     LOG_D(Log::APP, "Rendered %d elements", count);
     
     static int16_t s_appTouchStartX = -1;
@@ -828,10 +827,10 @@ bool Manager::loadApp(const P::String& path) {
         if ((fromTop && swipedDown && vertical) || 
             (fromBottom && swipedUp && vertical)) {
             // If keyboard visible → dismiss it first, don't close
-            if (ui_engine().isKeyboardVisible()) {
+            if (g_core.isKeyboardVisible()) {
                 LOG_D(Log::APP, "Keyboard visible, dismissing instead of exit");
                 s_appTouchStartY = -1;
-                ui_engine().dismissKeyboard();
+                g_core.dismissKeyboard();
                 return;
             }
             const char* gesture = fromTop ? "swipe-down-from-top" : "swipe-up-from-bottom";
@@ -851,10 +850,10 @@ bool Manager::loadApp(const P::String& path) {
         
         if (ambiguousLength || ambiguousAngle) {
             // If keyboard visible → dismiss it first
-            if (ui_engine().isKeyboardVisible()) {
+            if (g_core.isKeyboardVisible()) {
                 LOG_D(Log::APP, "Keyboard visible, dismissing instead of confirm");
                 s_appTouchStartY = -1;
-                ui_engine().dismissKeyboard();
+                g_core.dismissKeyboard();
                 return;
             }
             LOG_D(Log::APP, "Confirm? startY=%d%% dy=%d%% dx=%d%%", startYPct, dyPct, dxPct);
@@ -881,9 +880,9 @@ bool Manager::loadApp(const P::String& path) {
     
     display_unlock();
     
-    const char* scriptCode = ui_engine().scriptCode();
+    const char* scriptCode = g_core.scriptCode();
     if (scriptCode && scriptCode[0]) {
-        const char* lang = ui_engine().scriptLang();
+        const char* lang = g_core.scriptLang();
         
         if (lang && strcmp(lang, "brainfuck") == 0) {
             LOG_I(Log::APP, "Init BfEngine...");

@@ -1,6 +1,6 @@
 #include "core/script_manager.h"
 #include "core/state_store.h"
-#include "ui/ui_html.h"
+#include "core/core.h"
 #include "utils/task_queue.h"
 #include "core/call_queue.h"
 #include "utils/log_config.h"
@@ -53,7 +53,7 @@ bool ScriptManager::init(IScriptEngine* engine) {
     }
     
     loadState();
-    ui_engine().syncWidgetValues();
+    g_core.syncWidgetValues();
     loadScript();
     setupTimers();
     setupOnclickHandler();
@@ -89,7 +89,7 @@ void ScriptManager::shutdown() {
 }
 
 void ScriptManager::loadState() {
-    auto& ui = ui_engine();
+    auto& ui = g_core;
     int count = ui.stateCount();
     
     LOG_D(Log::LUA, "Loading state (%d vars):", count);
@@ -116,7 +116,7 @@ void ScriptManager::loadState() {
 }
 
 void ScriptManager::syncState() {
-    auto& ui = ui_engine();
+    auto& ui = g_core;
     int count = ui.stateCount();
     
     LOG_D(Log::LUA, "Syncing state (%d vars) through engine", count);
@@ -125,13 +125,13 @@ void ScriptManager::syncState() {
         const char* name = ui.stateVarName(i);
         if (!name) continue;
         
-        P::String val = State::store().getAsString(name);
+        P::String val = g_core.store().getAsString(name);
         m_engine->setState(name, val.c_str());
     }
 }
 
 void ScriptManager::loadScript() {
-    auto& ui = ui_engine();
+    auto& ui = g_core;
     const char* code = ui.scriptCode();
     const char* lang = ui.scriptLang();
     
@@ -145,7 +145,7 @@ void ScriptManager::loadScript() {
 }
 
 void ScriptManager::setupTimers() {
-    auto& ui = ui_engine();
+    auto& ui = g_core;
     int count = ui.timerCount();
     
     LOG_D(Log::LUA, "Setting up %d timers:", count);
@@ -202,7 +202,7 @@ void ScriptManager::setupTimers() {
 void ScriptManager::setupOnclickHandler() {
     LOG_D(Log::LUA, "Setting up onclick handler (via queue)");
     
-    ui_engine().setOnClickHandler([](const char* func_name) {
+    g_core.setOnClickHandler([](const char* func_name) {
         if (func_name && func_name[0]) {
             CallQueue::push(func_name);
         }
@@ -214,7 +214,7 @@ void ScriptManager::setupOnTapHandler() {
     
     s_engine = m_engine;
     
-    ui_engine().setOnTapHandler([](const char* func_name, int x, int y) {
+    g_core.setOnTapHandler([](const char* func_name, int x, int y) {
         if (s_engine && func_name && func_name[0]) {
             char call_str[128];
             snprintf(call_str, sizeof(call_str), "%s(%d, %d)", func_name, x, y);
@@ -228,13 +228,13 @@ void ScriptManager::setupOnHoldHandler() {
     
     s_engine = m_engine;
     
-    ui_engine().setOnHoldHandler([](const char* func_name) {
+    g_core.setOnHoldHandler([](const char* func_name) {
         if (func_name && func_name[0]) {
             CallQueue::push(func_name);
         }
     });
     
-    ui_engine().setOnHoldXYHandler([](const char* func_name, int x, int y) {
+    g_core.setOnHoldXYHandler([](const char* func_name, int x, int y) {
         if (s_engine && func_name && func_name[0]) {
             char call_str[128];
             snprintf(call_str, sizeof(call_str), "%s(%d, %d)", func_name, x, y);
@@ -248,7 +248,7 @@ void ScriptManager::setupWidgetHandler() {
     
     s_engine = m_engine;
     
-    ui_engine().setStateChangeHandler([](const char* var_name, const char* value) {
+    g_core.setStateChangeHandler([](const char* var_name, const char* value) {
         if (s_engine && var_name) {
             s_engine->setStateSilent(var_name, value);
         }

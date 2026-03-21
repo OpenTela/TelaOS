@@ -1,13 +1,14 @@
 #include "engines/lua/lua_ui.h"
+#include "core/core.h"
 #include "utils/log_config.h"
 #include "utils/psram_alloc.h"
-#include "ui/ui_engine.h"
+#include "core/core.h"
 
-// Forward declarations - implemented in ui_engine.cpp
+// Forward declarations - implemented in core.cpp
 namespace UI {
+    bool focusInput(const char* id);
     bool setWidgetAttr(const char* id, const char* attr, const char* value);
     P::String getWidgetAttr(const char* id, const char* attr);
-    bool focusInput(const char* id);
 }
 
 namespace LuaUI {
@@ -16,7 +17,7 @@ static const char* TAG = "LuaUI";
 
 static int lua_navigate(lua_State* L) {
     const char* page = luaL_checkstring(L, 1);
-    UI::Engine::instance().showPage(page);
+    g_core.showPage(page);
     return 0;
 }
 

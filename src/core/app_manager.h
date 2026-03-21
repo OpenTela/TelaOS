@@ -7,7 +7,7 @@
 #include <memory>
 #include "utils/psram_alloc.h"
 #include "core/sys_paths.h"
-#include "ui/ui_html.h"
+#include "core/core.h"
 #include "ui/ui_launcher.h"
 #include "core/script_engine.h"
 #include "core/script_manager.h"

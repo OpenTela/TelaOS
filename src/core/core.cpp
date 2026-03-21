@@ -1,11 +1,11 @@
 /**
- * ui_engine.cpp - UI::Engine facade and Lua API free functions
+ * core/core.cpp - Core implementation
  * 
  * Extracted from ui_html.cpp — thin wrappers over internal functions.
  */
 
 #include "lvgl.h"
-#include "ui/ui_engine.h"
+#include "core/core.h"
 #include "ui/ui_html_internal.h"
 #include "widgets/widget_methods.h"
 #include "core/state_store.h"
@@ -16,7 +16,8 @@
 #include <cstring>
 #include <string>
 
-static const char* TAG = "ui_engine";
+#include "core/core.h"
+static const char* TAG = "core";
 
 using namespace UI::StringUtils;
 
@@ -27,7 +28,6 @@ const char* ui_get_current_page_id();
 bool ui_trigger_click(const char* id);
 bool ui_call_function(const char* funcName);
 
-namespace UI {
 
 // Focused textarea (set by focusInput, used by ui type command)
 static lv_obj_t* s_focusedTextarea = nullptr;
@@ -35,7 +35,7 @@ static lv_obj_t* s_focusedTextarea = nullptr;
 lv_obj_t* getFocusedTextarea() { return s_focusedTextarea; }
 
 bool getWidgetCenter(const char* id, int& cx, int& cy) {
-    lv_obj_t* obj = g_app->findElement(id);
+    lv_obj_t* obj = g_core.app().findElement(id);
     if (!obj) return false;
     
     lv_area_t coords;
@@ -53,139 +53,131 @@ bool callFunction(const char* funcName) {
     return ui_call_function(funcName);
 }
 
-// ============ Singleton ============
-
-Engine& Engine::instance() {
-    static Engine engine;
-    return engine;
-}
-
 // ============ Lifecycle ============
 
-void Engine::init() {
-    ui_html_init_internal();
-}
-
-int Engine::render(const char* html) {
-    return ui_html_render_internal(html);
-}
-
-void Engine::clear() {
+void Core::initDynamicApp(const char* appPath) {
     s_focusedTextarea = nullptr;
-    ui_clear_internal();
+    m_app.~DynamicApp();
+    new (&m_app) DynamicApp();
+    m_store.clear();
+    m_app.app_path = appPath ? appPath : "";
+    if (appPath) {
+        LOG_I(Log::UI, "Init v%s | path=%s", version(), m_app.app_path.c_str());
+    } else {
+        LOG_I(Log::UI, "Init v%s | UI reset", version());
+    }
+}
+
+void Core::resetUI() {
+    initDynamicApp(nullptr);
+}
+
+int Core::render(const char* html) {
+    return ui_html_render_internal(html);
 }
 
 // ============ Element access ============
 
-lv_obj_t* Engine::get(const char* id) {
-    return g_app->findElement(id);
+lv_obj_t* Core::get(const char* id) {
+    return g_core.app().findElement(id);
 }
 
-void Engine::setText(const char* id, const char* text) {
+void Core::setText(const char* id, const char* text) {
     ui_set_text_internal(id, text);
 }
 
-void Engine::showPage(const char* id) {
+void Core::showPage(const char* id) {
     ui_show_page_internal(id);
 }
 
-bool Engine::hasPage(const char* id) {
-    return g_app->findPage(id) != INVALID_INDEX;
+bool Core::hasPage(const char* id) {
+    return g_core.app().findPage(id) != INVALID_INDEX;
 }
 
-const char* Engine::currentPageId() const {
+const char* Core::currentPageId() const {
     return ::ui_get_current_page_id();
 }
 
-bool Engine::isKeyboardVisible() const {
-    for (int i = 0; i < g_app->page_count; i++) {
-        if (g_app->keyboards[i] && !lv_obj_has_flag(g_app->keyboards[i], LV_OBJ_FLAG_HIDDEN)) {
+bool Core::isKeyboardVisible() const {
+    for (int i = 0; i < g_core.app().page_count; i++) {
+        if (g_core.app().keyboards[i] && !lv_obj_has_flag(g_core.app().keyboards[i], LV_OBJ_FLAG_HIDDEN)) {
             return true;
         }
     }
     return false;
 }
 
-void Engine::dismissKeyboard() {
-    for (int i = 0; i < g_app->page_count; i++) {
-        if (g_app->keyboards[i]) {
-            lv_obj_add_flag(g_app->keyboards[i], LV_OBJ_FLAG_HIDDEN);
+void Core::dismissKeyboard() {
+    for (int i = 0; i < g_core.app().page_count; i++) {
+        if (g_core.app().keyboards[i]) {
+            lv_obj_add_flag(g_core.app().keyboards[i], LV_OBJ_FLAG_HIDDEN);
         }
     }
 }
 
 // ============ Timer getters ============
 
-int Engine::timerCount() const {
-    return static_cast<int>(g_app->timers.size());
+int Core::timerCount() const {
+    return static_cast<int>(g_core.app().timers.size());
 }
 
-int Engine::timerInterval(int i) const {
-    return (i < static_cast<int>(g_app->timers.size())) ? g_app->timers[i].interval_ms : 0;
+int Core::timerInterval(int i) const {
+    return (i < static_cast<int>(g_core.app().timers.size())) ? g_core.app().timers[i].interval_ms : 0;
 }
 
-const char* Engine::timerCallback(int i) const {
-    return (i < static_cast<int>(g_app->timers.size())) ? g_app->timers[i].callback.c_str() : nullptr;
+const char* Core::timerCallback(int i) const {
+    return (i < static_cast<int>(g_core.app().timers.size())) ? g_core.app().timers[i].callback.c_str() : nullptr;
 }
 
 // ============ Script getters ============
 
-const char* Engine::scriptCode() const {
-    return g_app->script_code.c_str();
+const char* Core::scriptCode() const {
+    return g_core.app().script_code.c_str();
 }
 
-const char* Engine::scriptLang() const {
-    return g_app->script_lang.c_str();
+const char* Core::scriptLang() const {
+    return g_core.app().script_lang.c_str();
 }
 
 // ============ App metadata ============
 
-const char* Engine::appVersion() const {
-    return g_app->app_version.c_str();
+const char* Core::appVersion() const {
+    return g_core.app().app_version.c_str();
 }
 
-const char* Engine::appOsRequirement() const {
-    return g_app->app_os_requirement.c_str();
+const char* Core::appOsRequirement() const {
+    return g_core.app().app_os_requirement.c_str();
 }
 
-const char* Engine::appIcon() const {
-    return g_app->app_icon.c_str();
+const char* Core::appIcon() const {
+    return g_core.app().app_icon.c_str();
 }
 
-bool Engine::appReadonly() const {
-    return g_app->app_readonly;
-}
-
-void Engine::setAppPath(const char* path) {
-    g_app->app_path = path ? path : "";
-    LOG_I(Log::UI, "App path set to: %s", g_app->app_path.c_str());
-}
-
-const char* Engine::appPath() const {
-    return g_app->app_path.c_str();
+bool Core::appReadonly() const {
+    return g_core.app().app_readonly;
 }
 
 // ============ State getters ============
 
-int Engine::stateCount() const {
-    return static_cast<int>(State::store().count());
+int Core::stateCount() const {
+    return static_cast<int>(g_core.store().count());
 }
 
-const char* Engine::stateVarName(int i) const {
+const char* Core::stateVarName(int i) const {
     static char buf[ATTR_VAL_LEN];
-    auto name = State::store().nameAt(i);
+    auto name = g_core.store().nameAt(i);
     strncpy(buf, name.c_str(), sizeof(buf) - 1);
     buf[sizeof(buf) - 1] = '\0';
     return buf;
 }
 
-const char* Engine::stateVarType(int i) const {
-    return Store::typeToString(State::store().typeAt(i));
+const char* Core::stateVarType(int i) const {
+    return Store::typeToString(g_core.store().typeAt(i));
 }
 
-const char* Engine::stateVarDefault(int i) const {
+const char* Core::stateVarDefault(int i) const {
     static char buf[ATTR_VAL_LEN];
-    auto def = State::store().defaultAt(i);
+    auto def = g_core.store().defaultAt(i);
     strncpy(buf, def.c_str(), sizeof(buf) - 1);
     buf[sizeof(buf) - 1] = '\0';
     return buf;
@@ -193,38 +185,38 @@ const char* Engine::stateVarDefault(int i) const {
 
 // ============ Handler setters ============
 
-void Engine::setOnClickHandler(OnClickHandler handler) {
+void Core::setOnClickHandler(OnClickHandler handler) {
     g_onclick_handler = handler;
 }
 
-void Engine::setOnTapHandler(OnTapHandler handler) {
+void Core::setOnTapHandler(OnTapHandler handler) {
     g_ontap_handler = handler;
 }
 
-void Engine::setOnHoldHandler(OnHoldHandler handler) {
+void Core::setOnHoldHandler(OnHoldHandler handler) {
     g_onhold_handler = handler;
 }
 
-void Engine::setOnHoldXYHandler(OnHoldXYHandler handler) {
+void Core::setOnHoldXYHandler(OnHoldXYHandler handler) {
     g_onhold_xy_handler = handler;
 }
 
-void Engine::setStateChangeHandler(StateChangeHandler handler) {
+void Core::setStateChangeHandler(StateChangeHandler handler) {
     g_state_change_handler = handler;
 }
 
 // ============ Widget sync ============
 
-void Engine::syncWidgetValues() {
-    g_app->updating_from_binding = true;
+void Core::syncWidgetValues() {
+    g_core.app().updating_from_binding = true;
     
-    for (size_t i = 0; i < g_app->elements.size(); i++) {
-        if (g_app->elements[i]->bind.empty()) continue;
+    for (size_t i = 0; i < g_core.app().elements.size(); i++) {
+        if (g_core.app().elements[i]->bind.empty()) continue;
         
-        const char *value = get_state_value(g_app->elements[i]->bind.c_str());
+        const char *value = get_state_value(g_core.app().elements[i]->bind.c_str());
         if (!value) continue;
         
-        lv_obj_t *obj = g_app->elements[i]->obj();
+        lv_obj_t *obj = g_core.app().elements[i]->obj();
         
         if (lv_obj_check_type(obj, &lv_switch_class)) {
             bool checked = toBool(value);
@@ -240,18 +232,18 @@ void Engine::syncWidgetValues() {
         }
     }
     
-    g_app->updating_from_binding = false;
+    g_core.app().updating_from_binding = false;
     LOG_I(Log::UI, "Widget values synced from state");
 }
 
 // ============ FREE FUNCTIONS FOR LUA API ============
 
 lv_obj_t* getElementById(const char* id) {
-    return g_app->findElement(id);
+    return g_core.app().findElement(id);
 }
 
-bool focusInput(const char* id) {
-    lv_obj_t* obj = g_app->findElement(id);
+bool UI::focusInput(const char* id) {
+    lv_obj_t* obj = g_core.app().findElement(id);
     if (!obj) {
         LOG_W(Log::UI, "focusInput: widget '%s' not found", id);
         return false;
@@ -266,8 +258,8 @@ bool focusInput(const char* id) {
     int page_idx = -1;
     lv_obj_t* parent = lv_obj_get_parent(obj);
     while (parent) {
-        for (int i = 0; i < g_app->page_count; i++) {
-            if (g_app->page_objs[i] == parent) {
+        for (int i = 0; i < g_core.app().page_count; i++) {
+            if (g_core.app().page_objs[i] == parent) {
                 page_idx = i;
                 break;
             }
@@ -282,26 +274,26 @@ bool focusInput(const char* id) {
     }
     
     // Create keyboard if needed
-    if (!g_app->keyboards[page_idx]) {
-        g_app->keyboards[page_idx] = lv_keyboard_create(parent);
-        lv_obj_set_size(g_app->keyboards[page_idx], lv_pct(FULL_SIZE_PCT), lv_pct(KEYBOARD_HEIGHT_PCT));
-        lv_obj_align(g_app->keyboards[page_idx], LV_ALIGN_BOTTOM_MID, 0, 0);
-        lv_obj_add_event_cb(g_app->keyboards[page_idx], keyboard_event_handler, LV_EVENT_ALL, nullptr);
-        lv_obj_add_flag(g_app->keyboards[page_idx], LV_OBJ_FLAG_GESTURE_BUBBLE);
-        lv_obj_add_flag(g_app->keyboards[page_idx], LV_OBJ_FLAG_EVENT_BUBBLE);
+    if (!g_core.app().keyboards[page_idx]) {
+        g_core.app().keyboards[page_idx] = lv_keyboard_create(parent);
+        lv_obj_set_size(g_core.app().keyboards[page_idx], lv_pct(FULL_SIZE_PCT), lv_pct(KEYBOARD_HEIGHT_PCT));
+        lv_obj_align(g_core.app().keyboards[page_idx], LV_ALIGN_BOTTOM_MID, 0, 0);
+        lv_obj_add_event_cb(g_core.app().keyboards[page_idx], keyboard_event_handler, LV_EVENT_ALL, nullptr);
+        lv_obj_add_flag(g_core.app().keyboards[page_idx], LV_OBJ_FLAG_GESTURE_BUBBLE);
+        lv_obj_add_flag(g_core.app().keyboards[page_idx], LV_OBJ_FLAG_EVENT_BUBBLE);
     }
     
-    lv_keyboard_set_textarea(g_app->keyboards[page_idx], obj);
-    lv_obj_clear_flag(g_app->keyboards[page_idx], LV_OBJ_FLAG_HIDDEN);
+    lv_keyboard_set_textarea(g_core.app().keyboards[page_idx], obj);
+    lv_obj_clear_flag(g_core.app().keyboards[page_idx], LV_OBJ_FLAG_HIDDEN);
     s_focusedTextarea = obj;
     
     LOG_I(Log::UI, "focusInput: focused '%s'", id);
     return true;
 }
 
-bool setWidgetAttr(const char* id, const char* attr, const char* value) {
-    Element* elem = nullptr;
-    for (const auto& el : g_app->elements) {
+bool UI::setWidgetAttr(const char* id, const char* attr, const char* value) {
+    UI::Element* elem = nullptr;
+    for (const auto& el : g_core.app().elements) {
         if (el->id == id) {
             elem = el.get();
             break;
@@ -344,9 +336,9 @@ bool setWidgetAttr(const char* id, const char* attr, const char* value) {
     return true;
 }
 
-P::String getWidgetAttr(const char* id, const char* attr) {
-    Element* elem = nullptr;
-    for (const auto& el : g_app->elements) {
+P::String UI::getWidgetAttr(const char* id, const char* attr) {
+    UI::Element* elem = nullptr;
+    for (const auto& el : g_core.app().elements) {
         if (el->id == id) {
             elem = el.get();
             break;
@@ -386,4 +378,3 @@ P::String getWidgetAttr(const char* id, const char* attr) {
     return "";
 }
 
-} // namespace UI
