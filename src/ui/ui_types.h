@@ -46,6 +46,7 @@ namespace Tag {
         constexpr const char* Table = "table";
         constexpr const char* Tr = "tr";
         constexpr const char* Td = "td";
+        constexpr const char* Div = "div";
     }
     
     namespace TypeTag {

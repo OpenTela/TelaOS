@@ -71,33 +71,169 @@ static lv_obj_t *get_screen(void) {
 
 // ============ HEAD SECTION PARSING ============
 
-// Parse variables from ParsedElement into Store
+// Define a state variable with type inference from YAML value
+static void define_yaml_var(Store& store, const P::String& key, const P::String& val) {
+    if (val.empty() || val == "\"\"" || val == "''") {
+        store.defineString(key, "");
+    } else if (val == "true" || val == "yes") {
+        store.defineBool(key, true);
+    } else if (val == "false" || val == "no") {
+        store.defineBool(key, false);
+    } else if (val.size() >= 2 &&
+               ((val.front() == '"' && val.back() == '"') ||
+                (val.front() == '\'' && val.back() == '\''))) {
+        store.defineString(key, P::String(val.c_str() + 1, val.size() - 2));
+    } else {
+        char* numEnd = nullptr;
+        long lv = strtol(val.c_str(), &numEnd, 10);
+        if (numEnd && numEnd == val.c_str() + val.size()) {
+            store.defineInt(key, (int)lv);
+        } else {
+            float fv = strtof(val.c_str(), &numEnd);
+            if (numEnd && numEnd == val.c_str() + val.size()) {
+                store.defineFloat(key, fv);
+            } else {
+                store.defineString(key, val);
+            }
+        }
+    }
+    LOG_D(Log::UI, "state(yaml): %s = %s", key.c_str(), val.c_str());
+}
+
+// Parsed YAML line
+struct YamlLine {
+    int indent;
+    P::String key;
+    P::String value;
+    bool isArrayItem;
+};
+
+// Parse YAML state with nesting — flatten objects to dotted paths, arrays to Store arrays
+static void parse_state_yaml(const P::String& text, Store& store) {
+    P::Array<YamlLine> lines;
+    const char* p = text.c_str();
+    const char* end = p + text.size();
+    
+    while (p < end) {
+        const char* lineStart = p;
+        while (p < end && *p != '\n') p++;
+        P::String line(lineStart, p - lineStart);
+        if (p < end) p++;
+        
+        if (!line.empty() && line.back() == '\r') line.pop_back();
+        size_t firstNS = line.find_first_not_of(" \t");
+        if (firstNS == P::String::npos || line[firstNS] == '#') continue;
+        
+        // Strip inline comments
+        bool inQ = false;
+        for (size_t i = firstNS; i < line.size(); i++) {
+            if (line[i] == '"' || line[i] == '\'') inQ = !inQ;
+            if (!inQ && line[i] == '#' && i > 0 && line[i-1] == ' ') {
+                line = line.substr(0, i);
+                break;
+            }
+        }
+        
+        P::String trimmed = line.substr(firstNS);
+        YamlLine yl;
+        yl.indent = (int)firstNS;
+        yl.isArrayItem = false;
+        
+        if (trimmed.size() >= 2 && trimmed[0] == '-' && trimmed[1] == ' ') {
+            yl.isArrayItem = true;
+            P::String valPart = trimmed.substr(2);
+            size_t vs = valPart.find_first_not_of(" \t");
+            yl.value = (vs != P::String::npos) ? valPart.substr(vs) : "";
+        } else {
+            size_t colonPos = trimmed.find(':');
+            if (colonPos == P::String::npos) continue;
+            yl.key = trimmed.substr(0, colonPos);
+            size_t ke = yl.key.find_last_not_of(" \t");
+            if (ke != P::String::npos) yl.key = yl.key.substr(0, ke + 1);
+            P::String valPart = trimmed.substr(colonPos + 1);
+            size_t vs = valPart.find_first_not_of(" \t");
+            yl.value = (vs != P::String::npos) ? valPart.substr(vs) : "";
+        }
+        lines.push_back(yl);
+    }
+    
+    struct Level {
+        int indent;
+        P::String prefix;
+        bool isArray;
+        P::Array<P::String> arrayItems;
+    };
+    P::Array<Level> stack;
+    stack.push_back({-1, "", false, {}});
+    
+    auto flushArray = [&](Level& lv) {
+        if (lv.isArray && !lv.arrayItems.empty()) {
+            store.defineArray(lv.prefix, lv.arrayItems);
+        }
+    };
+    
+    for (size_t i = 0; i < lines.size(); i++) {
+        const auto& yl = lines[i];
+        while (stack.size() > 1 && yl.indent <= stack.back().indent) {
+            flushArray(stack.back());
+            stack.pop_back();
+        }
+        P::String prefix = stack.back().prefix;
+        
+        if (yl.isArrayItem) {
+            stack.back().isArray = true;
+            P::String val = yl.value;
+            if (val.size() >= 2 &&
+                ((val.front() == '"' && val.back() == '"') ||
+                 (val.front() == '\'' && val.back() == '\''))) {
+                val = val.substr(1, val.size() - 2);
+            }
+            stack.back().arrayItems.push_back(val);
+        } else if (!yl.value.empty()) {
+            P::String fullKey = prefix.empty() ? yl.key : P::String(prefix + "." + yl.key);
+            define_yaml_var(store, fullKey, yl.value);
+        } else {
+            P::String newPrefix = prefix.empty() ? yl.key : P::String(prefix + "." + yl.key);
+            stack.push_back({yl.indent, newPrefix, false, {}});
+        }
+    }
+    while (stack.size() > 0) {
+        flushArray(stack.back());
+        stack.pop_back();
+    }
+}
+
+// Check OS version: os="2.0" → true
+static bool isOsV2() {
+    const auto& os = g_core.app().appOsRequirement();
+    return !os.empty() && os[0] == '2';
+}
+
+// v1: Parse XML variables from ParsedElement into Store
 static void parse_vars_to_store(const UI::ParsedElement& section, Store& store) {
     for (const auto& var : section.children) {
         auto name = var.get("name");
         if (name.empty()) continue;
-        
         P::String nameStr(name);
-        
-        if (var.is("bool")) {
-            store.defineBool(nameStr, var.getBool("default"));
-        } else if (var.is("int")) {
-            store.defineInt(nameStr, var.getInt("default"));
-        } else if (var.is("float")) {
-            store.defineFloat(nameStr, var.getFloat("default"));
-        } else if (var.is("string")) {
-            store.defineString(nameStr, P::String(var.get("default")));
-        }
+        if (var.is("bool"))        store.defineBool(nameStr, var.getBool("default"));
+        else if (var.is("int"))    store.defineInt(nameStr, var.getInt("default"));
+        else if (var.is("float"))  store.defineFloat(nameStr, var.getFloat("default"));
+        else if (var.is("string")) store.defineString(nameStr, P::String(var.get("default")));
     }
 }
 
-// Parse <state> section
+// Parse <state> — v1: XML tags, v2: YAML text
 static void parse_state(const UI::ParsedElement& root) {
     auto state = root.find("state");
     if (!state) return;
     
     LOG_D(Log::UI, "state:");
-    parse_vars_to_store(*state, g_core.store());
+    if (isOsV2()) {
+        if (!state->text.empty())
+            parse_state_yaml(state->text, g_core.store());
+    } else {
+        parse_vars_to_store(*state, g_core.store());
+    }
 }
 
 // Parse <timer> tags
@@ -241,8 +377,19 @@ static void parse_system(const UI::ParsedElement& root) {
 // ============ TEMPLATE & @FOR EXPANSION ============
 
 // Parse <templates> section from raw HTML
+// Helper: trim body, lowercase key, store template
+static void store_template(const char* id, const char* bodyStart, const char* bodyEnd) {
+    while (bodyStart < bodyEnd && isspace((unsigned char)*bodyStart)) bodyStart++;
+    const char* trimEnd = bodyEnd;
+    while (trimEnd > bodyStart && isspace((unsigned char)*(trimEnd - 1))) trimEnd--;
+    
+    P::String key = id;
+    for (char& c : key) c = tolower((unsigned char)c);
+    g_core.app().setTemplate(key, P::String(bodyStart, trimEnd - bodyStart));
+    LOG_I(Log::UI, "template: %s -> %d bytes", id, (int)(trimEnd - bodyStart));
+}
+
 static void parse_templates(const char* html) {
-    // Find <templates> section
     const char* tplSection = strstr(html, "<templates>");
     if (!tplSection) tplSection = strstr(html, "<templates ");
     if (!tplSection) return;
@@ -250,50 +397,69 @@ static void parse_templates(const char* html) {
     const char* sectionEnd = strstr(tplSection, "</templates>");
     if (!sectionEnd) return;
     
-    // Iterate <template> tags inside
-    const char* p = tplSection;
-    while (p < sectionEnd) {
-        const char* tstart = strstr(p, "<template ");
-        if (!tstart || tstart >= sectionEnd) break;
-        
-        // Parse attributes (find id)
-        const char* astart = tstart + 10; // strlen("<template ")
-        const char* aend = astart;
-        while (aend < sectionEnd && *aend != '>') aend++;
-        if (aend >= sectionEnd) break;
-        
-        P::String id = getAttr(astart, aend, "id");
-        if (id.empty()) {
-            LOG_W(Log::UI, "template without id, skipping");
-            p = aend + 1;
-            continue;
+    if (!isOsV2()) {
+        // v1: <template id="Name">body</template>
+        const char* p = tplSection;
+        while (p < sectionEnd) {
+            const char* tstart = strstr(p, "<template ");
+            if (!tstart || tstart >= sectionEnd) break;
+            
+            const char* astart = tstart + 10;
+            const char* aend = astart;
+            while (aend < sectionEnd && *aend != '>') aend++;
+            if (aend >= sectionEnd) break;
+            
+            P::String id = getAttr(astart, aend, "id");
+            if (id.empty() || !isupper((unsigned char)id[0])) {
+                p = aend + 1;
+                continue;
+            }
+            
+            const char* bodyStart = aend + 1;
+            const char* bodyEnd = strstr(bodyStart, "</template>");
+            if (!bodyEnd || bodyEnd > sectionEnd) break;
+            
+            store_template(id.c_str(), bodyStart, bodyEnd);
+            p = bodyEnd + 11;
         }
-        
-        // Verify PascalCase
-        if (!isupper((unsigned char)id[0])) {
-            LOG_E(Log::UI, "Template '%s' must start with uppercase (PascalCase)", id.c_str());
-            p = aend + 1;
-            continue;
+    } else {
+        // v2: <PascalCase>body</PascalCase>
+        const char* p = tplSection + 11;
+        while (p < sectionEnd) {
+            while (p < sectionEnd && isspace((unsigned char)*p)) p++;
+            if (p >= sectionEnd || *p != '<') { p++; continue; }
+            if (p + 1 < sectionEnd && (p[1] == '/' || p[1] == '!')) {
+                while (p < sectionEnd && *p != '>') p++;
+                if (p < sectionEnd) p++;
+                continue;
+            }
+            
+            p++;
+            char tagBuf[TAG_BUF_LEN];
+            int ti = 0;
+            while (p < sectionEnd && !isspace((unsigned char)*p) && *p != '>' && *p != '/' && ti < TAG_BUF_LEN - 1) {
+                tagBuf[ti++] = *p++;
+            }
+            tagBuf[ti] = '\0';
+            if (!tagBuf[0] || !isupper((unsigned char)tagBuf[0])) {
+                while (p < sectionEnd && *p != '>') p++;
+                if (p < sectionEnd) p++;
+                continue;
+            }
+            
+            while (p < sectionEnd && *p != '>') p++;
+            if (p >= sectionEnd) break;
+            p++;
+            
+            char closePat[PATTERN_BUF_LEN];
+            snprintf(closePat, sizeof(closePat), "</%s>", tagBuf);
+            const char* bodyStart = p;
+            const char* bodyEnd = strstr(p, closePat);
+            if (!bodyEnd || bodyEnd > sectionEnd) break;
+            
+            store_template(tagBuf, bodyStart, bodyEnd);
+            p = bodyEnd + strlen(closePat);
         }
-        
-        // Get body: content between > and </template>
-        const char* bodyStart = aend + 1;
-        const char* bodyEnd = strstr(bodyStart, "</template>");
-        if (!bodyEnd || bodyEnd > sectionEnd) break;
-        
-        // Store with lowercase key
-        P::String key = id;
-        for (char& c : key) c = tolower((unsigned char)c);
-        
-        // Trim body whitespace
-        while (bodyStart < bodyEnd && isspace((unsigned char)*bodyStart)) bodyStart++;
-        const char* trimEnd = bodyEnd;
-        while (trimEnd > bodyStart && isspace((unsigned char)*(trimEnd - 1))) trimEnd--;
-        
-        g_core.app().setTemplate(key, P::String(bodyStart, trimEnd - bodyStart));
-        LOG_I(Log::UI, "template: %s -> %d bytes", id.c_str(), (int)(trimEnd - bodyStart));
-        
-        p = bodyEnd + 11; // strlen("</template>")
     }
     
     LOG_I(Log::UI, "templates: %d defined", g_core.app().templatesCount());
@@ -750,27 +916,50 @@ const char *get_state_value(const char *name) {
     return state_store_get(name);
 }
 
+// Resolve a binding path: dotted keys and array[N] access
+static const char* resolve_binding(const P::String& raw) {
+    static P::String s_buf;
+    auto& store = g_core.store();
+    
+    // Array access: "name[idx]"
+    size_t bracket = raw.find('[');
+    if (bracket != P::String::npos) {
+        size_t closeBracket = raw.find(']', bracket);
+        if (closeBracket != P::String::npos) {
+            P::String arrayName = raw.substr(0, bracket);
+            int idx = atoi(raw.substr(bracket + 1, closeBracket - bracket - 1).c_str());
+            if (store.hasArray(arrayName)) {
+                s_buf = store.getArrayItem(arrayName, idx);
+                return s_buf.c_str();
+            }
+        }
+    }
+    
+    // Scalar (flat or dotted)
+    if (store.has(raw)) {
+        s_buf = store.getAsString(raw);
+        return s_buf.c_str();
+    }
+    return "";
+}
+
 // Set state variable value - uses StateStore (silent - no UI callback)
 void ui_set_state(const char *name, const char *value) {
     state_store_set_silent(name, value);
 }
 
 // Render template: replace {var} with state values
+// Supports dotted paths {player.x} and array access {items[0]}
 P::String render_template(const char *tpl) {
     P::String result;
     const char *p = tpl;
     
     while (*p) {
         if (*p == '{') {
-            // Find closing }
             const char *close = strchr(p, '}');
             if (close && (close - p) < VAR_NAME_LEN) {
-                // Extract variable name
                 P::String varname(p + 1, close - p - 1);
-                
-                // Get value and append
-                const char *val = get_state_value(varname.c_str());
-                result += val;
+                result += resolve_binding(varname);
                 p = close + 1;
             } else {
                 result += *p++;
@@ -784,8 +973,7 @@ P::String render_template(const char *tpl) {
 
 // Check if template contains {varname}
 static bool template_has_var(const char *tpl, const char *varname) {
-    if (!tpl || !tpl[0]) return false;
-    
+    if (!tpl || !tpl[0] || !varname || !varname[0]) return false;
     char search[PATTERN_BUF_LEN];
     snprintf(search, sizeof(search), "{%s}", varname);
     return strstr(tpl, search) != nullptr;
@@ -1306,12 +1494,18 @@ void parse_children(const char *html, int len, lv_obj_t *parent) {
         P::String content;
         if (!self_close) {
             const char *cstart = p;
-            char closing[PATTERN_BUF_LEN];
-            snprintf(closing, sizeof(closing), "</%s>", tag);
-            const char *cend = strstr(p, closing);
+            const char *cend = nullptr;
+            // Div is nestable — use depth-aware close
+            if (strcmp(tag, Element::Div) == 0) {
+                cend = findTagClose(p, tag);
+            } else {
+                char closing[PATTERN_BUF_LEN];
+                snprintf(closing, sizeof(closing), "</%s>", tag);
+                cend = strstr(p, closing);
+            }
             if (cend && cend < end) {
                 content.assign(cstart, cend - cstart);
-                p = cend + strlen(closing);
+                p = cend + tagCloseLen(tag);
             }
         }
         
@@ -1335,6 +1529,125 @@ void parse_children(const char *html, int len, lv_obj_t *parent) {
             create_tabs(astart, aend, content.c_str(), parent);
         } else if (strcmp(tag, Element::Select) == 0) {
             create_select(astart, aend, content.c_str(), parent);
+        } else if (strcmp(tag, Element::Div) == 0) {
+            // --- Div container (general-purpose, supports flex) ---
+            lv_obj_t *container = lv_obj_create(parent);
+            lv_obj_remove_style_all(container);
+            lv_obj_clear_flag(container, LV_OBJ_FLAG_SCROLLABLE);
+            
+            auto wAttr = getAttr(astart, aend, "w");
+            auto hAttr = getAttr(astart, aend, "h");
+            auto xAttr = getAttr(astart, aend, "x");
+            auto yAttr = getAttr(astart, aend, "y");
+            auto bgAttr = getAttr(astart, aend, "bgcolor");
+            auto flexAttr = getAttr(astart, aend, "flex");
+            auto gapAttr = getAttr(astart, aend, "gap");
+            auto justifyAttr = getAttr(astart, aend, "justify");
+            auto alignAttr = getAttr(astart, aend, "align");
+            auto radiusAttr = getAttr(astart, aend, "radius");
+            auto paddingAttr = getAttr(astart, aend, "padding");
+            auto overflowAttr = getAttr(astart, aend, "overflow");
+            auto growAttr = getAttr(astart, aend, "grow");
+            auto idAttr = getAttr(astart, aend, "id");
+            auto classAttr = getAttr(astart, aend, "class");
+            auto visAttr = getAttr(astart, aend, "visible");
+            
+            lv_obj_set_width(container, LV_SIZE_CONTENT);
+            lv_obj_set_height(container, LV_SIZE_CONTENT);
+            if (!wAttr.empty()) lv_obj_set_width(container, parse_size(wAttr.c_str()));
+            if (!hAttr.empty()) lv_obj_set_height(container, parse_size(hAttr.c_str()));
+            
+            if (!xAttr.empty() || !yAttr.empty()) {
+                int32_t xv = xAttr.empty() ? 0 : parse_coord_w(xAttr.c_str(), parent);
+                int32_t yv = yAttr.empty() ? 0 : parse_coord_h(yAttr.c_str(), parent);
+                lv_obj_set_pos(container, xv, yv);
+            }
+            
+            // Background (with dynamic binding support)
+            bool hasDynBg = !bgAttr.empty() && bgAttr.find('{') != P::String::npos;
+            if (!bgAttr.empty()) {
+                if (hasDynBg) {
+                    P::String varName = extractBindVar(bgAttr.c_str());
+                    P::String initVal = g_core.store().getString(varName);
+                    if (!initVal.empty()) {
+                        uint32_t bgc = parse_color(initVal.c_str());
+                        lv_obj_set_style_bg_color(container, lv_color_hex(bgc), LV_PART_MAIN);
+                        lv_obj_set_style_bg_opa(container, LV_OPA_COVER, LV_PART_MAIN);
+                    }
+                } else {
+                    uint32_t bgc = parse_color(bgAttr.c_str());
+                    lv_obj_set_style_bg_color(container, lv_color_hex(bgc), LV_PART_MAIN);
+                    lv_obj_set_style_bg_opa(container, LV_OPA_COVER, LV_PART_MAIN);
+                }
+            }
+            
+            if (!radiusAttr.empty())
+                lv_obj_set_style_radius(container, atoi(radiusAttr.c_str()), LV_PART_MAIN);
+            if (!paddingAttr.empty())
+                lv_obj_set_style_pad_all(container, parse_size(paddingAttr.c_str()), LV_PART_MAIN);
+            if (overflowAttr == "scroll")
+                lv_obj_add_flag(container, LV_OBJ_FLAG_SCROLLABLE);
+            
+            // Flex layout
+            if (!flexAttr.empty()) {
+                lv_flex_flow_t flow = LV_FLEX_FLOW_ROW;
+                if (flexAttr == "column")              flow = LV_FLEX_FLOW_COLUMN;
+                else if (flexAttr == "row-wrap")       flow = LV_FLEX_FLOW_ROW_WRAP;
+                else if (flexAttr == "column-wrap")    flow = LV_FLEX_FLOW_COLUMN_WRAP;
+                else if (flexAttr == "row-reverse")    flow = LV_FLEX_FLOW_ROW_REVERSE;
+                else if (flexAttr == "column-reverse") flow = LV_FLEX_FLOW_COLUMN_REVERSE;
+                lv_obj_set_flex_flow(container, flow);
+                
+                if (!gapAttr.empty()) {
+                    int32_t gap = parse_size(gapAttr.c_str());
+                    lv_obj_set_style_pad_row(container, gap, LV_PART_MAIN);
+                    lv_obj_set_style_pad_column(container, gap, LV_PART_MAIN);
+                }
+                
+                lv_flex_align_t mainAlign = LV_FLEX_ALIGN_START;
+                lv_flex_align_t crossAlign = LV_FLEX_ALIGN_START;
+                if (!justifyAttr.empty()) {
+                    if (justifyAttr == "center")       mainAlign = LV_FLEX_ALIGN_CENTER;
+                    else if (justifyAttr == "end")     mainAlign = LV_FLEX_ALIGN_END;
+                    else if (justifyAttr == "between") mainAlign = LV_FLEX_ALIGN_SPACE_BETWEEN;
+                    else if (justifyAttr == "around")  mainAlign = LV_FLEX_ALIGN_SPACE_AROUND;
+                    else if (justifyAttr == "evenly")  mainAlign = LV_FLEX_ALIGN_SPACE_EVENLY;
+                }
+                if (!alignAttr.empty()) {
+                    if (alignAttr == "center")       crossAlign = LV_FLEX_ALIGN_CENTER;
+                    else if (alignAttr == "end")      crossAlign = LV_FLEX_ALIGN_END;
+                    else if (alignAttr == "stretch")  crossAlign = LV_FLEX_ALIGN_STRETCH;
+                }
+                lv_obj_set_flex_align(container, mainAlign, crossAlign, LV_FLEX_ALIGN_START);
+            }
+            
+            if (!growAttr.empty())
+                lv_obj_set_flex_grow(container, atoi(growAttr.c_str()));
+            
+            Widget{container}.applyCss("div", idAttr.c_str(), classAttr.c_str());
+            
+            bool hasDynVisible = !visAttr.empty() && visAttr.find('{') != P::String::npos;
+            if (!idAttr.empty() || hasDynVisible || hasDynBg) {
+                P::String autoId = idAttr;
+                if (autoId.empty()) {
+                    static int s_divIdx = 0;
+                    char buf[32]; snprintf(buf, sizeof(buf), "_div_%d", s_divIdx++);
+                    autoId = buf;
+                }
+                ElementDesc ed = {};
+                ed.id = autoId.c_str();
+                ed.obj = container;
+                ed.visibleBind = hasDynVisible ? visAttr.c_str() : nullptr;
+                ed.bgcolorBind = hasDynBg ? bgAttr.c_str() : nullptr;
+                g_core.app().addElement(ed);
+            }
+            
+            LOG_I(Log::UI, "<div> id=%s flex=%s", idAttr.empty() ? "-" : idAttr.c_str(),
+                     flexAttr.empty() ? "-" : flexAttr.c_str());
+            
+            if (!content.empty()) {
+                parse_children(content.c_str(), content.length(), container);
+            }
         } else if (strcmp(tag, Element::Table) == 0 ||
                    strcmp(tag, Element::Tr) == 0 ||
                    strcmp(tag, Element::Td) == 0) {
@@ -1456,6 +1769,20 @@ void parse_children(const char *html, int len, lv_obj_t *parent) {
             // Recursive parse children
             if (!content.empty()) {
                 parse_children(content.c_str(), content.length(), container);
+            }
+        }
+        
+        // Apply flex-grow on any non-container child widget
+        if (strcmp(tag, Element::Div) != 0 &&
+            strcmp(tag, Element::Table) != 0 &&
+            strcmp(tag, Element::Tr) != 0 &&
+            strcmp(tag, Element::Td) != 0) {
+            auto growVal = getAttr(astart, aend, "grow");
+            if (!growVal.empty()) {
+                lv_obj_t* lastChild = lv_obj_get_child(parent, -1);
+                if (lastChild) {
+                    lv_obj_set_flex_grow(lastChild, atoi(growVal.c_str()));
+                }
             }
         }
     }
