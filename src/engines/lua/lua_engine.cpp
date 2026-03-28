@@ -333,88 +333,167 @@ void LuaEngine::createStateTable() {
     lua_setglobal(m_lua, "state");
 }
 
-int LuaEngine::lua_state_index(lua_State* L) {
-    const char* key = luaL_checkstring(L, 2);
-    
-    auto& store = g_core.store();
+// Helper: push typed value from store onto Lua stack
+static void pushStoreValue(lua_State* L, Store& store, const P::String& key) {
     VarType type = store.getType(key);
-    
     switch (type) {
-        case VarType::Bool:
-            lua_pushboolean(L, store.getBool(key) ? 1 : 0);
-            break;
-        case VarType::Int:
-            lua_pushinteger(L, store.getInt(key));
-            break;
-        case VarType::Float:
-            lua_pushnumber(L, store.getFloat(key));
+        case VarType::Bool:  lua_pushboolean(L, store.getBool(key) ? 1 : 0); break;
+        case VarType::Int:   lua_pushinteger(L, store.getInt(key)); break;
+        case VarType::Float: lua_pushnumber(L, store.getFloat(key)); break;
+        default:             lua_pushstring(L, store.getString(key).c_str()); break;
+    }
+}
+
+// Helper: extract value string from Lua stack position
+static P::String luaValueToString(lua_State* L, int idx) {
+    int vtype = lua_type(L, idx);
+    switch (vtype) {
+        case LUA_TBOOLEAN: return lua_toboolean(L, idx) ? "true" : "false";
+        case LUA_TNUMBER:
+            return lua_isinteger(L, idx) ? std::to_string(lua_tointeger(L, idx))
+                                         : std::to_string(lua_tonumber(L, idx));
+        case LUA_TSTRING:  return lua_tostring(L, idx);
+        default:           return "";
+    }
+}
+
+// Helper: write value from Lua stack to store, typed
+static void storeWriteFromLua(lua_State* L, int valIdx, Store& store, const P::String& key) {
+    int vtype = lua_type(L, valIdx);
+    VarType stype = store.getType(key);
+    switch (vtype) {
+        case LUA_TBOOLEAN:
+            store.setBool(key, lua_toboolean(L, valIdx), false); break;
+        case LUA_TNUMBER:
+            if (stype == VarType::Float || !lua_isinteger(L, valIdx))
+                store.setFloat(key, (float)lua_tonumber(L, valIdx), false);
+            else
+                store.setInt(key, (int)lua_tointeger(L, valIdx), false);
             break;
         default:
-            lua_pushstring(L, store.getString(key).c_str());
-            break;
+            store.setString(key, luaValueToString(L, valIdx), false); break;
     }
+}
+
+int LuaEngine::lua_state_index(lua_State* L) {
+    const char* key = luaL_checkstring(L, 2);
+    auto& store = g_core.store();
     
+    // Direct scalar
+    if (store.has(P::String(key))) {
+        pushStoreValue(L, store, P::String(key));
+        return 1;
+    }
+    // Nested prefix or array
+    if (store.hasPrefix(P::String(key)) || store.hasArray(P::String(key))) {
+        pushProxy(L, key);
+        return 1;
+    }
+    lua_pushnil(L);
     return 1;
 }
 
 int LuaEngine::lua_state_newindex(lua_State* L) {
     const char* key = luaL_checkstring(L, 2);
+    P::String valueStr = luaValueToString(L, 3);
     
-    P::String valueStr;
-    int vtype = lua_type(L, 3);
+    LOG_V(Log::LUA, "state.%s = '%s'", key, valueStr.c_str());
     
-    switch (vtype) {
-        case LUA_TBOOLEAN:
-            valueStr = lua_toboolean(L, 3) ? "true" : "false";
-            break;
-        case LUA_TNUMBER:
-            if (lua_isinteger(L, 3)) {
-                valueStr = std::to_string(lua_tointeger(L, 3));
-            } else {
-                valueStr = std::to_string(lua_tonumber(L, 3));
-            }
-            break;
-        case LUA_TSTRING:
-            valueStr = lua_tostring(L, 3);
-            break;
-        default:
-            valueStr = "";
-            break;
-    }
-    
-    LOG_V(Log::LUA, "state.%s = '%s' (type=%d)", key, valueStr.c_str(), vtype);
-    
-    // Update Lua _state_data table
     lua_getglobal(L, "_state_data");
     lua_pushvalue(L, 3);
     lua_setfield(L, -2, key);
     lua_pop(L, 1);
     
-    // Update StateStore + notify UI
     if (s_instance) {
-        auto& store = g_core.store();
-        VarType type = store.getType(key);
-        
-        switch (vtype) {
-            case LUA_TBOOLEAN:
-                store.setBool(key, lua_toboolean(L, 3), false);
-                break;
-            case LUA_TNUMBER:
-                if (type == VarType::Float || !lua_isinteger(L, 3)) {
-                    store.setFloat(key, static_cast<float>(lua_tonumber(L, 3)), false);
-                } else {
-                    store.setInt(key, static_cast<int>(lua_tointeger(L, 3)), false);
-                }
-                break;
-            default:
-                store.setString(key, valueStr, false);
-                break;
-        }
-        
-        if (s_instance->m_stateCallback) {
+        storeWriteFromLua(L, 3, g_core.store(), P::String(key));
+        if (s_instance->m_stateCallback)
             s_instance->m_stateCallback(key, valueStr.c_str());
+    }
+    return 0;
+}
+
+// ============ Nested state proxy ============
+
+void LuaEngine::pushProxy(lua_State* L, const char* path) {
+    lua_newtable(L);
+    lua_newtable(L); // metatable
+    
+    lua_pushstring(L, path);
+    lua_pushcclosure(L, lua_proxy_index, 1);
+    lua_setfield(L, -2, "__index");
+    
+    lua_pushstring(L, path);
+    lua_pushcclosure(L, lua_proxy_newindex, 1);
+    lua_setfield(L, -2, "__newindex");
+    
+    lua_pushstring(L, path);
+    lua_pushcclosure(L, lua_proxy_len, 1);
+    lua_setfield(L, -2, "__len");
+    
+    lua_setmetatable(L, -2);
+}
+
+int LuaEngine::lua_proxy_index(lua_State* L) {
+    const char* prefix = lua_tostring(L, lua_upvalueindex(1));
+    auto& store = g_core.store();
+    
+    if (lua_type(L, 2) == LUA_TNUMBER) {
+        int idx = (int)lua_tointeger(L, 2) - 1; // Lua 1-indexed → 0-indexed
+        if (store.hasArray(P::String(prefix))) {
+            lua_pushstring(L, store.getArrayItem(P::String(prefix), idx).c_str());
+            return 1;
+        }
+        lua_pushnil(L);
+        return 1;
+    }
+    
+    const char* key = luaL_checkstring(L, 2);
+    P::String fullKey = P::String(prefix) + "." + key;
+    
+    if (store.has(fullKey)) {
+        pushStoreValue(L, store, fullKey);
+        return 1;
+    }
+    if (store.hasPrefix(fullKey) || store.hasArray(fullKey)) {
+        pushProxy(L, fullKey.c_str());
+        return 1;
+    }
+    lua_pushnil(L);
+    return 1;
+}
+
+int LuaEngine::lua_proxy_newindex(lua_State* L) {
+    const char* prefix = lua_tostring(L, lua_upvalueindex(1));
+    auto& store = g_core.store();
+    P::String valueStr = luaValueToString(L, 3);
+    
+    if (lua_type(L, 2) == LUA_TNUMBER) {
+        int idx = (int)lua_tointeger(L, 2) - 1;
+        if (store.hasArray(P::String(prefix))) {
+            store.setArrayItem(P::String(prefix), idx, valueStr);
+            LOG_V(Log::LUA, "state.%s[%d] = '%s'", prefix, idx, valueStr.c_str());
+            if (s_instance && s_instance->m_stateCallback) {
+                char buf[64]; snprintf(buf, sizeof(buf), "%s[%d]", prefix, idx);
+                s_instance->m_stateCallback(buf, valueStr.c_str());
+            }
+            return 0;
         }
     }
     
+    const char* key = luaL_checkstring(L, 2);
+    P::String fullKey = P::String(prefix) + "." + key;
+    LOG_V(Log::LUA, "state.%s = '%s'", fullKey.c_str(), valueStr.c_str());
+    
+    if (s_instance) {
+        storeWriteFromLua(L, 3, store, fullKey);
+        if (s_instance->m_stateCallback)
+            s_instance->m_stateCallback(fullKey.c_str(), valueStr.c_str());
+    }
     return 0;
+}
+
+int LuaEngine::lua_proxy_len(lua_State* L) {
+    const char* prefix = lua_tostring(L, lua_upvalueindex(1));
+    lua_pushinteger(L, g_core.store().getArraySize(P::String(prefix)));
+    return 1;
 }

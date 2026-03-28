@@ -47,4 +47,9 @@ private:
     
     static int lua_state_index(lua_State* L);
     static int lua_state_newindex(lua_State* L);
+    
+    static void pushProxy(lua_State* L, const char* path);
+    static int lua_proxy_index(lua_State* L);
+    static int lua_proxy_newindex(lua_State* L);
+    static int lua_proxy_len(lua_State* L);
 };

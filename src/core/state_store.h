@@ -67,6 +67,47 @@ public:
         return m_vars.find(name) != m_vars.end();
     }
     
+    bool hasPrefix(const P::String& prefix) const {
+        P::String dp = prefix + ".";
+        for (const auto& [n, _] : m_vars) {
+            if (n.size() > dp.size() && n.compare(0, dp.size(), dp) == 0) return true;
+        }
+        return false;
+    }
+    
+    // ============ ARRAYS ============
+    
+    void defineArray(const P::String& name, const P::Array<P::String>& items) {
+        m_arrays[name] = items;
+    }
+    
+    bool hasArray(const P::String& name) const {
+        return m_arrays.find(name) != m_arrays.end();
+    }
+    
+    int getArraySize(const P::String& name) const {
+        auto it = m_arrays.find(name);
+        return it != m_arrays.end() ? (int)it->second.size() : 0;
+    }
+    
+    P::String getArrayItem(const P::String& name, int idx) const {
+        auto it = m_arrays.find(name);
+        if (it == m_arrays.end() || idx < 0 || idx >= (int)it->second.size()) return "";
+        return it->second[idx];
+    }
+    
+    void setArrayItem(const P::String& name, int idx, const P::String& value, bool notify = true) {
+        auto it = m_arrays.find(name);
+        if (it == m_arrays.end() || idx < 0 || idx >= (int)it->second.size()) return;
+        if (it->second[idx] == value) return;
+        it->second[idx] = value;
+        if (notify && m_onChange) {
+            char buf[64];
+            snprintf(buf, sizeof(buf), "%s[%d]", name.c_str(), idx);
+            m_onChange(P::String(buf), VarValue(value));
+        }
+    }
+    
     const Variable* getVar(const P::String& name) const {
         auto it = m_vars.find(name);
         return it != m_vars.end() ? &it->second : nullptr;
@@ -202,6 +243,7 @@ public:
     void clear() {
         m_vars.clear();
         m_names.clear();
+        m_arrays.clear();
     }
     
     // ============ INDEX ACCESS ============
@@ -274,6 +316,7 @@ public:
 private:
     P::Map<P::String, Variable> m_vars;
     P::Array<P::String> m_names;
+    P::Map<P::String, P::Array<P::String>> m_arrays;
     std::function<void(const P::String&, const VarValue&)> m_onChange;
     const char* m_tag = "Store";
     
