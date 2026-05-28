@@ -10,6 +10,7 @@ enum Cat : uint8_t {
     STATE, 
     APP, 
     BLE, 
+    CRYPTO, 
     COUNT 
 };
 
