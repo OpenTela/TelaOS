@@ -6,6 +6,7 @@
 #include "engines/lua/lua_ui.h"
 #include "engines/lua/lua_csv.h"
 #include "engines/lua/lua_yaml.h"
+#include "engines/lua/lua_crypto.h"
 #include "utils/log_config.h"
 #include "esp_heap_caps.h"
 #include <cstring>
@@ -59,6 +60,7 @@ bool LuaEngine::init() {
     LuaUI::registerAll(m_lua);
     LuaCSV::registerAll(m_lua);
     LuaYAML::registerAll(m_lua);
+    LuaCrypto::registerAll(m_lua);
     
     LOG_I(Log::LUA, "Lua initialized successfully");
     return true;
