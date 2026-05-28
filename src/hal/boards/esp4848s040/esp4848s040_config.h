@@ -101,3 +101,14 @@
 // Strapping pins (reset after boot)
 #define STRAPPING_PIN_0         0
 #define STRAPPING_PIN_1         15
+
+// ============================================
+// SD Card (microSD / TF slot)
+// ============================================
+// Shares ST7701 control-SPI lines (SCK=48, MOSI/SDA=47); SD has its own CS+MISO.
+// Safe: st7701_init() bit-bangs those once during initPanel(), leaves LCD CS(39)
+// deselected; SD mounts afterwards (App::Manager::init runs after display_init).
+#define PIN_SD_SCK              48
+#define PIN_SD_MOSI             47
+#define PIN_SD_MISO             41
+#define PIN_SD_CS               42

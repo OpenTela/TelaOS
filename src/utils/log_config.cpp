@@ -4,7 +4,7 @@
 namespace Log {
 
 // Defaults: Info для основных, Warn для шумных
-static Level s_levels[COUNT] = { Info, Info, Info, Info, Info, Info };
+static Level s_levels[COUNT] = { Info, Info, Info, Info, Info, Info, Info };
 // All categories default to Info
 
 void set(Cat cat, Level lvl) {
@@ -20,7 +20,7 @@ Level get(Cat cat) {
 }
 
 const char* catName(Cat cat) {
-    static const char* names[] = { "UI", "LUA", "STATE", "APP", "BLE", "CRYPTO" };
+    static const char* names[] = { "UI", "LUA", "STATE", "APP", "BLE", "CRYPTO", "SD" };
     return (cat < COUNT) ? names[cat] : "?";
 }
 
@@ -50,6 +50,7 @@ static int parseCat(const char* s) {
     if (!s || !s[0]) return -1;
     
     char c = s[0] | 0x20;
+    if (c == 's' && (s[1] | 0x20) == 'd') return SD;
     if (c == 'u') return UI;
     if (c == 'l') return LUA;
     if (c == 's') return STATE;

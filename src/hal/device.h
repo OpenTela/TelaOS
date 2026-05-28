@@ -23,6 +23,9 @@ public:
     virtual bool initTouch() = 0;
     virtual void setBrightness(uint8_t level) = 0;  // 0=off, 255=max
 
+    // ---- Optional storage (default: board has no SD card) ----
+    virtual bool mountSdCard() { return false; }
+
     // ---- Callback providers (called once, result stored by LVGL) ----
     virtual lv_display_flush_cb_t  getFlushCallback() = 0;
     virtual lv_indev_read_cb_t     getTouchCallback() = 0;
