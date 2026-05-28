@@ -19,6 +19,7 @@ bool info(uint64_t& t, uint64_t& f) { t = 0; f = 0; return false; }
 #include "sdmmc_cmd.h"
 #include "driver/sdspi_host.h"
 #include "driver/spi_common.h"
+#include "ff.h"  // FATFS direct API (f_getfree) — works on IDF 4.4 and 5.x
 
 static sdmmc_card_t* s_card    = nullptr;
 static bool          s_mounted = false;
@@ -84,8 +85,20 @@ bool isMounted() { return s_mounted; }
 const char* mountPoint() { return kMountPoint; }
 
 bool info(uint64_t& totalBytes, uint64_t& freeBytes) {
-    if (!s_mounted) { totalBytes = 0; freeBytes = 0; return false; }
-    return esp_vfs_fat_info(kMountPoint, &totalBytes, &freeBytes) == ESP_OK;
+    totalBytes = 0; freeBytes = 0;
+    if (!s_mounted) return false;
+    // esp_vfs_fat_sdspi_mount registers FATFS at drive "0:" by default.
+    // Use the FATFS API directly: it ships with ESP-IDF (both 4.4 and 5.x),
+    // unlike POSIX statvfs (not in newlib for IDF 4.4) or esp_vfs_fat_info
+    // (IDF 5.x only).
+    FATFS* fs = nullptr;
+    DWORD  freeClusters = 0;
+    if (f_getfree("0:", &freeClusters, &fs) != FR_OK || fs == nullptr) return false;
+    const uint64_t bytesPerCluster = (uint64_t) fs->csize * FF_MAX_SS;
+    const uint64_t totalClusters   = (uint64_t)(fs->n_fatent - 2);
+    totalBytes = totalClusters  * bytesPerCluster;
+    freeBytes  = (uint64_t) freeClusters * bytesPerCluster;
+    return true;
 }
 
 #endif  // LVGL_MOCK_ENABLED

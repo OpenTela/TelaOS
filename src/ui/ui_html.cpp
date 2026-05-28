@@ -1616,6 +1616,8 @@ void parse_children(const char *html, int len, lv_obj_t *parent) {
                 lv_obj_add_flag(container, LV_OBJ_FLAG_SCROLLABLE);
             
             // Flex layout
+            bool stretchChildren = false;
+            bool stretchIsWidth  = false;  // true=stretch child width (row), false=stretch height (column)
             if (!flexAttr.empty()) {
                 lv_flex_flow_t flow = LV_FLEX_FLOW_ROW;
                 if (flexAttr == "column")              flow = LV_FLEX_FLOW_COLUMN;
@@ -1624,6 +1626,14 @@ void parse_children(const char *html, int len, lv_obj_t *parent) {
                 else if (flexAttr == "row-reverse")    flow = LV_FLEX_FLOW_ROW_REVERSE;
                 else if (flexAttr == "column-reverse") flow = LV_FLEX_FLOW_COLUMN_REVERSE;
                 lv_obj_set_flex_flow(container, flow);
+                // Cross axis = perpendicular to flow. So for row-flow flex,
+                // children get stretched in HEIGHT; for column-flow, in WIDTH.
+                const bool isColumnFlow =
+                    (flow == LV_FLEX_FLOW_COLUMN) ||
+                    (flow == LV_FLEX_FLOW_COLUMN_WRAP) ||
+                    (flow == LV_FLEX_FLOW_COLUMN_REVERSE);
+                stretchIsWidth = isColumnFlow;  // column flow -> stretch width; row flow -> stretch height
+                (void)stretchIsWidth;
                 
                 if (!gapAttr.empty()) {
                     int32_t gap = parse_size(gapAttr.c_str());
@@ -1643,7 +1653,15 @@ void parse_children(const char *html, int len, lv_obj_t *parent) {
                 if (!alignAttr.empty()) {
                     if (alignAttr == "center")       crossAlign = LV_FLEX_ALIGN_CENTER;
                     else if (alignAttr == "end")      crossAlign = LV_FLEX_ALIGN_END;
-                    else if (alignAttr == "stretch")  crossAlign = LV_FLEX_ALIGN_STRETCH;
+                    else if (alignAttr == "stretch") {
+                        // LVGL's lv_flex_align_t has no STRETCH (verified against
+                        // lvgl/lvgl src/layouts/flex/lv_flex.h — only START/END/
+                        // CENTER/SPACE_*). To make align="stretch" actually do
+                        // something useful, we keep cross=START and stretch each
+                        // child to 100% on the cross axis after they are built.
+                        crossAlign = LV_FLEX_ALIGN_START;
+                        stretchChildren = true;
+                    }
                 }
                 lv_obj_set_flex_align(container, mainAlign, crossAlign, LV_FLEX_ALIGN_START);
             }
@@ -1674,6 +1692,20 @@ void parse_children(const char *html, int len, lv_obj_t *parent) {
             
             if (!content.empty()) {
                 parse_children(content.c_str(), content.length(), container);
+            }
+
+            // align="stretch" emulation: LVGL flex has no STRETCH enum value,
+            // so we set each child's cross-axis size to 100% of the container.
+            if (stretchChildren) {
+                uint32_t n = lv_obj_get_child_cnt(container);
+                for (uint32_t i = 0; i < n; ++i) {
+                    lv_obj_t* ch = lv_obj_get_child(container, i);
+                    if (!ch) continue;
+                    if (stretchIsWidth)
+                        lv_obj_set_width(ch,  lv_pct(100));
+                    else
+                        lv_obj_set_height(ch, lv_pct(100));
+                }
             }
         } else if (strcmp(tag, Element::Table) == 0 ||
                    strcmp(tag, Element::Tr) == 0 ||
