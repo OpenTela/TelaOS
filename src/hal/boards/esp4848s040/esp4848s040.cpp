@@ -12,6 +12,7 @@
  #ifdef BOARD_ESP4848S040
 
 #include "esp4848s040.h"
+#include "hal/sdcard.h"
 #include <Arduino.h>
 #include <Wire.h>
 #include <TAMC_GT911.h>
@@ -301,6 +302,12 @@ lv_display_flush_cb_t Esp4848S040::getFlushCallback() {
 
 lv_indev_read_cb_t Esp4848S040::getTouchCallback() {
     return esp4848s040_touch;
+}
+
+bool Esp4848S040::mountSdCard() {
+    // SD shares ST7701 control SPI (SCK48/MOSI47); panel init is bit-banged and
+    // one-time, so SPI2 is free here. SD uses its own CS/MISO.
+    return Sd::mountSpi(PIN_SD_CS, PIN_SD_MOSI, PIN_SD_MISO, PIN_SD_SCK);
 }
 
 #endif

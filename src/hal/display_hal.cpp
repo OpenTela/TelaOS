@@ -6,6 +6,7 @@
  */
 
 #include "display_hal.h"
+#include "hal/lv_fs_sd.h"
 #include "device.h"
 #include "ui/ui_touch.h"
 #include <Arduino.h>
@@ -66,6 +67,7 @@ bool display_init() {
     #if LV_USE_FS_STDIO
     Serial.println("[LVGL] FS STDIO ready (C: -> /littlefs)");
     #endif
+    LvFsSd::registerDrive();   // A: -> /sd (SD card)
 
     // 6. Allocate LVGL draw buffer (DRAM, fallback chain)
     const DisplayBuffer fallback[] = { BufferMax, BufferOptimal, BufferSmall, BufferMicro };

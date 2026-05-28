@@ -12,6 +12,7 @@
  */
 
 #include "esp8048w550.h"
+#include "hal/sdcard.h"
 #include <Arduino.h>
 #include <Wire.h>
 #include <TAMC_GT911.h>
@@ -156,6 +157,10 @@ lv_display_flush_cb_t Esp8048W550::getFlushCallback() {
 
 lv_indev_read_cb_t Esp8048W550::getTouchCallback() {
     return esp8048w550_touch;
+}
+
+bool Esp8048W550::mountSdCard() {
+    return Sd::mountSpi(PIN_SD_CS, PIN_SD_MOSI, PIN_SD_MISO, PIN_SD_SCK);
 }
 
 #endif // BOARD_ESP8048W550

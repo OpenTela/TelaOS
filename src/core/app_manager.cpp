@@ -22,6 +22,7 @@
 #include <Arduino.h>
 #include <lvgl.h>
 #include <LittleFS.h>
+#include "hal/device.h"
 #include <sys/stat.h>
 #include <cstring>
 
@@ -278,6 +279,9 @@ void Manager::init() {
     LOG_I(Log::APP, "=== Evolution OS ===");
     
     mountLittleFS();
+
+    if (Device::inst().mountSdCard()) { LOG_I(Log::SD, "SD card ready"); }
+    else { LOG_I(Log::SD, "no SD card"); }
 
     // System config
     systemConfig.define("display.brightness",  VarType::Int,  255);

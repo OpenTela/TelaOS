@@ -11,6 +11,7 @@ enum Cat : uint8_t {
     APP, 
     BLE, 
     CRYPTO, 
+    SD, 
     COUNT 
 };
 
