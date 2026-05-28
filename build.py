@@ -25,16 +25,21 @@ DEFINES = [
 ]
 
 def find_all_sources(src_dir: Path):
-    """Find all .cpp files in src/, excluding font/"""
+    """Find all .cpp/.c files in src/, excluding font/"""
     sources = []
-    for cpp in src_dir.rglob("*.cpp"):
-        if "font" not in cpp.parts:
-            sources.append(cpp)
+    for pattern in ("*.cpp", "*.c"):
+        for cpp in src_dir.rglob(pattern):
+            if "font" not in cpp.parts:
+                sources.append(cpp)
     return sorted(sources)
 
 def get_obj_path(src: Path, src_dir: Path, build_dir: Path) -> Path:
     """Get .o path for source file"""
-    rel = src.relative_to(src_dir)
+    try:
+        rel = src.relative_to(src_dir)
+    except ValueError:
+        # Source outside src_dir (e.g. lib/blowfish/bf_blowfish.c)
+        rel = Path("lib") / src.name
     return build_dir / rel.with_suffix('.o')
 
 def needs_rebuild(src: Path, obj: Path, force: bool = False) -> bool:
@@ -73,12 +78,16 @@ def parse_depfile(dep: Path) -> list:
 
 def compile_one(src: Path, obj: Path, includes: list, defines: list) -> tuple:
     obj.parent.mkdir(parents=True, exist_ok=True)
-    
-    cmd = [CXX, f"-std={STD}", "-MMD", "-include", "cstring", "-c", "-o", str(obj)]
+
+    is_c = src.suffix == ".c"
+    if is_c:
+        cmd = ["gcc", "-std=gnu11", "-MMD", "-c", "-o", str(obj)]
+    else:
+        cmd = [CXX, f"-std={STD}", "-MMD", "-include", "cstring", "-c", "-o", str(obj)]
     cmd += [f"-D{d}" for d in defines]
     cmd += [f"-I{inc}" for inc in includes]
     cmd.append(str(src))
-    
+
     result = subprocess.run(cmd, capture_output=True, text=True)
     return result.returncode == 0, result.stdout + result.stderr
 
@@ -121,17 +130,38 @@ def main():
         str(COMPILER_DIR / "lib" / "ckdl" / "bindings" / "cpp" / "include"),
     ]
     
+    # Add project lib includes (small vendored third-party components)
+    LIB_COMPONENTS = ["blowfish"]  # add new ones here
+    lib_dir = project_dir / "lib"
+    for name in LIB_COMPONENTS:
+        comp = lib_dir / name
+        if comp.exists():
+            includes.append(str(comp))
+    
     # Use separate build directory for mock builds
     build_dir = BUILD_DIR / "mock" if mock_enabled else BUILD_DIR
     build_dir.mkdir(parents=True, exist_ok=True)
     
     sources = find_all_sources(src_dir)
     
+    # Add third-party lib sources (small vendored components only)
+    LIB_COMPONENTS = ["blowfish"]  # add new ones here
+    lib_dir = project_dir / "lib"
+    for name in LIB_COMPONENTS:
+        comp = lib_dir / name
+        if comp.exists():
+            for pattern in ("*.cpp", "*.c"):
+                for f in comp.glob(pattern):
+                    sources.append(f)
+    
     # Group by folder
     folders = {}
     for src in sources:
-        parts = src.relative_to(src_dir).parts
-        folder = parts[0] if len(parts) > 1 else "."
+        try:
+            parts = src.relative_to(src_dir).parts
+            folder = parts[0] if len(parts) > 1 else "."
+        except ValueError:
+            folder = "lib"
         folders.setdefault(folder, []).append(src)
     
     print(f"Project: {project_dir}")
@@ -157,7 +187,10 @@ def main():
     
     errors = []
     for i, (src, obj) in enumerate(to_build, 1):
-        rel = src.relative_to(src_dir)
+        try:
+            rel = src.relative_to(src_dir)
+        except ValueError:
+            rel = Path("lib") / src.name
         ok, output = compile_one(src, obj, includes, defines)
         
         if ok:
