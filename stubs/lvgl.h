@@ -184,7 +184,9 @@ typedef enum {
     LV_FLEX_FLOW_ROW = 0,
     LV_FLEX_FLOW_COLUMN,
     LV_FLEX_FLOW_ROW_WRAP,
-    LV_FLEX_FLOW_COLUMN_WRAP
+    LV_FLEX_FLOW_COLUMN_WRAP,
+    LV_FLEX_FLOW_ROW_REVERSE,
+    LV_FLEX_FLOW_COLUMN_REVERSE
 } lv_flex_flow_t;
 
 typedef enum {
@@ -193,7 +195,10 @@ typedef enum {
     LV_FLEX_ALIGN_CENTER,
     LV_FLEX_ALIGN_SPACE_EVENLY,
     LV_FLEX_ALIGN_SPACE_AROUND,
-    LV_FLEX_ALIGN_SPACE_BETWEEN
+    LV_FLEX_ALIGN_SPACE_BETWEEN,
+    // NOTE: LVGL flex has no STRETCH (see lvgl/lvgl src/layouts/flex/lv_flex.h).
+    // align="stretch" in app HTML is emulated by sizing children to 100% on
+    // the cross axis after they are created.
 } lv_flex_align_t;
 
 typedef enum {
@@ -272,14 +277,12 @@ inline bool lv_obj_has_state(lv_obj_t*, int) { return false; }
 #ifdef LVGL_MOCK_ENABLED
 // Flag capture (for visibility)
 inline void lv_obj_add_flag(lv_obj_t* obj, int flag) {
-    if (obj && obj->mock_widget && flag == LV_OBJ_FLAG_HIDDEN) {
-        obj->mock_widget->hidden = true;
-    }
+    if (obj && obj->mock_widget && flag == LV_OBJ_FLAG_HIDDEN) obj->mock_widget->hidden = true;
+    if (obj && obj->mock_widget && flag == LV_OBJ_FLAG_SCROLLABLE) obj->mock_widget->scrollable = true;
 }
 inline void lv_obj_clear_flag(lv_obj_t* obj, int flag) {
-    if (obj && obj->mock_widget && flag == LV_OBJ_FLAG_HIDDEN) {
-        obj->mock_widget->hidden = false;
-    }
+    if (obj && obj->mock_widget && flag == LV_OBJ_FLAG_HIDDEN) obj->mock_widget->hidden = false;
+    if (obj && obj->mock_widget && flag == LV_OBJ_FLAG_SCROLLABLE) obj->mock_widget->scrollable = false;
 }
 inline void lv_obj_remove_flag(lv_obj_t* obj, int flag) {
     lv_obj_clear_flag(obj, flag);
@@ -413,6 +416,35 @@ inline void lv_textarea_set_text(lv_obj_t* obj, const char* txt) {
 #define _set_onenter _set_onenter
 #define _set_onblur _set_onblur
 #define _set_href _set_href
+
+// Flex capture (mock)
+inline void lv_obj_set_flex_flow(lv_obj_t* obj, lv_flex_flow_t flow) {
+    if (obj && obj->mock_widget) obj->mock_widget->flexFlow = (int)flow;
+}
+inline void lv_obj_set_flex_align(lv_obj_t* obj, lv_flex_align_t main, lv_flex_align_t cross, lv_flex_align_t track) {
+    if (obj && obj->mock_widget) {
+        obj->mock_widget->flexMainAlign = (int)main;
+        obj->mock_widget->flexCrossAlign = (int)cross;
+        obj->mock_widget->flexTrackAlign = (int)track;
+    }
+}
+inline void lv_obj_set_flex_grow(lv_obj_t* obj, int grow) {
+    if (obj && obj->mock_widget) obj->mock_widget->flexGrow = grow;
+}
+#define lv_obj_set_flex_flow lv_obj_set_flex_flow
+#define lv_obj_set_flex_align lv_obj_set_flex_align
+#define lv_obj_set_flex_grow lv_obj_set_flex_grow
+
+// Pad row/column capture (mock)
+inline void lv_obj_set_style_pad_row(lv_obj_t* obj, int pad, int) {
+    if (obj && obj->mock_widget) obj->mock_widget->padRow = pad;
+}
+inline void lv_obj_set_style_pad_column(lv_obj_t* obj, int pad, int) {
+    if (obj && obj->mock_widget) obj->mock_widget->padColumn = pad;
+}
+#define lv_obj_set_style_pad_row lv_obj_set_style_pad_row
+#define lv_obj_set_style_pad_column lv_obj_set_style_pad_column
+
 #else
 // Non-mock stubs
 inline void lv_obj_add_flag(lv_obj_t*, int) {}
@@ -464,7 +496,10 @@ inline void lv_obj_get_coords(lv_obj_t* obj, lv_area_t* area) {
 }
 inline lv_obj_t* lv_obj_get_parent(lv_obj_t* obj) { return obj ? obj->parent : nullptr; }
 inline lv_obj_t* lv_obj_get_child(lv_obj_t* obj, int idx) {
-    if (obj && obj->mock_widget && idx >= 0 && idx < (int)obj->mock_widget->children.size())
+    if (!obj || !obj->mock_widget) return nullptr;
+    int n = (int)obj->mock_widget->children.size();
+    if (idx < 0) idx = n + idx;
+    if (idx >= 0 && idx < n)
         return (lv_obj_t*)obj->mock_widget->children[idx]->lv_obj;
     return nullptr;
 }
@@ -483,9 +518,15 @@ inline void lv_obj_set_scrollbar_mode(lv_obj_t*, int) {}
 inline void lv_obj_scroll_to_view(lv_obj_t*, int) {}
 inline void lv_obj_set_tile_id(lv_obj_t*, int, int, int) {}
 
+#ifndef lv_obj_set_flex_flow
 inline void lv_obj_set_flex_flow(lv_obj_t*, lv_flex_flow_t) {}
+#endif
+#ifndef lv_obj_set_flex_align
 inline void lv_obj_set_flex_align(lv_obj_t*, lv_flex_align_t, lv_flex_align_t, lv_flex_align_t) {}
+#endif
+#ifndef lv_obj_set_flex_grow
 inline void lv_obj_set_flex_grow(lv_obj_t*, int) {}
+#endif
 
 inline void lv_obj_set_grid_dsc_array(lv_obj_t*, const int*, const int*) {}
 inline void lv_obj_set_grid_cell(lv_obj_t*, lv_grid_align_t, int, int, lv_grid_align_t, int, int) {}
@@ -557,8 +598,12 @@ inline void lv_obj_set_style_pad_left(lv_obj_t*, int, int) {}
 #ifndef lv_obj_set_style_pad_right
 inline void lv_obj_set_style_pad_right(lv_obj_t*, int, int) {}
 #endif
+#ifndef lv_obj_set_style_pad_column
 inline void lv_obj_set_style_pad_column(lv_obj_t*, int, int) {}
+#endif
+#ifndef lv_obj_set_style_pad_row
 inline void lv_obj_set_style_pad_row(lv_obj_t*, int, int) {}
+#endif
 inline void lv_obj_set_style_shadow_width(lv_obj_t*, int, int) {}
 inline void lv_obj_set_style_shadow_color(lv_obj_t*, lv_color_t, int) {}
 inline void lv_obj_set_style_shadow_opa(lv_obj_t*, int, int) {}
