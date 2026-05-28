@@ -46,10 +46,12 @@ static int lua_getAttr(lua_State* L) {
 }
 
 static int lua_freeze(lua_State* L) {
+    g_core.freeze();
     return 0;
 }
 
 static int lua_unfreeze(lua_State* L) {
+    g_core.unfreeze();
     return 0;
 }
 

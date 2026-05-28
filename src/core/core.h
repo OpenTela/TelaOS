@@ -52,6 +52,10 @@ public:
     bool isKeyboardVisible() const;  // Any keyboard shown?
     void dismissKeyboard();          // Hide all keyboards
     
+    // Batch UI updates
+    void freeze();      // Defer binding updates
+    void unfreeze();    // Flush deferred updates
+    
     // Head section getters
     int timersCount() const;
     int timerInterval(int i) const;

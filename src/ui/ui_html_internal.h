@@ -52,6 +52,8 @@ const char* get_state_value(const char* name);
 P::String extractBindVar(const char* bindStr);
 void navigate(const char* href);
 void ui_update_bindings(const char* varname, const char* value);
+void ui_freeze();
+void ui_unfreeze();
 P::String render_template(const char* tpl);
 
 /// Descriptor for registering a UI element

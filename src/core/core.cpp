@@ -115,6 +115,14 @@ void Core::dismissKeyboard() {
     }
 }
 
+void Core::freeze() {
+    ui_freeze();
+}
+
+void Core::unfreeze() {
+    ui_unfreeze();
+}
+
 // ============ Timer getters ============
 
 int Core::timersCount() const {

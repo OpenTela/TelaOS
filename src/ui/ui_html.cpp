@@ -65,6 +65,10 @@ void (*g_onhold_handler)(const char* func_name) = nullptr;
 void (*g_onhold_xy_handler)(const char* func_name, int x, int y) = nullptr;
 void (*g_state_change_handler)(const char* var_name, const char* value) = nullptr;
 
+// Freeze: defer UI binding updates, flush on unfreeze
+static bool s_frozen = false;
+static P::Map<P::String, P::String> s_frozenDirty;
+
 static lv_obj_t *get_screen(void) {
     return lv_screen_active();
 }
@@ -984,9 +988,30 @@ static bool template_has_var(const char *tpl, const char *varname) {
 static void ui_update_bindings_internal(const char *varname, const char *value);
 uint32_t parse_color(const char *s);
 
-// Public function - calls internal directly (we're always in LVGL context)
+// Public function - defers if frozen, else applies immediately
 void ui_update_bindings(const char *varname, const char *value) {
+    if (s_frozen) {
+        s_frozenDirty[P::String(varname)] = P::String(value);
+        // Still update internal state so Lua reads current values
+        ui_set_state(varname, value);
+        return;
+    }
     ui_update_bindings_internal(varname, value);
+}
+
+void ui_freeze() {
+    s_frozen = true;
+    s_frozenDirty.clear();
+}
+
+void ui_unfreeze() {
+    if (!s_frozen) return;
+    s_frozen = false;
+    // Flush all deferred updates
+    auto dirty = std::move(s_frozenDirty);
+    for (auto& [name, value] : dirty) {
+        ui_update_bindings_internal(name.c_str(), value.c_str());
+    }
 }
 
 // Internal function that actually updates bindings

@@ -300,9 +300,20 @@ void keyboard_event_handler(lv_event_t *e) {
     lv_event_code_t code = lv_event_get_code(e);
     lv_obj_t *kb = (lv_obj_t*)lv_event_get_target(e);
     
+    if (code == LV_EVENT_READY) {
+        lv_obj_t *ta = lv_keyboard_get_textarea(kb);
+        if (ta) {
+            for (auto& el : g_core.app().elements) {
+                if (el->obj() == ta && !el->onclick.empty() && g_onclick_handler) {
+                    g_onclick_handler(el->onclick.c_str());
+                    break;
+                }
+            }
+        }
+    }
+    
     if (code == LV_EVENT_READY || code == LV_EVENT_CANCEL) {
         lv_obj_add_flag(kb, LV_OBJ_FLAG_HIDDEN);
-        // Unfocus textarea
         lv_obj_t *ta = lv_keyboard_get_textarea(kb);
         if (ta) {
             lv_obj_clear_state(ta, LV_STATE_FOCUSED);
@@ -360,7 +371,6 @@ static void input_focus_handler(lv_event_t *e) {
         lv_obj_align(g_core.app().keyboards[page_idx], LV_ALIGN_BOTTOM_MID, 0, 0);
         lv_obj_add_flag(g_core.app().keyboards[page_idx], LV_OBJ_FLAG_GESTURE_BUBBLE);
         lv_obj_add_flag(g_core.app().keyboards[page_idx], LV_OBJ_FLAG_EVENT_BUBBLE);
-        lv_obj_set_style_text_font(g_core.app().keyboards[page_idx], UI::Font::get(), LV_PART_ITEMS);
     }
     
     lv_keyboard_set_textarea(g_core.app().keyboards[page_idx], ta);
@@ -1093,6 +1103,7 @@ void create_input(const char *astart, const char *aend, const char *content, lv_
     ElementDesc ind;
     ind.id          = attrs.id.c_str();
     ind.obj         = ta;
+    ind.onclick     = onenter.c_str();
     ind.onchange    = onchange.c_str();
     ind.oninput     = oninput.c_str();
     ind.bind        = bind.c_str();
