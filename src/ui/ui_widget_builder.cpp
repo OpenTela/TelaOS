@@ -1431,6 +1431,86 @@ void create_markdown(const char *astart, const char *aend, const char *content, 
 
 #endif // LV_USE_SPAN
 
+// ============ QR CODE ============
+// <qr size="200" dark="#000000" light="#ffffff">{payload}</qr>
+// Content may be literal or a {var} template; on bound-var change the code
+// is re-rendered via updateFn (same mechanism markdown uses).
+void create_qr(const char *astart, const char *aend, const char *content, lv_obj_t *parent) {
+#if !LV_USE_QRCODE
+    (void)astart; (void)aend; (void)content; (void)parent;
+    LOG_W(Log::UI, "<qr> ignored: LV_USE_QRCODE is disabled");
+    return;
+#else
+    auto text = trimmed(content);
+    bool isLiteral = stripLiteral(text);
+    bool hasDynamicText = !isLiteral && contains(text, '{');
+
+    CommonAttrs attrs = parseCommonAttrs(astart, aend);
+    ensureId(attrs, "_qr", hasDynamicText);
+
+    P::String payload = hasDynamicText ? render_template(text.c_str()) : decodeEntities(text);
+
+    // Geometry + colors
+    int32_t size = getAttrSize(astart, aend, "size");
+    if (size <= 0) size = 200;
+    P::String darkAttr  = getAttr(astart, aend, "dark");
+    P::String lightAttr = getAttr(astart, aend, "light");
+    uint32_t darkRgb  = darkAttr.empty()  ? 0x000000 : parse_color(darkAttr.c_str());
+    uint32_t lightRgb = lightAttr.empty() ? 0xFFFFFF : parse_color(lightAttr.c_str());
+
+    lv_obj_t* qr = lv_qrcode_create(parent);
+    lv_qrcode_set_size(qr, size);
+    lv_qrcode_set_dark_color(qr,  lv_color_hex(darkRgb));
+    lv_qrcode_set_light_color(qr, lv_color_hex(lightRgb));
+
+    // Position (same logic as image/markdown)
+    auto align = getAttr(astart, aend, "align");
+    bool hasX, hasY;
+    int32_t x = getAttrCoordW(astart, aend, "x", hasX, parent);
+    int32_t y = getAttrCoordH(astart, aend, "y", hasY, parent);
+    if (align == "center" && !hasX) {
+        lv_obj_align(qr, LV_ALIGN_TOP_MID, 0, y);
+    } else {
+        set_pos(qr, x, y);
+    }
+
+    // Initial render (empty payload -> leave blank, qrcodegen rejects 0-length)
+    if (!payload.empty()) {
+        lv_qrcode_update(qr, payload.c_str(), payload.length());
+    }
+
+    // Store element
+    auto elem = P::create<UI::Element>();
+    elem->id = attrs.id;
+    elem->w.handle = qr;
+    elem->tpl = hasDynamicText ? P::String(text) : "";
+
+    if (hasDynamicText) {
+        elem->updateFn = [qr](const P::String& rendered) {
+            if (rendered.empty()) return;
+            lv_qrcode_update(qr, rendered.c_str(), rendered.length());
+        };
+    }
+
+    if (!attrs.visible.empty()) {
+        P::String vb = attrs.visible;
+        if (vb.length() > 2 && vb[0] == '{' && vb.back() == '}') {
+            elem->visibleBind = vb.substr(1, vb.length() - 2);
+        } else {
+            elem->visibleBind = vb;
+        }
+        if (!elem->visibleBind.empty()) {
+            P::String visVal = g_core.store().getString(elem->visibleBind);
+            if (!(visVal == "true" || visVal == "1")) {
+                lv_obj_add_flag(qr, LV_OBJ_FLAG_HIDDEN);
+            }
+        }
+    }
+
+    g_core.app().elements.push_back(std::move(elem));
+#endif // LV_USE_QRCODE
+}
+
 // ============ SELECT / DROPDOWN ============
 
 static void dropdown_event_handler(lv_event_t *e) {

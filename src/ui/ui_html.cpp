@@ -1525,6 +1525,8 @@ void parse_children(const char *html, int len, lv_obj_t *parent) {
             create_image(astart, aend, parent);
         } else if (strcmp(tag, Element::Markdown) == 0) {
             create_markdown(astart, aend, content.c_str(), parent);
+        } else if (strcmp(tag, Element::Qr) == 0) {
+            create_qr(astart, aend, content.c_str(), parent);
         } else if (strcmp(tag, Element::Tabs) == 0) {
             create_tabs(astart, aend, content.c_str(), parent);
         } else if (strcmp(tag, Element::Select) == 0) {

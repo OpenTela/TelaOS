@@ -96,6 +96,7 @@ void create_input(const char* astart, const char* aend, const char* content, lv_
 void create_image(const char* astart, const char* aend, lv_obj_t* parent);
 void create_canvas(const char* astart, const char* aend, lv_obj_t* parent);
 void create_markdown(const char* astart, const char* aend, const char* content, lv_obj_t* parent);
+void create_qr(const char* astart, const char* aend, const char* content, lv_obj_t* parent);
 void create_tabs    (const char* astart, const char* aend, const char* content, lv_obj_t* parent);
 void create_select  (const char* astart, const char* aend, const char* content, lv_obj_t* parent);
 

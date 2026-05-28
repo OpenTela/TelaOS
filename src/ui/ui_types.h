@@ -40,6 +40,7 @@ namespace Tag {
         constexpr const char* Canvas = "canvas";
         constexpr const char* Image = "image";
         constexpr const char* Markdown = "markdown";
+        constexpr const char* Qr = "qr";
         constexpr const char* Tabs = "tabs";
         constexpr const char* Tab = "tab";
         constexpr const char* Select = "select";
