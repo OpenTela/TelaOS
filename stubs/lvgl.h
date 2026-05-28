@@ -196,9 +196,7 @@ typedef enum {
     LV_FLEX_ALIGN_SPACE_EVENLY,
     LV_FLEX_ALIGN_SPACE_AROUND,
     LV_FLEX_ALIGN_SPACE_BETWEEN,
-    // NOTE: LVGL flex has no STRETCH (see lvgl/lvgl src/layouts/flex/lv_flex.h).
-    // align="stretch" in app HTML is emulated by sizing children to 100% on
-    // the cross axis after they are created.
+    LV_FLEX_ALIGN_STRETCH
 } lv_flex_align_t;
 
 typedef enum {

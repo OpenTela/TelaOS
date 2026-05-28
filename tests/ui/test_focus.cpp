@@ -24,7 +24,7 @@
 #define FAIL(msg) do { printf("✗ %s\n", msg); } while(0)
 
 static const char* HTML = R"(
-<app>
+<app os="1.0">
   <ui default="/main">
     <page id="main">
       <button id="btn1" x="10" y="10" w="100" h="40" onclick="doNothing">Click</button>

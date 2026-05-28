@@ -42,7 +42,7 @@ int main() {
     printf("Parsing:\n");
     {
         render(R"(
-<app>
+<app os="1.0">
   <ui default="/main">
     <page id="main">
       <select id="cityDd" x="5%" y="20%" w="90%" h="40" bind="city">
@@ -88,7 +88,7 @@ int main() {
         g_core.store().defineString("city", "london");
         g_core.initDynamicApp(nullptr);
         g_core.render(R"(
-<app>
+<app os="1.0">
   <ui default="/main">
     <page id="main">
       <select id="cityDd" bind="city">
@@ -114,7 +114,7 @@ int main() {
     printf("\nReverse binding (state → dropdown):\n");
     {
         render(R"(
-<app>
+<app os="1.0">
   <ui default="/main">
     <page id="main">
       <select id="cityDd" bind="city">
@@ -152,7 +152,7 @@ int main() {
     printf("\n<option> without value=:\n");
     {
         render(R"(
-<app>
+<app os="1.0">
   <ui default="/main">
     <page id="main">
       <select id="themeDd" bind="theme">
@@ -187,7 +187,7 @@ int main() {
     printf("\nTemplate vars in option labels:\n");
     {
         render(R"(
-<app>
+<app os="1.0">
   <ui default="/main">
     <page id="main">
       <select id="dynDd" bind="level">
@@ -221,7 +221,7 @@ int main() {
     printf("\nCSS styling:\n");
     {
         render(R"(
-<app>
+<app os="1.0">
   <style>
     select { bgcolor: #333333; color: #ffffff; }
     select.primary { bgcolor: #0066ff; }

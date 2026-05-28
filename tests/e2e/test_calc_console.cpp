@@ -39,7 +39,7 @@ static int g_passed = 0, g_total = 0;
 // ═══════════════════════════════════════════════════════
 
 const char* CALC_HTML = R"(
-<app>
+<app os="1.0">
   <ui default="/calc">
     <page id="calc">
       <label id="display" x="5%" y="5%" w="90%" h="50" font="48"

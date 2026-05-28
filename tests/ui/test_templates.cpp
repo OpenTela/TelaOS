@@ -16,7 +16,7 @@
 #define FAIL(msg) do { printf("✗ %s\n", msg); } while(0)
 
 static const char* HTML_TEMPLATE_BASIC = R"HTML(
-<app>
+<app os="1.0">
   <templates>
     <template id="Btn">
       <button id="btn_{n}" onclick="tap">{label_{n}}</button>
@@ -43,7 +43,7 @@ static const char* HTML_TEMPLATE_BASIC = R"HTML(
 )HTML";
 
 static const char* HTML_FOR_BASIC = R"HTML(
-<app>
+<app os="1.0">
   <ui default="/main">
     <page id="main">
       @for(i in 0..4) {
@@ -69,7 +69,7 @@ static const char* HTML_FOR_BASIC = R"HTML(
 )HTML";
 
 static const char* HTML_FOR_NESTED = R"HTML(
-<app>
+<app os="1.0">
   <ui default="/main">
     <page id="main">
       <table w="100%">
@@ -100,7 +100,7 @@ static const char* HTML_FOR_NESTED = R"HTML(
 )HTML";
 
 static const char* HTML_FOR_TEMPLATE = R"HTML(
-<app>
+<app os="1.0">
   <templates>
     <template id="Cell">
       <button id="c_{r}_{c}" bgcolor="{bg_{r}_{c}}" onclick="tap({r},{c})">{val_{r}_{c}}</button>
@@ -141,7 +141,7 @@ static const char* HTML_FOR_TEMPLATE = R"HTML(
 )HTML";
 
 static const char* HTML_FOR_STEP = R"HTML(
-<app>
+<app os="1.0">
   <ui default="/main">
     <page id="main">
       @for(i in 0..10 step 5) {
@@ -155,7 +155,7 @@ static const char* HTML_FOR_STEP = R"HTML(
 )HTML";
 
 static const char* HTML_CONFLICT = R"HTML(
-<app>
+<app os="1.0">
   <ui default="/main">
     <page id="main">
       @for(count in 0..2) {
@@ -171,7 +171,7 @@ static const char* HTML_CONFLICT = R"HTML(
 )HTML";
 
 static const char* HTML_SLASH_IN_ATTR = R"HTML(
-<app>
+<app os="1.0">
   <templates>
     <template id="Op">
       <button id="op_{id}" onclick="{click}">{label}</button>

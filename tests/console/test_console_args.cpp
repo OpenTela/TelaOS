@@ -66,7 +66,7 @@ static void setup() {
     //   "123abc"   - digits then letters (was broken: atoi→123)
     //   "editInput"- normal camelCase ID
     const char* html = R"(
-    <app>
+    <app os="1.0">
       <ui default="/p">
         <page id="p">
           <button id="btn7" x="10" y="10" w="50" h="50" onclick="d7">7</button>

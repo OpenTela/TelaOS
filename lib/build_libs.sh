@@ -85,6 +85,26 @@ build_lua() {
     info "Lua ${LUA_VERSION} → $(du -h "$lib" | cut -f1)"
 }
 
+# --- mbedTLS (host dep for crypto_engine; must match device: 2.28.x) ---
+# The device gets mbedTLS bundled with ESP-IDF 4.4 (2.28). For host KATs we
+# need the same 2.28 API. Provisioned from the distro package (pins 2.28.x).
+build_mbedtls() {
+    if [ -f /usr/include/mbedtls/gcm.h ] && \
+       ls /usr/lib/*/libmbedcrypto.a >/dev/null 2>&1; then
+        info "mbedTLS already available ($(grep -m1 VERSION_STRING /usr/include/mbedtls/version.h | grep -o '[0-9.]*'))"
+        return 0
+    fi
+    info "Installing libmbedtls-dev (host crypto for KATs)..."
+    if command -v apt-get &>/dev/null; then
+        apt-get install -y libmbedtls-dev >/dev/null 2>&1 \
+            && info "mbedTLS installed" \
+            || { error "apt install failed — install libmbedtls-dev (2.28.x) manually"; exit 1; }
+    else
+        error "no apt-get; install mbedTLS 2.28.x dev headers + libmbedcrypto manually"
+        exit 1
+    fi
+}
+
 # --- Clean ---
 do_clean() {
     rm -f "${SCRIPT_DIR}/ckdl/build/libkdl.a"
@@ -98,7 +118,8 @@ command -v gcc &>/dev/null || { error "gcc not found"; exit 1; }
 case "${1:-all}" in
     ckdl)  build_ckdl ;;
     lua)   build_lua ;;
+    mbedtls) build_mbedtls ;;
     clean) do_clean ;;
-    all)   build_ckdl; build_lua; echo ""; info "All libraries ready." ;;
-    *)     echo "Usage: $0 [ckdl|lua|clean|all]"; exit 1 ;;
+    all)   build_ckdl; build_lua; build_mbedtls; echo ""; info "All libraries ready." ;;
+    *)     echo "Usage: $0 [ckdl|lua|mbedtls|clean|all]"; exit 1 ;;
 esac

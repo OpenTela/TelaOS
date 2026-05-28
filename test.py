@@ -104,6 +104,7 @@ def compile_test(test: TestInfo, project_dir: Path, objs: list) -> tuple:
     cmd += [str(test.src), str(externals)]
     cmd += [str(o) for o in objs]
     cmd += [str(KDL_LIB), str(LUA_LIB)]
+    cmd += ["-lmbedcrypto"]  # crypto_engine.o (SHA/HMAC/PBKDF2/AES-GCM)
     cmd += ["-lm", "-ldl"]
     cmd += ["-o", str(out)]
 

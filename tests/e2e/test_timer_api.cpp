@@ -35,7 +35,7 @@ static std::string get(const char* var) {
 }
 
 static const char* APP_HTML = R"(
-<app>
+<app os="1.0">
   <ui default="/main">
     <page id="main" bgcolor="#000">
       <label align="center" y="10%">{status}</label>

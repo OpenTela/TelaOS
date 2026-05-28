@@ -16,7 +16,7 @@ static int g_passed = 0, g_total = 0;
 #define FAIL(msg) printf("✗ %s\n", msg)
 
 static const char* APP_A = R"(
-<app>
+<app os="1.0">
   <ui default="/main"><page id="main">
     <label id="lblA" x="10" y="10">{greeting}</label>
   </page></ui>
@@ -28,7 +28,7 @@ static const char* APP_A = R"(
 )";
 
 static const char* APP_B = R"(
-<app>
+<app os="1.0">
   <ui default="/main"><page id="main">
     <label id="lblB" x="10" y="10">{status}</label>
   </page></ui>

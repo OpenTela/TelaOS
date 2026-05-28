@@ -18,7 +18,7 @@
 #define FAIL(msg) do { printf("✗ %s\n", msg); } while(0)
 
 static const char* HTML = R"HTML(
-<app>
+<app os="1.0">
   <ui default="/main">
     <page id="main">
       <label id="litPlain">"{count} items"</label>

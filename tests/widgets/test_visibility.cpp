@@ -14,7 +14,7 @@
 #include "core/state_store.h"
 
 const char* APP = R"(
-<app>
+<app os="1.0">
   <ui default="/main">
     <page id="main">
       <!-- Font sizes -->

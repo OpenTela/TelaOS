@@ -14,7 +14,7 @@
 #include "core/state_store.h"
 
 const char* WIDGETS_APP = R"(
-<app>
+<app os="1.0">
   <ui default="/main">
     <page id="main" bgcolor="#222">
       <!-- Slider -->

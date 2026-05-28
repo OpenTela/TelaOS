@@ -12,7 +12,7 @@
 
 
 const char* CALC_APP = R"(
-<app>
+<app os="1.0">
   <ui default="/calc">
     <page id="calc">
       <label id="display" x="5%" y="5%" w="90%" h="50" font="48" 

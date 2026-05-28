@@ -52,6 +52,16 @@ struct Widget {
     std::string placeholder;
     bool password = false;
     
+    // Flex layout
+    int flexFlow = -1;
+    int flexGrow = 0;
+    int flexMainAlign = 0;
+    int flexCrossAlign = 0;
+    int flexTrackAlign = 0;
+    int padRow = 0;
+    int padColumn = 0;
+    bool scrollable = false;
+    
     // Events/navigation
     std::string onclick;
     std::string onhold;

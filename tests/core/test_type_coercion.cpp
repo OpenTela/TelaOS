@@ -8,7 +8,7 @@
 #include "engines/lua/lua_engine.h"
 
 static const char* HTML = R"HTML(
-<app>
+<app os="1.0">
   <ui default="/main">
     <page id="main">
       <label id="lbl" x="10" y="10">test</label>

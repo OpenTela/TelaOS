@@ -17,7 +17,7 @@
 #include "core/state_store.h"
 
 const char* BINDING_APP = R"(
-<app>
+<app os="1.0">
   <ui default="/binding">
     <page id="binding" bgcolor="#222">
       <!-- Text binding -->

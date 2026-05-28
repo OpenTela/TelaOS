@@ -18,7 +18,7 @@
 #define FAIL(msg) printf("✗ %s\n", msg)
 
 static const char* APP_HTML = R"(
-<app>
+<app os="1.0">
   <ui default="/main">
     <page id="main">
       <label id="lbl1" x="10" y="10" color="#ffffff">Hello</label>

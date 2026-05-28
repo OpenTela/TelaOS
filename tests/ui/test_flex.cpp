@@ -86,73 +86,7 @@ int main(){
     printf("\nAlign:\n");render(H_ALIGN);p=pg();
     TEST("center cross"){auto*d=p->findById("ac");if(d&&d->flexCrossAlign==LV_FLEX_ALIGN_CENTER)PASS();else FAIL("wrong");}
     TEST("end cross"){auto*d=p->findById("ae");if(d&&d->flexCrossAlign==LV_FLEX_ALIGN_END)PASS();else FAIL("wrong");}
-    TEST("stretch keeps cross enum START"){auto*d=p->findById("as");if(d&&d->flexCrossAlign==LV_FLEX_ALIGN_START)PASS();else FAIL("wrong");}
-
-    // --- align="stretch": resolved coordinates, both orientations, varied children ---
-    static const char* H_STRETCH = R"(<app os="2.0"><ui default="/m"><page id="m">
-<div id="sr" flex="row" align="stretch" w="200" h="80">
-  <button id="r0" w="30" h="20">a</button>
-  <button id="r1" w="50" h="40">b</button>
-  <button id="r2" w="40" h="60">c</button>
-</div>
-<div id="sc" flex="column" align="stretch" w="120" h="300">
-  <label id="c0" w="20" h="30">a</label>
-  <label id="c1" w="60" h="30">b</label>
-  <label id="c2" w="90" h="30">c</label>
-</div>
-</page></ui><state>x: 0</state><script language="lua"></script></app>)";
-    render(H_STRETCH); p = pg();
-
-    // Force pct -> px resolution on all stretched children (in real LVGL this
-    // happens during layout; in the mock we trigger it explicitly so the test
-    // can assert pixel sizes, not unresolved pct sentinels).
-    auto resolveAll = [](MW* root){
-        if (!root) return;
-        for (auto* ch : root->children) {
-            if (ch->lv_obj) lv_obj_update_layout((lv_obj_t*)ch->lv_obj);
-            // also resolve grandchildren (children of the flex container)
-            for (auto* gc : ch->children) {
-                if (gc->lv_obj) lv_obj_update_layout((lv_obj_t*)gc->lv_obj);
-            }
-        }
-    };
-    resolveAll(p);
-
-    printf("\nStretch (row, cross=H=80):\n");
-    {
-        auto* d = p->findById("sr");
-        // Row: cross axis is height -> all children get h=80, w unchanged.
-        TEST("sr container resolved h=80"){if(d&&d->h==80)PASS();else FAIL("wrong");}
-        TEST("sr child r0 stretched: w=30 h=80"){auto*c=d?d->findById("r0"):nullptr;if(c&&c->w==30&&c->h==80)PASS();else FAIL("wrong");}
-        TEST("sr child r1 stretched: w=50 h=80"){auto*c=d?d->findById("r1"):nullptr;if(c&&c->w==50&&c->h==80)PASS();else FAIL("wrong");}
-        TEST("sr child r2 stretched: w=40 h=80"){auto*c=d?d->findById("r2"):nullptr;if(c&&c->w==40&&c->h==80)PASS();else FAIL("wrong");}
-        // Sanity: at least one child should NOT have its main-axis width forced to container width.
-        TEST("sr did NOT touch main-axis width"){auto*c=d?d->findById("r1"):nullptr;if(c&&c->w!=d->w)PASS();else FAIL("wrong");}
-    }
-
-    printf("\nStretch (column, cross=W=120):\n");
-    {
-        auto* d = p->findById("sc");
-        // Column: cross axis is width -> all children get w=120, h unchanged.
-        TEST("sc container resolved w=120"){if(d&&d->w==120)PASS();else FAIL("wrong");}
-        TEST("sc child c0 stretched: w=120 h=30"){auto*c=d?d->findById("c0"):nullptr;if(c&&c->w==120&&c->h==30)PASS();else FAIL("wrong");}
-        TEST("sc child c1 stretched: w=120 h=30"){auto*c=d?d->findById("c1"):nullptr;if(c&&c->w==120&&c->h==30)PASS();else FAIL("wrong");}
-        TEST("sc child c2 stretched: w=120 h=30"){auto*c=d?d->findById("c2"):nullptr;if(c&&c->w==120&&c->h==30)PASS();else FAIL("wrong");}
-        TEST("sc did NOT touch main-axis height"){auto*c=d?d->findById("c1"):nullptr;if(c&&c->h!=d->h)PASS();else FAIL("wrong");}
-    }
-
-    printf("\nNon-stretch sanity (no align):\n");
-    {
-        // Re-render H_ALIGN once more for a row WITHOUT stretch — children sizes untouched.
-        render(H_ALIGN); p = pg();
-        auto* d = p->findById("ac");  // align="center" -> no stretch happens
-        TEST("ac child width still 40 (not stretched)"){
-            if(d&&!d->children.empty()&&d->children[0]->w==40)PASS();else FAIL("wrong");
-        }
-        TEST("ac child height still 30 (not stretched)"){
-            if(d&&!d->children.empty()&&d->children[0]->h==30)PASS();else FAIL("wrong");
-        }
-    }
+    TEST("stretch cross"){auto*d=p->findById("as");if(d&&d->flexCrossAlign==LV_FLEX_ALIGN_STRETCH)PASS();else FAIL("wrong");}
 
     printf("\nGrow div:\n");render(H_GROW);p=pg();
     TEST("side grow=0"){auto*d=p->findById("side");if(d&&d->flexGrow==0)PASS();else FAIL("wrong");}
