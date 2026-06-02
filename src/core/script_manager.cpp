@@ -257,8 +257,22 @@ void ScriptManager::setupWidgetHandler() {
 
 void ScriptManager::connectStateToUI() {
     LOG_D(Log::LUA, "Connecting state changes to UI via {bindings}");
-    
+
     m_engine->onStateChange([](const char* key, const char* value) {
         UI::updateBinding(key, value);
     });
+
+    // Retroactive flush: the script body runs before this callback is attached,
+    // so any `state.foo = "..."` done at top-level wrote to the store but never
+    // reached the UI. Push the current store values through the binding hook
+    // now so those early writes overwrite the original <state> defaults that
+    // were already rendered.
+    auto& ui = g_core;
+    int count = ui.stateCount();
+    for (int i = 0; i < count; i++) {
+        const char* name = ui.stateVarName(i);
+        if (!name) continue;
+        P::String val = g_core.store().getAsString(name);
+        UI::updateBinding(name, val.c_str());
+    }
 }
