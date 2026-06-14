@@ -164,6 +164,7 @@ typedef enum {
     LV_EVENT_READY,
     LV_EVENT_PRESSING,
     LV_EVENT_CANCEL,
+    LV_EVENT_DELETE,
     LV_EVENT_ALL = 0xFF
 } lv_event_code_t;
 
@@ -250,6 +251,15 @@ inline lv_obj_t* lv_tabview_create(lv_obj_t* parent) { return alloc_obj("TabView
 inline lv_obj_t* lv_tileview_create(lv_obj_t* parent) { return alloc_obj("TileView", parent); }
 inline lv_obj_t* lv_tileview_add_tile(lv_obj_t* parent, int, int, int) { return alloc_obj("Tile", parent); }
 
+// MessageBox (LVGL v9 API). Minimal mock: each part is a child widget so the
+// mock tree mirrors real structure; return values are usable as lv_obj_t*.
+inline lv_obj_t* lv_msgbox_create(lv_obj_t* parent) { return alloc_obj("MsgBox", parent); }
+inline lv_obj_t* lv_msgbox_add_title(lv_obj_t* mbox, const char*) { return alloc_obj("MsgBoxTitle", mbox); }
+inline lv_obj_t* lv_msgbox_add_text(lv_obj_t* mbox, const char*) { return alloc_obj("MsgBoxText", mbox); }
+inline lv_obj_t* lv_msgbox_add_close_button(lv_obj_t* mbox) { return alloc_obj("MsgBoxClose", mbox); }
+inline lv_obj_t* lv_msgbox_add_footer_button(lv_obj_t* mbox, const char*) { return alloc_obj("MsgBoxFooterBtn", mbox); }
+inline void lv_msgbox_close(lv_obj_t* mbox) { delete mbox; }
+
 #ifdef LVGL_MOCK_ENABLED
 inline lv_obj_t* lv_screen_active() { 
     static lv_obj_t screen_obj;
@@ -266,6 +276,7 @@ inline void lv_scr_load_anim(lv_obj_t*, int, int, int, bool) {}
 
 inline void lv_obj_del(lv_obj_t* obj) { delete obj; }
 inline void lv_obj_delete(lv_obj_t* obj) { delete obj; }
+inline void lv_obj_delete_async(lv_obj_t* obj) { delete obj; }
 inline lv_obj_t* lv_layer_top() { return nullptr; }
 inline void lv_obj_clean(lv_obj_t*) {}
 inline void lv_obj_invalidate(lv_obj_t*) {}

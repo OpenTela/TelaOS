@@ -13,5 +13,9 @@ public:
 };
 extern EspClass ESP;
 
+// Free-function reboot used by OTA. Captured for host tests.
+inline bool g_esp_restarted = false;
+inline void esp_restart() { g_esp_restarted = true; }
+
 #include <sys/time.h>
 inline int settimeofday(const struct timeval*, const struct timezone*) { return 0; }
