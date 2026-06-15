@@ -86,7 +86,11 @@ int main(){
     printf("\nAlign:\n");render(H_ALIGN);p=pg();
     TEST("center cross"){auto*d=p->findById("ac");if(d&&d->flexCrossAlign==LV_FLEX_ALIGN_CENTER)PASS();else FAIL("wrong");}
     TEST("end cross"){auto*d=p->findById("ae");if(d&&d->flexCrossAlign==LV_FLEX_ALIGN_END)PASS();else FAIL("wrong");}
-    TEST("stretch cross"){auto*d=p->findById("as");if(d&&d->flexCrossAlign==LV_FLEX_ALIGN_STRETCH)PASS();else FAIL("wrong");}
+    TEST("stretch cross"){auto*d=p->findById("as");
+        // LVGL has no LV_FLEX_ALIGN_STRETCH: align="stretch" is emulated by
+        // keeping cross=START and stretching each child to 100% on the cross
+        // axis (height for row-flow). Verify the emulation, not the enum.
+        if(d&&d->children.size()==1&&d->children[0]->h==lv_pct(100))PASS();else FAIL("child not stretched");}
 
     printf("\nGrow div:\n");render(H_GROW);p=pg();
     TEST("side grow=0"){auto*d=p->findById("side");if(d&&d->flexGrow==0)PASS();else FAIL("wrong");}
