@@ -60,6 +60,9 @@ QUICK_TESTS = {
     "console_args",
     # parser
     "html_parser",
+    # ble / ota (firmware update path)
+    "bin_stream",
+    "ota_receive",
 }
 
 
