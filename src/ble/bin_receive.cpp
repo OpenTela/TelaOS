@@ -1,4 +1,5 @@
 #include "ble/bin_receive.h"
+#include "ble/bin_stream.h"
 #include "ble/ble_bridge.h"
 #include "core/sys_paths.h"
 #include "core/app_manager.h"
@@ -13,11 +14,8 @@ static const char* TAG = "BinReceive";
 
 namespace BinReceive {
 
+static BinStream  s_stream;                // shared BIN transport
 static uint8_t*   s_buffer = nullptr;
-static uint32_t   s_expectedSize = 0;
-static uint32_t   s_received = 0;
-static uint16_t   s_expectedChunk = 0;
-static bool       s_active = false;
 static char       s_appName[32] = {};
 static char       s_fileName[48] = {};
 
@@ -28,15 +26,13 @@ static uint32_t   s_fileCount = 0;
 static bool       s_multiMode = false;
 static bool       s_readyToSave = false;  // deferred save — BLE callback sets, main loop processes
 
+// forward
+static void cleanup();
+
 // ─── validation ───────────────────────────────────────────────────────────
 
 /// Simple XML validation: check that <app> and </app> are present and balanced
 static bool validateHtml(const uint8_t* data, uint32_t size) {
-    // Need null-terminated string for strstr
-    // Buffer was allocated with expectedSize, add terminator temporarily
-    // Actually safer: use memmem or manual search
-    
-    // Search for "<app" in buffer
     const char* openTag = nullptr;
     for (uint32_t i = 0; i + 4 <= size; i++) {
         if (memcmp(data + i, "<app", 4) == 0) {
@@ -49,7 +45,6 @@ static bool validateHtml(const uint8_t* data, uint32_t size) {
         return false;
     }
 
-    // Search for "</app>" in buffer
     const char* closeTag = nullptr;
     for (uint32_t i = 0; i + 6 <= size; i++) {
         if (memcmp(data + i, "</app>", 6) == 0) {
@@ -72,14 +67,15 @@ static bool validateHtml(const uint8_t* data, uint32_t size) {
 
 /// Check file validity after receive
 static bool validate() {
-    // Size check
-    if (s_received != s_expectedSize) {
-        LOG_E(Log::APP, "Size mismatch: got %u, expected %u", s_received, s_expectedSize);
+    uint32_t received = s_stream.received();
+    uint32_t expected = s_stream.expected();
+
+    if (received != expected) {
+        LOG_E(Log::APP, "Size mismatch: got %u, expected %u", received, expected);
         return false;
     }
 
     if (s_multiMode) {
-        // Validate each .html file in the blob
         uint32_t offset = 0;
         for (uint32_t i = 0; i < s_fileCount; i++) {
             const char* ext = strrchr(s_files[i].name, '.');
@@ -94,10 +90,9 @@ static bool validate() {
         return true;
     }
 
-    // Single file: HTML validation
     const char* ext = strrchr(s_fileName, '.');
     if (ext && strcmp(ext, ".html") == 0) {
-        return validateHtml(s_buffer, s_received);
+        return validateHtml(s_buffer, received);
     }
 
     return true;
@@ -116,7 +111,6 @@ static bool saveOneFile(const char* appName, const char* fileName, const uint8_t
     snprintf(dirPath, sizeof(dirPath), SYS_APPS "%s", appName);
     ensureDir(dirPath);
 
-    // Create resources/ subdirectory if needed
     if (strncmp(fileName, "resources/", 10) == 0) {
         char resDir[80];
         snprintf(resDir, sizeof(resDir), SYS_APPS "%s/resources", appName);
@@ -124,7 +118,6 @@ static bool saveOneFile(const char* appName, const char* fileName, const uint8_t
     }
 
     char fullPath[128];
-    // Rename legacy app.html → appname.bax
     if (strcmp(fileName, "app.html") == 0) {
         snprintf(fullPath, sizeof(fullPath), SYS_APPS "%s/%s.bax", appName, appName);
     } else {
@@ -150,20 +143,20 @@ static bool saveOneFile(const char* appName, const char* fileName, const uint8_t
 }
 
 static bool saveFile() {
-    return saveOneFile(s_appName, s_fileName, s_buffer, s_received);
+    return saveOneFile(s_appName, s_fileName, s_buffer, s_stream.received());
 }
 
 static bool saveMultiFiles() {
     uint32_t offset = 0;
     uint32_t saved = 0;
-    
+
     for (uint32_t i = 0; i < s_fileCount; i++) {
         if (saveOneFile(s_appName, s_files[i].name, s_buffer + offset, s_files[i].size)) {
             saved++;
         }
         offset += s_files[i].size;
     }
-    
+
     LOG_I(Log::APP, "Multi save: %u/%u files", saved, s_fileCount);
     return (saved == s_fileCount);
 }
@@ -175,23 +168,37 @@ static void cleanup() {
         heap_caps_free(s_buffer);
         s_buffer = nullptr;
     }
-    s_active = false;
+    s_stream.reset();
     s_readyToSave = false;
 }
 
 /// Send result back on text channel
 static void sendResult(bool ok, const char* msg) {
-    // JSON on text char: {"cmd":"push","status":"ok"/"error","msg":"..."}
     char buf[128];
     snprintf(buf, sizeof(buf), "{\"cmd\":\"push\",\"status\":\"%s\",\"msg\":\"%s\"}",
              ok ? "ok" : "error", msg);
     BLEBridge::send(P::String(buf));
 }
 
+// --- transport wiring (shared BinStream) ---
+
+/// Arm s_stream to memcpy chunks into s_buffer and report framing errors.
+static void armStream(uint32_t totalSize) {
+    s_stream.begin(
+        totalSize,
+        [](const uint8_t* data, uint32_t len) {
+            memcpy(s_buffer + s_stream.received(), data, len);
+        },
+        [](BinStream::Error) {
+            sendResult(false, "chunk framing error");
+            cleanup();
+        });
+}
+
 // ─── public API ───────────────────────────────────────────────────────────
 
 bool start(const char* appName, const char* fileName, uint32_t expectedSize) {
-    if (s_active) {
+    if (s_stream.isActive()) {
         LOG_W(Log::BLE, "BinReceive already active, cancelling");
         cancel();
     }
@@ -207,22 +214,19 @@ bool start(const char* appName, const char* fileName, uint32_t expectedSize) {
         return false;
     }
 
-    // Sanitize app name: transliterate, lowercase, clean
     NameGen::sanitize(s_appName, appName, sizeof(s_appName));
     strncpy(s_fileName, fileName, sizeof(s_fileName) - 1);
-    s_expectedSize = expectedSize;
-    s_received = 0;
-    s_expectedChunk = 0;
     s_multiMode = false;
     s_fileCount = 0;
-    s_active = true;
+
+    armStream(expectedSize);
 
     LOG_I(Log::BLE, "BinReceive start: %s/%s, %u bytes", appName, fileName, expectedSize);
     return true;
 }
 
 bool startMulti(const char* appName, const FileEntry* files, uint32_t fileCount, uint32_t totalSize) {
-    if (s_active) {
+    if (s_stream.isActive()) {
         LOG_W(Log::BLE, "BinReceive already active, cancelling");
         cancel();
     }
@@ -246,63 +250,31 @@ bool startMulti(const char* appName, const FileEntry* files, uint32_t fileCount,
     NameGen::sanitize(s_appName, appName, sizeof(s_appName));
     memcpy(s_files, files, fileCount * sizeof(FileEntry));
     s_fileCount = fileCount;
-    s_expectedSize = totalSize;
-    s_received = 0;
-    s_expectedChunk = 0;
     s_multiMode = true;
-    s_active = true;
+
+    armStream(totalSize);
 
     LOG_I(Log::BLE, "BinReceive startMulti: %s, %u files, %u bytes", appName, fileCount, totalSize);
     return true;
 }
 
 void onChunk(const uint8_t* data, uint32_t len) {
-    if (!s_active || !s_buffer) return;
+    if (!s_stream.isActive() || !s_buffer) return;
 
-    // Need at least 2 bytes for chunk header
-    if (len < 3) {
-        LOG_W(Log::BLE, "Chunk too small: %u bytes", len);
-        return;
+    s_stream.onChunk(data, len);
+
+    if (s_stream.received() % (250 * 50) < 250) {
+        LOG_D(Log::BLE, "BinReceive %u/%u bytes", s_stream.received(), s_stream.expected());
     }
 
-    // Parse chunk_id (2B LE)
-    uint16_t chunkId = data[0] | (data[1] << 8);
-    const uint8_t* payload = data + 2;
-    uint32_t payloadLen = len - 2;
-
-    // Sequence check
-    if (chunkId != s_expectedChunk) {
-        LOG_E(Log::BLE, "Chunk out of order: got %u, expected %u", chunkId, s_expectedChunk);
-        sendResult(false, "chunk sequence error");
-        cleanup();
-        return;
-    }
-
-    // Overflow check
-    if (s_received + payloadLen > s_expectedSize) {
-        LOG_E(Log::BLE, "Buffer overflow: %u + %u > %u", s_received, payloadLen, s_expectedSize);
-        sendResult(false, "size overflow");
-        cleanup();
-        return;
-    }
-
-    memcpy(s_buffer + s_received, payload, payloadLen);
-    s_received += payloadLen;
-    s_expectedChunk++;
-
-    if (s_expectedChunk % 50 == 0) {
-        LOG_D(Log::BLE, "BinReceive chunk %u, %u/%u bytes", chunkId, s_received, s_expectedSize);
-    }
-
-    // All bytes received — defer save to main loop (BLE stack too small for LittleFS)
-    if (s_received >= s_expectedSize) {
-        LOG_I(Log::BLE, "BinReceive complete, %u bytes — saving deferred", s_received);
+    if (s_stream.isComplete()) {
+        LOG_I(Log::BLE, "BinReceive complete, %u bytes - saving deferred", s_stream.received());
         s_readyToSave = true;
     }
 }
 
 bool isInProgress() {
-    return s_active;
+    return s_stream.isActive();
 }
 
 void process() {
@@ -326,19 +298,17 @@ void process() {
 
     // Save app name before cleanup clears it
     P::String appName(s_appName);
-    
+
     cleanup();
 
     // Refresh launcher so new/updated app appears immediately
     if (saved) {
         auto& mgr = App::Manager::instance();
         mgr.refreshApps();
-        
+
         // Hot reload: if pushed app is currently running, relaunch it
         if (!mgr.inLauncher()) {
-            // currentApp = "/apps/name/name.bax" → extract "name"
             const auto& cur = mgr.currentApp();
-            // Find last '/' before '.bax'
             size_t lastSlash = cur.rfind('/');
             size_t dot = cur.rfind('.');
             if (lastSlash != P::String::npos && dot != P::String::npos && dot > lastSlash) {
@@ -353,7 +323,7 @@ void process() {
 }
 
 void cancel() {
-    if (s_active) {
+    if (s_stream.isActive() || s_buffer) {
         LOG_W(Log::BLE, "BinReceive cancelled");
         cleanup();
     }

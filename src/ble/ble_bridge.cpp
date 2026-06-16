@@ -1,6 +1,7 @@
 #include "ble/ble_bridge.h"
 #include "ble/bin_receive.h"
 #include "ble/bin_transfer.h"
+#include "ota/ota_receive.h"
 #include "console/console.h"
 #include "console/ble_transport.h"
 #include "utils/log_config.h"
@@ -72,7 +73,12 @@ class BinRxCallbacks : public NimBLECharacteristicCallbacks {
     void onWrite(NimBLECharacteristic* pChar, NimBLEConnInfo& connInfo) override {
         auto val = pChar->getValue();
         if (val.length() > 0) {
-            BinReceive::onChunk((const uint8_t*)val.data(), val.length());
+            // OTA, when armed, takes over the BIN channel; otherwise app-push.
+            if (OtaReceive::isInProgress()) {
+                OtaReceive::onChunk((const uint8_t*)val.data(), val.length());
+            } else {
+                BinReceive::onChunk((const uint8_t*)val.data(), val.length());
+            }
         }
     }
 };

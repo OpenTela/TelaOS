@@ -6,7 +6,7 @@ BLE Assistant for TelaOS v1.0
 
 Функции:
   - Синхронизация времени при подключении (sys sync)
-  - HTTP proxy: часы делают fetch() → Python выполняет запрос → ответ обратно
+  - HTTP proxy: часы делают fetch() -> Python выполняет запрос -> ответ обратно
   - CLI: отправка команд на часы
   - Бинарный трансфер: скриншоты, push файлов
 
@@ -30,6 +30,7 @@ import struct
 import sys
 import os
 import time
+import hashlib
 import argparse
 import signal
 from datetime import datetime, timezone, timedelta
@@ -46,18 +47,18 @@ except ImportError:
     print("WARNING: requests not installed. HTTP proxy disabled.")
     requests = None
 
-# ── BLE UUIDs ──────────────────────────────────────────────────
+# -- BLE UUIDs --------------------------------------------------
 SERVICE_UUID = "12345678-1234-5678-1234-56789abcdef0"
-TX_CHAR_UUID = "12345678-1234-5678-1234-56789abcdef1"  # watch → PC (notify)
-RX_CHAR_UUID = "12345678-1234-5678-1234-56789abcdef2"  # PC → watch (write)
+TX_CHAR_UUID = "12345678-1234-5678-1234-56789abcdef1"  # watch -> PC (notify)
+RX_CHAR_UUID = "12345678-1234-5678-1234-56789abcdef2"  # PC -> watch (write)
 BIN_CHAR_UUID = "12345678-1234-5678-1234-56789abcdef3"  # binary chunks
 
 PROTOCOL_VERSION = "2.7"
 DEVICE_NAME = "FutureClock"
 
-# ── Global state ───────────────────────────────────────────────
+# -- Global state -----------------------------------------------
 request_id = 0
-pending_responses = {}  # id → asyncio.Future
+pending_responses = {}  # id -> asyncio.Future
 bin_buffer = bytearray()
 bin_expected_size = 0
 bin_expected_chunks = {}
@@ -75,14 +76,14 @@ def log(tag, msg):
 
 
 def log_rx(msg):
-    log("←", msg)
+    log("<-", msg)
 
 
 def log_tx(msg):
-    log("→", msg)
+    log("->", msg)
 
 
-# ── Timezone detection ─────────────────────────────────────────
+# -- Timezone detection -----------------------------------------
 def get_local_timezone():
     """Returns timezone offset as string like '+03:00' or '-05:30'"""
     now = datetime.now(timezone.utc)
@@ -101,7 +102,7 @@ def get_utc_iso():
     return datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
 
 
-# ── BLE Communication ─────────────────────────────────────────
+# -- BLE Communication -----------------------------------------
 class BLEAssistant:
     def __init__(self, address=None, daemon=False):
         self.address = address
@@ -110,7 +111,7 @@ class BLEAssistant:
         self.connected = False
         self.synced = False
 
-    # ── Discovery ──────────────────────────────────────────
+    # -- Discovery ------------------------------------------
     @staticmethod
     async def scan(timeout=5.0):
         """Scan for BLE devices"""
@@ -121,7 +122,7 @@ class BLEAssistant:
         for d, adv in sorted(devices.values(), key=lambda x: x[1].rssi, reverse=True):
             name = d.name or "?"
             rssi = adv.rssi
-            marker = " ◀ " if DEVICE_NAME in (name or "") else "   "
+            marker = " <- " if DEVICE_NAME in (name or "") else "   "
             print(f"  {d.address}  {rssi:4d} dBm  {marker}{name}")
             if DEVICE_NAME in (name or ""):
                 found.append(d.address)
@@ -132,26 +133,26 @@ class BLEAssistant:
 
     async def find_device(self, timeout=10.0):
         """Find FutureClock by name"""
-        log("•", f"Searching for {DEVICE_NAME}...")
+        log("*", f"Searching for {DEVICE_NAME}...")
         device = await BleakScanner.find_device_by_name(
             DEVICE_NAME, timeout=timeout
         )
         if device:
-            log("•", f"Found: {device.address}")
+            log("*", f"Found: {device.address}")
             return device.address
         return None
 
-    # ── Connection ─────────────────────────────────────────
+    # -- Connection -----------------------------------------
     async def connect(self):
         """Connect and setup notifications"""
         addr = self.address
         if not addr:
             addr = await self.find_device()
             if not addr:
-                log("✗", f"{DEVICE_NAME} not found")
+                log("X", f"{DEVICE_NAME} not found")
                 return False
 
-        log("•", f"Connecting to {addr}...")
+        log("*", f"Connecting to {addr}...")
         self.client = BleakClient(
             addr,
             disconnected_callback=self._on_disconnect
@@ -160,11 +161,11 @@ class BLEAssistant:
         try:
             await self.client.connect()
         except Exception as e:
-            log("✗", f"Connection failed: {e}")
+            log("X", f"Connection failed: {e}")
             return False
 
         self.connected = True
-        log("✓", f"Connected to {addr}")
+        log("ok", f"Connected to {addr}")
 
         # Subscribe to TX (JSON responses) and BIN (binary chunks)
         await self.client.start_notify(TX_CHAR_UUID, self._on_tx_notify)
@@ -177,9 +178,9 @@ class BLEAssistant:
     def _on_disconnect(self, client):
         self.connected = False
         self.synced = False
-        log("✗", "Disconnected")
+        log("X", "Disconnected")
 
-    # ── TX notify (JSON responses from watch) ──────────────
+    # -- TX notify (JSON responses from watch) --------------
     def _on_tx_notify(self, sender, data: bytearray):
         """Handle JSON messages from watch"""
         text = data.decode("utf-8", errors="replace")
@@ -211,7 +212,7 @@ class BLEAssistant:
         # Other (text messages etc.)
         log_rx(json.dumps(msg, ensure_ascii=False)[:200])
 
-    # ── BIN notify (binary chunks from watch) ──────────────
+    # -- BIN notify (binary chunks from watch) --------------
     def _on_bin_notify(self, sender, data: bytearray):
         """Handle binary chunks: [2B chunk_id LE][data]"""
         global bin_buffer
@@ -228,9 +229,9 @@ class BLEAssistant:
         
         # Check if complete
         if bin_expected_size > 0 and len(bin_buffer) >= bin_expected_size:
-            log("•", f"Binary received: {len(bin_buffer)} bytes ({chunk_id + 1} chunks)")
+            log("*", f"Binary received: {len(bin_buffer)} bytes ({chunk_id + 1} chunks)")
 
-    # ── Send command ───────────────────────────────────────
+    # -- Send command ---------------------------------------
     async def send(self, subsystem, cmd, args=None, wait=True, timeout=5.0):
         """Send command, optionally wait for response"""
         rid = next_id()
@@ -253,31 +254,31 @@ class BLEAssistant:
                 return status, payload
             except asyncio.TimeoutError:
                 pending_responses.pop(rid, None)
-                log("✗", f"[{rid}] timeout")
+                log("X", f"[{rid}] timeout")
                 return "error", {"code": "timeout"}
         
         return "ok", {}
 
-    # ── Sync ───────────────────────────────────────────────
+    # -- Sync -----------------------------------------------
     async def sync(self):
         """Send time sync to watch"""
         tz = get_local_timezone()
         utc = get_utc_iso()
         
-        log("⏱", f"Sync: {utc} {tz}")
+        log("T", f"Sync: {utc} {tz}")
         status, data = await self.send("sys", "sync", [PROTOCOL_VERSION, utc, tz])
         
         if status == "ok":
             proto = data.get("protocol", "?")
             osv = data.get("os", "?")
-            log("⏱", f"Synced! OS {osv}, protocol {proto}")
+            log("T", f"Synced! OS {osv}, protocol {proto}")
             self.synced = True
         else:
-            log("✗", f"Sync failed: {data}")
+            log("X", f"Sync failed: {data}")
         
         return status == "ok"
 
-    # ── HTTP Proxy ─────────────────────────────────────────
+    # -- HTTP Proxy -----------------------------------------
     async def _handle_fetch(self, msg):
         """Handle HTTP fetch request from watch"""
         rid = msg.get("id", 0)
@@ -287,7 +288,7 @@ class BLEAssistant:
         fmt = msg.get("format")
         fields = msg.get("fields", [])
 
-        log("⇄", f"fetch[{rid}] {method} {url[:80]}")
+        log("<>", f"fetch[{rid}] {method} {url[:80]}")
 
         if not requests:
             await self._send_fetch_response(rid, 0, '{"error":"requests not installed"}')
@@ -315,14 +316,14 @@ class BLEAssistant:
                 except (json.JSONDecodeError, KeyError):
                     pass  # Return raw body
 
-            log("⇄", f"fetch[{rid}] → {resp.status_code} ({len(resp_body)} bytes)")
+            log("<>", f"fetch[{rid}] -> {resp.status_code} ({len(resp_body)} bytes)")
             await self._send_fetch_response(rid, resp.status_code, resp_body)
 
         except requests.Timeout:
-            log("✗", f"fetch[{rid}] timeout")
+            log("X", f"fetch[{rid}] timeout")
             await self._send_fetch_response(rid, 408, '{"error":"timeout"}')
         except Exception as e:
-            log("✗", f"fetch[{rid}] error: {e}")
+            log("X", f"fetch[{rid}] error: {e}")
             await self._send_fetch_response(rid, 0, json.dumps({"error": str(e)}))
 
     async def _send_fetch_response(self, rid, status, body):
@@ -332,11 +333,11 @@ class BLEAssistant:
         # BLE MTU is typically 512, but chunk if needed
         encoded = msg.encode("utf-8")
         if len(encoded) > 500:
-            log("⇄", f"fetch[{rid}] response large: {len(encoded)} bytes")
+            log("<>", f"fetch[{rid}] response large: {len(encoded)} bytes")
         
         await self.client.write_gatt_char(RX_CHAR_UUID, encoded)
 
-    # ── Binary send (file push) ────────────────────────────
+    # -- Binary send (file push) ----------------------------
     async def send_binary(self, data: bytes, chunk_size=250):
         """Send binary data via BIN_CHAR in chunks"""
         total = len(data)
@@ -352,9 +353,9 @@ class BLEAssistant:
             chunk_id += 1
             await asyncio.sleep(0.015)  # Match ESP32's 15ms delay
 
-        log("•", f"Binary sent: {total} bytes ({chunk_id} chunks)")
+        log("*", f"Binary sent: {total} bytes ({chunk_id} chunks)")
 
-    # ── CLI ────────────────────────────────────────────────
+    # -- CLI ------------------------------------------------
     async def cli_loop(self):
         """Interactive command line"""
         print("\n  Команды: sys info | sys screen | app list | app launch <name>")
@@ -386,7 +387,7 @@ class BLEAssistant:
         if len(parts) < 1:
             return
 
-        # Single word → default subsystem is "sys"
+        # Single word -> default subsystem is "sys"
         if len(parts) == 1:
             subsystem = "sys"
             cmd = parts[0]
@@ -417,7 +418,15 @@ class BLEAssistant:
                 print("  Usage: app push <app_directory>")
             return
 
-        # Special: sys screen → save to file
+        # Special: sys ota <firmware.bin> -> flash firmware over BLE
+        if subsystem == "sys" and cmd == "ota":
+            if args:
+                await self._push_ota(args[0])
+            else:
+                print("  Usage: sys ota <firmware.bin>")
+            return
+
+        # Special: sys screen -> save to file
         global bin_expected_size, bin_buffer
         if subsystem == "sys" and cmd == "screen":
             if not args:
@@ -430,7 +439,7 @@ class BLEAssistant:
         # Handle binary payload (screenshot etc)
         if status == "ok" and "bytes" in data:
             bin_expected_size = data["bytes"]
-            log("•", f"Expecting {bin_expected_size} bytes binary...")
+            log("*", f"Expecting {bin_expected_size} bytes binary...")
             # Wait for binary transfer
             for _ in range(100):  # 10s max
                 await asyncio.sleep(0.1)
@@ -447,16 +456,67 @@ class BLEAssistant:
                 
                 png_name = _decode_screenshot(raw, w, h, color, fmt, raw_size)
                 if png_name:
-                    log("•", f"Saved: {png_name} ({w}x{h}, {color})")
+                    log("*", f"Saved: {png_name} ({w}x{h}, {color})")
                 else:
                     # Fallback: save raw binary
                     os.makedirs("screens", exist_ok=True)
                     fname = os.path.join("screens", f"screen_{int(time.time())}.{fmt}")
                     with open(fname, "wb") as f:
                         f.write(raw)
-                    log("•", f"Saved raw: {fname} ({bin_expected_size} bytes)")
+                    log("*", f"Saved raw: {fname} ({bin_expected_size} bytes)")
             else:
-                log("✗", f"Binary incomplete: {len(bin_buffer)}/{bin_expected_size}")
+                log("X", f"Binary incomplete: {len(bin_buffer)}/{bin_expected_size}")
+
+    async def _push_ota(self, bin_path):
+        """Flash a firmware image (.bin) to the watch over BLE.
+
+        Compresses with LZ4 block format (same codec as the device's screenshot
+        path) when python-lz4 is available; otherwise sends raw. SHA-256 is
+        always computed over the RAW image - what actually gets written to flash.
+        """
+        if not os.path.isfile(bin_path):
+            print(f"  Not found: {bin_path}")
+            return
+
+        raw = open(bin_path, "rb").read()
+        if not raw:
+            print("  Empty firmware file")
+            return
+
+        raw_size = len(raw)
+        sha = hashlib.sha256(raw).hexdigest()
+
+        # Try LZ4 block compression (high-compression). store_size=False so the
+        # device decodes against the known raw_size, matching LZ4_decompress_safe.
+        payload = raw
+        comp_size = 0
+        try:
+            import lz4.block
+            packed = lz4.block.compress(raw, mode="high_compression", store_size=False)
+            if len(packed) < raw_size:
+                payload = packed
+                comp_size = len(packed)
+        except ImportError:
+            print("  (python-lz4 not installed - sending uncompressed; "
+                  "pip install lz4 to speed this up)")
+
+        ratio = f", {comp_size * 100 // raw_size}% of raw" if comp_size else ""
+        log("->", f"OTA {os.path.basename(bin_path)}: raw={raw_size} "
+                 f"comp={comp_size}{ratio}, sha256={sha[:12]}...")
+
+        # Arm device. esp_ota erase happens only after the full image arrives,
+        # so the 'ready' ack returns immediately.
+        status, resp = await self.send("sys", "ota", [str(raw_size), str(comp_size), sha])
+        if status != "ok":
+            log("X", f"OTA rejected: {resp}")
+            return
+
+        t0 = time.time()
+        await self.send_binary(payload)
+        dt = time.time() - t0
+        log("*", f"Sent {len(payload)} bytes in {dt:.1f}s "
+                 f"({len(payload) / dt / 1024:.1f} KB/s) - device verifying & "
+                 f"flashing, will reboot on success")
 
     async def _push_app(self, app_dir):
         """Push app directory to watch"""
@@ -483,7 +543,7 @@ class BLEAssistant:
             print("  No files to push")
             return
 
-        log("↑", f"Push {app_name}: {len(files)} files")
+        log("->", f"Push {app_name}: {len(files)} files")
 
         if len(files) == 1:
             # Single file: [name, filename, "size_as_string"]
@@ -498,7 +558,7 @@ class BLEAssistant:
             status, data = await self.send("app", "push", args)
 
         if status != "ok":
-            log("✗", f"Push rejected: {data}")
+            log("X", f"Push rejected: {data}")
             return
 
         # Send binary blob (all files concatenated)
@@ -507,7 +567,7 @@ class BLEAssistant:
             blob.extend(fdata)
 
         await self.send_binary(bytes(blob))
-        log("✓", f"Push {app_name} complete ({len(blob)} bytes)")
+        log("ok", f"Push {app_name} complete ({len(blob)} bytes)")
 
     @staticmethod
     def _split_args(raw):
@@ -538,17 +598,17 @@ class BLEAssistant:
 
         return args
 
-    # ── Main loop ──────────────────────────────────────────
+    # -- Main loop ------------------------------------------
     async def run(self):
         """Main loop with auto-reconnect"""
         while True:
             if not await self.connect():
-                log("•", "Retry in 5s...")
+                log("*", "Retry in 5s...")
                 await asyncio.sleep(5)
                 continue
 
             if self.daemon:
-                log("•", "Daemon mode (proxy + sync)")
+                log("*", "Daemon mode (proxy + sync)")
                 # Keep alive until disconnect
                 while self.connected:
                     await asyncio.sleep(1)
@@ -560,7 +620,7 @@ class BLEAssistant:
                 break
 
             if not self.connected:
-                log("•", "Reconnecting...")
+                log("*", "Reconnecting...")
                 await asyncio.sleep(2)
 
 
@@ -674,7 +734,7 @@ def _auto_type(s):
     return s
 
 
-# ── Entry point ────────────────────────────────────────────────
+# -- Entry point ------------------------------------------------
 async def main():
     parser = argparse.ArgumentParser(description="BLE Assistant for TelaOS")
     parser.add_argument("--scan", action="store_true", help="Scan BLE devices")
@@ -705,7 +765,7 @@ async def main():
     except Exception:
         pass
     
-    log("•", "Done")
+    log("*", "Done")
 
 
 async def shutdown(assistant):
@@ -714,7 +774,7 @@ async def shutdown(assistant):
             await assistant.client.disconnect()
     except Exception:
         pass
-    log("•", "Bye")
+    log("*", "Bye")
     os._exit(0)
 
 

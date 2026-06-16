@@ -21,6 +21,7 @@ Core g_core;
 #include "ble/ble_bridge.h"
 #include "ble/bin_transfer.h"
 #include "ble/bin_receive.h"
+#include "ota/ota_receive.h"
 #include "ui/ui_shade.h"
 #include "native/counter_app.h"
 
@@ -134,6 +135,9 @@ void loop() {
         
         // Deferred save after BLE receive completes (LittleFS needs main loop stack)
         BinReceive::process();
+
+        // Deferred firmware flash after BLE OTA receive completes
+        OtaReceive::process();
     }
     
     App::Manager::instance().processPendingLaunch();

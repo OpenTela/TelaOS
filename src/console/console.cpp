@@ -7,6 +7,7 @@
 #include "console/console.h"
 #include "core/sys_paths.h"
 #include "ble/bin_receive.h"
+#include "ota/ota_receive.h"
 #ifndef NO_BLE
 #include "ble/ble_bridge.h"
 #endif
@@ -275,6 +276,32 @@ static Result execSys(const char* cmd, JsonArray args) {
     // sys ping
     if (strcmp(cmd, "ping") == 0) {
         return Result::ok();
+    }
+
+    // sys ota <raw_size> <comp_size> [sha256_hex]
+    //   Arms a full-firmware OTA receive over the BIN channel.
+    //   comp_size == 0 -> uncompressed; > 0 -> one LZ4 block of raw_size bytes.
+    //   Client then streams the (compressed) image as [2B chunk_id][data] chunks.
+    if (strcmp(cmd, "ota") == 0) {
+        const char* rawStr  = argStr(args, 0, "");
+        const char* compStr = argStr(args, 1, "0");
+        const char* sha     = argStr(args, 2, "");
+
+        long raw  = atol(rawStr);
+        long comp = atol(compStr);
+        if (raw <= 0 || comp < 0) {
+            return Result::errInvalid("Usage: sys ota <raw_size> <comp_size> [sha256]");
+        }
+
+        if (!OtaReceive::start((uint32_t)raw, (uint32_t)comp, sha)) {
+            return Result::errMemory("Failed to start OTA (bad size or no PSRAM)");
+        }
+
+        auto r = Result::ok("Ready for OTA");
+        r.data["raw"]  = (uint32_t)raw;
+        r.data["comp"] = (uint32_t)comp;
+        r.data["hash"] = (sha && sha[0]) ? sha : "none";
+        return r;
     }
     
     // sys info
