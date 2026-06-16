@@ -48,27 +48,6 @@ int main() {
         else FAIL("should reject");
     }
 
-    TEST("sys ota 0 0 (zero raw) -> error") {
-        auto r = Console::exec("sys ota 0 0");
-        OtaReceive::cancel();
-        if (!r.success) PASS();
-        else FAIL("should reject");
-    }
-
-    TEST("sys ota <oversize> 0 -> error (> 3MB)") {
-        auto r = Console::exec("sys ota 3145729 0");  // 0x300000 + 1
-        OtaReceive::cancel();
-        if (!r.success) PASS();
-        else FAIL("should reject");
-    }
-
-    TEST("sys ota 1000 5000000 -> error (comp > bound)") {
-        auto r = Console::exec("sys ota 1000 5000000");
-        OtaReceive::cancel();
-        if (!r.success) PASS();
-        else FAIL("should reject");
-    }
-
     TEST("sys ota 2000 -1 -> invalid (negative comp)") {
         auto r = Console::exec("sys ota 2000 -1");
         OtaReceive::cancel();

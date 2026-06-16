@@ -60,18 +60,6 @@ int main() {
         else FAIL("");
     }
 
-    TEST("write offset advances per chunk (no overwrite)");
-    {
-        uint8_t dst[N] = {0};
-        BinStream s;
-        s.begin(N, [&](const uint8_t* d, uint32_t l) { memcpy(dst + s.received(), d, l); });
-        feed(s, 0, src, 250);
-        feed(s, 1, src + 250, 250);
-        // second chunk must land at offset 250, not 0
-        if (memcmp(dst + 250, src + 250, 250) == 0 && memcmp(dst, src, 250) == 0) PASS();
-        else FAIL("offset wrong");
-    }
-
     TEST("single-chunk transfer completes");
     {
         uint8_t dst[10] = {0};
@@ -115,10 +103,28 @@ int main() {
         BinStream s;
         s.begin(N, [&](const uint8_t*, uint32_t) {},
                 [&](BinStream::Error e) { err = (e == BinStream::Error::TooSmall); });
-        uint8_t hdrOnly[2] = {0, 0};   // no payload byte
+        uint8_t hdrOnly[2] = {0, 0};   // 2 bytes, not the end marker
         s.onChunk(hdrOnly, 2);
         if (err && !s.isActive()) PASS();
         else FAIL("");
+    }
+
+    TEST("end marker [0xFF,0xFF] is benign (ignored, no error)");
+    {
+        // OBSOLETE: compat shim for pre-PR#1 clients. Remove together with the
+        // marker branch in bin_stream.cpp once the field has migrated.
+        bool err = false;
+        uint8_t dst[N] = {0};
+        BinStream s;
+        s.begin(500, [&](const uint8_t* d, uint32_t l) { memcpy(dst + s.received(), d, l); },
+                [&](BinStream::Error) { err = true; });
+        feed(s, 0, src, 250);
+        feed(s, 1, src + 250, 250);            // now complete (500/500)
+        uint8_t marker[2] = {0xFF, 0xFF};
+        s.onChunk(marker, 2);                  // trailing marker after completion
+        // marker must NOT raise an error, NOT advance count, transfer stays complete
+        if (!err && s.isComplete() && s.received() == 500 && memcmp(dst, src, 500) == 0) PASS();
+        else { FAIL(""); printf("      err=%d complete=%d received=%u\n", err, s.isComplete(), s.received()); }
     }
 
     TEST("chunks after error are ignored (no crash)");
