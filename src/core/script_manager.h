@@ -38,6 +38,7 @@ private:
     void setupOnclickHandler();
     void setupOnTapHandler();
     void setupOnHoldHandler();
+    void setupOnItemClickHandler();
     void setupWidgetHandler();
     void connectStateToUI();
 };

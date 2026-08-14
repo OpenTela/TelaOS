@@ -80,6 +80,16 @@ public:
     void defineArray(const P::String& name, const P::Array<P::String>& items) {
         m_arrays[name] = items;
     }
+
+    // Replace the whole array and notify subscribers. Notification carries the
+    // bare name (no [idx]) so listeners can distinguish "full rebuild" from a
+    // per-index update, and pull the new contents via getArraySize/getArrayItem.
+    void setArray(const P::String& name, const P::Array<P::String>& items, bool notify = true) {
+        m_arrays[name] = items;
+        if (notify && m_onChange) {
+            m_onChange(name, VarValue(P::String("")));
+        }
+    }
     
     bool hasArray(const P::String& name) const {
         return m_arrays.find(name) != m_arrays.end();
