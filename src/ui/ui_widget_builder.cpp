@@ -72,9 +72,11 @@ struct CommonAttrs {
     P::String id;
     P::String cssClass;
     P::String visible;      // "{varname}" for visibility binding
+    P::String disabled;     // "{varname}" for disabled binding (or "true"/"1" static)
     int zIndex = 0;
     bool hasDynamicClass = false;
     bool hasDynamicVisible = false;
+    bool hasDynamicDisabled = false;
 };
 
 static CommonAttrs parseCommonAttrs(const char *astart, const char *aend) {
@@ -82,15 +84,26 @@ static CommonAttrs parseCommonAttrs(const char *astart, const char *aend) {
     attrs.id = getAttr(astart, aend, "id");
     attrs.cssClass = getAttr(astart, aend, "class");
     attrs.visible = getAttr(astart, aend, "visible");
+    attrs.disabled = getAttr(astart, aend, "disabled");
     attrs.hasDynamicClass = contains(attrs.cssClass, '{');
     attrs.hasDynamicVisible = contains(attrs.visible, '{');
+    attrs.hasDynamicDisabled = contains(attrs.disabled, '{');
     attrs.zIndex = getAttrInt(astart, aend, "z-index");
     return attrs;
 }
 
 // Auto-generate id if needed for dynamic bindings
+// Static disabled="true" / disabled="1" (no binding): grey the widget out at
+// creation time. Dynamic "{var}" initial state is handled in addElement().
+static void applyStaticDisabled(lv_obj_t* obj, const CommonAttrs& attrs) {
+    if (!attrs.hasDynamicDisabled &&
+        (attrs.disabled == "true" || attrs.disabled == "1")) {
+        lv_obj_add_state(obj, LV_STATE_DISABLED);
+    }
+}
+
 static void ensureId(CommonAttrs& attrs, const char* prefix, bool hasDynamicContent = false) {
-    if (attrs.id.empty() && (hasDynamicContent || attrs.hasDynamicClass || attrs.hasDynamicVisible)) {
+    if (attrs.id.empty() && (hasDynamicContent || attrs.hasDynamicClass || attrs.hasDynamicVisible || attrs.hasDynamicDisabled)) {
         static int auto_id = 0;
         char buf[32]; snprintf(buf, sizeof(buf), "%s%d", prefix, auto_id++);
         attrs.id = buf;
@@ -700,6 +713,8 @@ void create_label(const char *astart, const char *aend, const char *content, lv_
         d.tpl         = text.c_str();
         d.classTpl    = attrs.hasDynamicClass   ? attrs.cssClass.c_str() : nullptr;
         d.visibleBind = attrs.hasDynamicVisible  ? attrs.visible.c_str()  : nullptr;
+        d.disabledBind = attrs.hasDynamicDisabled ? attrs.disabled.c_str() : nullptr;
+        applyStaticDisabled(d.obj, attrs);
         d.bgcolorBind = hasDynamicBgcolor        ? bgcolorAttr.c_str()    : nullptr;
         d.colorBind   = hasDynamicColor          ? colorAttr.c_str()      : nullptr;
         d.zIndex      = attrs.zIndex;
@@ -910,6 +925,9 @@ void create_button(const char *astart, const char *aend, const char *content, lv
     bd.tpl         = (hasDynamicText && widget.label.handle) ? text.c_str() : nullptr;
     bd.classTpl    = attrs.hasDynamicClass   ? attrs.cssClass.c_str() : nullptr;
     bd.visibleBind = attrs.hasDynamicVisible  ? attrs.visible.c_str()  : nullptr;
+    bd.disabledBind = attrs.hasDynamicDisabled ? attrs.disabled.c_str() : nullptr;
+    // NOTE: initial disabled applied to `btn` below, after parentObj is set —
+    // bd.obj here is the label, and greying the label doesn't block clicks.
     bd.bgcolorBind = hasDynamicBgcolor        ? bgcolorAttr.c_str()    : nullptr;
     bd.colorBind   = hasDynamicColor          ? colorAttr.c_str()      : nullptr;
     bd.zIndex      = attrs.zIndex;
@@ -928,6 +946,17 @@ void create_button(const char *astart, const char *aend, const char *content, lv
             }
             lv_obj_clear_flag(storeObj, LV_OBJ_FLAG_HIDDEN);
         }
+
+        // Same for disabled: grey the button itself. addElement() applied the
+        // initial state to bd.obj (the label), which doesn't block clicks —
+        // undo that and put the state on the button where it belongs.
+        if (!g_core.app().elements[idx]->disabledBind.empty()) {
+            P::String disVal = g_core.store().getString(g_core.app().elements[idx]->disabledBind);
+            bool disabled = (disVal == "true" || disVal == "1");
+            lv_obj_remove_state(storeObj, LV_STATE_DISABLED);
+            if (disabled) lv_obj_add_state(btn, LV_STATE_DISABLED);
+        }
+        applyStaticDisabled(btn, attrs);
     }
     
     if (!href.empty() || !onclick.empty()) {
@@ -976,7 +1005,9 @@ void create_switch(const char *astart, const char *aend, lv_obj_t *parent) {
     sd.obj         = sw;
     sd.onchange    = onchange.c_str();
     sd.bind        = bind.c_str();
-    sd.visibleBind = attrs.hasDynamicVisible ? attrs.visible.c_str() : nullptr;
+    sd.visibleBind = attrs.hasDynamicVisible  ? attrs.visible.c_str()  : nullptr;
+    sd.disabledBind = attrs.hasDynamicDisabled ? attrs.disabled.c_str() : nullptr;
+    applyStaticDisabled(sd.obj, attrs);
     sd.zIndex      = attrs.zIndex;
     int idx = g_core.app().addElement(sd);
     
@@ -1028,7 +1059,9 @@ void create_slider(const char *astart, const char *aend, lv_obj_t *parent) {
     sld.obj         = slider;
     sld.onchange    = onchange.c_str();
     sld.bind        = bind.c_str();
-    sld.visibleBind = attrs.hasDynamicVisible ? attrs.visible.c_str() : nullptr;
+    sld.visibleBind = attrs.hasDynamicVisible  ? attrs.visible.c_str()  : nullptr;
+    sld.disabledBind = attrs.hasDynamicDisabled ? attrs.disabled.c_str() : nullptr;
+    applyStaticDisabled(sld.obj, attrs);
     sld.zIndex      = attrs.zIndex;
     int idx = g_core.app().addElement(sld);
     
@@ -1107,7 +1140,9 @@ void create_input(const char *astart, const char *aend, const char *content, lv_
     ind.onchange    = onchange.c_str();
     ind.oninput     = oninput.c_str();
     ind.bind        = bind.c_str();
-    ind.visibleBind = attrs.hasDynamicVisible ? attrs.visible.c_str() : nullptr;
+    ind.visibleBind = attrs.hasDynamicVisible  ? attrs.visible.c_str()  : nullptr;
+    ind.disabledBind = attrs.hasDynamicDisabled ? attrs.disabled.c_str() : nullptr;
+    applyStaticDisabled(ind.obj, attrs);
     ind.zIndex      = attrs.zIndex;
     int idx = g_core.app().addElement(ind);
     
@@ -1159,7 +1194,9 @@ void create_image(const char *astart, const char *aend, lv_obj_t *parent) {
         imd.id          = attrs.id.c_str();
         imd.obj         = img;
         imd.onclick     = onclick.c_str();
-        imd.visibleBind = attrs.hasDynamicVisible ? attrs.visible.c_str() : nullptr;
+        imd.visibleBind = attrs.hasDynamicVisible  ? attrs.visible.c_str()  : nullptr;
+        imd.disabledBind = attrs.hasDynamicDisabled ? attrs.disabled.c_str() : nullptr;
+        applyStaticDisabled(imd.obj, attrs);
         imd.zIndex      = attrs.zIndex;
         int idx = g_core.app().addElement(imd);
         widget.on(LV_EVENT_CLICKED, button_click_handler, idx);
@@ -1168,7 +1205,9 @@ void create_image(const char *astart, const char *aend, lv_obj_t *parent) {
         ElementDesc imd2;
         imd2.id          = attrs.id.c_str();
         imd2.obj         = img;
-        imd2.visibleBind = attrs.hasDynamicVisible ? attrs.visible.c_str() : nullptr;
+        imd2.visibleBind = attrs.hasDynamicVisible  ? attrs.visible.c_str()  : nullptr;
+        imd2.disabledBind = attrs.hasDynamicDisabled ? attrs.disabled.c_str() : nullptr;
+        applyStaticDisabled(imd2.obj, attrs);
         imd2.zIndex      = attrs.zIndex;
         g_core.app().addElement(imd2);
     }
@@ -1655,7 +1694,9 @@ void create_select(const char *astart, const char *aend, const char *content, lv
     sd.obj         = dd;
     sd.bind        = bind.c_str();
     sd.onchange    = onchange.c_str();
-    sd.visibleBind = attrs.hasDynamicVisible ? attrs.visible.c_str() : nullptr;
+    sd.visibleBind = attrs.hasDynamicVisible  ? attrs.visible.c_str()  : nullptr;
+    sd.disabledBind = attrs.hasDynamicDisabled ? attrs.disabled.c_str() : nullptr;
+    applyStaticDisabled(sd.obj, attrs);
     sd.zIndex      = attrs.zIndex;
     int elemIdx = g_core.app().addElement(sd);
 

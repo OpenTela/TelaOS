@@ -69,6 +69,7 @@ struct ElementDesc {
     bool        is_page     = false;
     const char* classTpl    = nullptr;
     const char* visibleBind = nullptr;
+    const char* disabledBind = nullptr;
     const char* bgcolorBind = nullptr;
     const char* colorBind   = nullptr;
     int         zIndex      = 0;
