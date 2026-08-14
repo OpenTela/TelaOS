@@ -196,7 +196,44 @@ static void parse_state_yaml(const P::String& text, Store& store) {
             stack.back().arrayItems.push_back(val);
         } else if (!yl.value.empty()) {
             P::String fullKey = prefix.empty() ? yl.key : P::String(prefix + "." + yl.key);
-            define_yaml_var(store, fullKey, yl.value);
+            // Flow-style array: key: [a, "b", 'c']. Items may be quoted
+            // (either style) or bare; bare items are trimmed. Empty
+            // brackets ⇒ empty array. Without this branch the whole
+            // bracket expression would be stored as a scalar string.
+            const P::String& v = yl.value;
+            if (v.front() == '[') {
+                P::Array<P::String> items;
+                const char* fp = v.c_str() + 1;
+                const char* fe = v.c_str() + v.size();
+                auto skipWs = [&]() { while (fp < fe && (*fp==' '||*fp=='\t')) fp++; };
+                while (fp < fe) {
+                    skipWs();
+                    if (fp < fe && *fp == ']') break;
+                    if (fp >= fe) break;
+                    P::String item;
+                    if (*fp == '"' || *fp == '\'') {
+                        char q = *fp++;
+                        while (fp < fe && *fp != q) {
+                            if (*fp == '\\' && fp + 1 < fe) { item += fp[1]; fp += 2; }
+                            else item += *fp++;
+                        }
+                        if (fp < fe) fp++;  // closing quote
+                    } else {
+                        const char* is = fp;
+                        while (fp < fe && *fp != ',' && *fp != ']') fp++;
+                        const char* ie = fp;
+                        while (ie > is && (ie[-1]==' '||ie[-1]=='\t')) ie--;
+                        item.assign(is, (size_t)(ie - is));
+                    }
+                    items.push_back(item);
+                    skipWs();
+                    if (fp < fe && *fp == ',') { fp++; continue; }
+                    if (fp < fe && *fp == ']') break;
+                }
+                store.defineArray(fullKey, items);
+            } else {
+                define_yaml_var(store, fullKey, yl.value);
+            }
         } else {
             P::String newPrefix = prefix.empty() ? yl.key : P::String(prefix + "." + yl.key);
             stack.push_back({yl.indent, newPrefix, false, {}});
