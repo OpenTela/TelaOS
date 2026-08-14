@@ -47,6 +47,7 @@ struct Widget {
     
     // Switch
     bool checked = false;
+    bool disabled = false;
     
     // Input
     std::string placeholder;
