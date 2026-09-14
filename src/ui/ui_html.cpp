@@ -1147,6 +1147,17 @@ static void ui_update_bindings_internal(const char *varname, const char *value) 
             UI::setVisible(g_core.app().elements[i]->box(), visible);
             LOG_V(Log::UI, "Visibility update: %s -> %s", g_core.app().elements[i]->id.c_str(), visible ? "visible" : "hidden");
         }
+
+        // Update disabled state with disabled="{varname}"
+        if (!g_core.app().elements[i]->disabledBind.empty() && g_core.app().elements[i]->disabledBind == varname) {
+            bool disabled = (strcmp(value, "true") == 0 || strcmp(value, "1") == 0);
+            lv_obj_t* obj_d = g_core.app().elements[i]->box().handle;
+            if (obj_d) {
+                if (disabled) lv_obj_add_state(obj_d, LV_STATE_DISABLED);
+                else          lv_obj_remove_state(obj_d, LV_STATE_DISABLED);
+            }
+            LOG_V(Log::UI, "Disabled update: %s -> %s", g_core.app().elements[i]->id.c_str(), disabled ? "disabled" : "enabled");
+        }
         
         // Update background color with bgcolorBind=varname
         if (!g_core.app().elements[i]->bgcolorBind.empty()) {
@@ -1578,6 +1589,7 @@ void parse_children(const char *html, int len, lv_obj_t *parent) {
             auto idAttr = getAttr(astart, aend, "id");
             auto classAttr = getAttr(astart, aend, "class");
             auto visAttr = getAttr(astart, aend, "visible");
+            auto disAttr = getAttr(astart, aend, "disabled");
             
             lv_obj_set_width(container, LV_SIZE_CONTENT);
             lv_obj_set_height(container, LV_SIZE_CONTENT);
@@ -1672,7 +1684,8 @@ void parse_children(const char *html, int len, lv_obj_t *parent) {
             Widget{container}.applyCss("div", idAttr.c_str(), classAttr.c_str());
             
             bool hasDynVisible = !visAttr.empty() && visAttr.find('{') != P::String::npos;
-            if (!idAttr.empty() || hasDynVisible || hasDynBg) {
+            bool hasDynDisabled = !disAttr.empty() && disAttr.find('{') != P::String::npos;
+            if (!idAttr.empty() || hasDynVisible || hasDynDisabled || hasDynBg) {
                 P::String autoId = idAttr;
                 if (autoId.empty()) {
                     static int s_divIdx = 0;
@@ -1683,6 +1696,7 @@ void parse_children(const char *html, int len, lv_obj_t *parent) {
                 ed.id = autoId.c_str();
                 ed.obj = container;
                 ed.visibleBind = hasDynVisible ? visAttr.c_str() : nullptr;
+                ed.disabledBind = hasDynDisabled ? disAttr.c_str() : nullptr;
                 ed.bgcolorBind = hasDynBg ? bgAttr.c_str() : nullptr;
                 g_core.app().addElement(ed);
             }
@@ -1800,10 +1814,12 @@ void parse_children(const char *html, int len, lv_obj_t *parent) {
             
             // visible binding
             auto visAttr = getAttr(astart, aend, "visible");
+            auto disAttr = getAttr(astart, aend, "disabled");
             bool hasDynVisible = !visAttr.empty() && visAttr.find('{') != P::String::npos;
+            bool hasDynDisabled = !disAttr.empty() && disAttr.find('{') != P::String::npos;
             
             // Register element if it has id or dynamic visible
-            if (!idAttr.empty() || hasDynVisible) {
+            if (!idAttr.empty() || hasDynVisible || hasDynDisabled) {
                 // Auto-generate id if needed
                 P::String autoId = idAttr;
                 if (autoId.empty()) {
@@ -1817,6 +1833,7 @@ void parse_children(const char *html, int len, lv_obj_t *parent) {
                 ed.id = autoId.c_str();
                 ed.obj = container;
                 ed.visibleBind = hasDynVisible ? visAttr.c_str() : nullptr;
+                ed.disabledBind = hasDynDisabled ? disAttr.c_str() : nullptr;
                 g_core.app().addElement(ed);
             }
             

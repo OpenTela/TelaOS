@@ -57,6 +57,18 @@ int DynamicApp::addElement(ElementDesc& d) {
             if (!visible) lv_obj_add_flag(d.obj, LV_OBJ_FLAG_HIDDEN);
         }
     }
+
+    // Parse disabledBind — same shape as visibleBind but flips LV_STATE_DISABLED.
+    // The widget starts life matching the current store value, so a page that
+    // opens with atRoot=true immediately shows its "Up" button greyed out.
+    if (d.disabledBind && d.disabledBind[0]) {
+        el->disabledBind = extractBindVar(d.disabledBind);
+        if (!el->disabledBind.empty()) {
+            P::String val = g_core.store().getString(el->disabledBind);
+            bool disabled = (val == "true" || val == "1");
+            if (disabled) lv_obj_add_state(d.obj, LV_STATE_DISABLED);
+        }
+    }
     
     // Parse bgcolorBind
     if (d.bgcolorBind && d.bgcolorBind[0]) {

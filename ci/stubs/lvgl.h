@@ -107,6 +107,7 @@ extern const lv_font_t lv_font_montserrat_16;
 #define LV_STATE_PRESSED  1
 #define LV_STATE_CHECKED  2
 #define LV_STATE_FOCUSED  4
+#define LV_STATE_DISABLED 0x80
 
 #define LV_PART_MAIN      0
 #define LV_PART_INDICATOR 1
@@ -385,9 +386,11 @@ inline void lv_bar_set_value(lv_obj_t* obj, int val, int) {
 // Switch capture  
 inline void lv_obj_add_state(lv_obj_t* obj, int state) {
     if (obj && obj->mock_widget && state == LV_STATE_CHECKED) obj->mock_widget->checked = true;
+    if (obj && obj->mock_widget && state == LV_STATE_DISABLED) obj->mock_widget->disabled = true;
 }
 inline void lv_obj_clear_state(lv_obj_t* obj, int state) {
     if (obj && obj->mock_widget && state == LV_STATE_CHECKED) obj->mock_widget->checked = false;
+    if (obj && obj->mock_widget && state == LV_STATE_DISABLED) obj->mock_widget->disabled = false;
 }
 
 // Input capture
@@ -414,6 +417,9 @@ inline void lv_textarea_set_text(lv_obj_t* obj, const char* txt) {
 #define lv_bar_set_value lv_bar_set_value
 #define lv_obj_add_state lv_obj_add_state
 #define lv_obj_clear_state lv_obj_clear_state
+// LVGL 9 name: remove_state == clear_state
+inline void lv_obj_remove_state(lv_obj_t* obj, int state) { lv_obj_clear_state(obj, state); }
+#define lv_obj_remove_state lv_obj_remove_state
 #define lv_textarea_set_placeholder_text lv_textarea_set_placeholder_text
 #define lv_textarea_set_password_mode lv_textarea_set_password_mode
 #define lv_textarea_set_text lv_textarea_set_text

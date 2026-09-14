@@ -122,6 +122,7 @@ struct Element {
     P::String tpl;
     P::String classTemplate;
     P::String visibleBind;
+    P::String disabledBind;
     P::String bgcolorBind;
     P::String colorBind;
     
