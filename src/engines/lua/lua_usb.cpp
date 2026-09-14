@@ -1,7 +1,6 @@
-#include "engines/lua/lua_sd.h"
-#include "hal/sdcard.h"
+#include "engines/lua/lua_usb.h"
+#include "hal/usbhost.h"
 #include "hal/sd_path.h"
-#include "hal/device.h"
 #include "utils/log_config.h"
 
 #include <cstdio>
@@ -10,23 +9,23 @@
 #include <sys/stat.h>
 #include <unistd.h>
 
-namespace LuaSd {
+namespace LuaUsb {
 
-static const char* TAG = "LuaSd";
+static const char* TAG = "LuaUsb";
 
 // Resolve arg `idx` to an absolute SD path in `buf`. On failure, raises a Lua
 // error (invalid path) — callers that prefer nil,err handle mount separately.
 static bool resolveArg(lua_State* L, int idx, char* buf, size_t sz) {
     const char* in = luaL_checkstring(L, idx);
-    return sdResolvePath(Sd::mountPoint(), in, buf, sz);
+    return sdResolvePath(Usb::mountPoint(), in, buf, sz);
 }
 
 // Common preamble for every I/O operation: try to mount on demand
-// (Sd::ensureMounted re-mounts via the board's Device if the card was
+// (Usb::ensureMounted re-mounts via the board's Device if the card was
 // inserted after boot). If that fails, the card simply isn't there.
 static int pushNotMounted(lua_State* L) {
     lua_pushnil(L);
-    lua_pushstring(L, "sd: not mounted");
+    lua_pushstring(L, "usb: not mounted");
     return 2;
 }
 
@@ -39,42 +38,44 @@ static int pushNotMounted(lua_State* L) {
 // one-call recovery after re-inserting the card, without a reboot. For case
 // 2 the re-mount succeeds and the original error still surfaces as nil,err.
 static int ioFailed(lua_State* L, const char* msg) {
-    Sd::unmount();
+    // Unlike SD, no force-unmount here: USB hot-plug is event-driven — the
+    // MSC driver fires DISCONNECTED on unplug and the VFS unregisters itself.
+    // A genuine FS error shouldn't tear the whole stack down.
     lua_pushnil(L);
     lua_pushstring(L, msg);
     return 2;
 }
 
-static int lua_sd_mounted(lua_State* L) {
+static int lua_usb_mounted(lua_State* L) {
     // Probe: reflect the *current* state, not a stale boot-time flag. If the
     // card is absent, ensureMounted fails fast and this stays false.
-    Sd::ensureMounted();
-    lua_pushboolean(L, Sd::isMounted());
+    Usb::ensureMounted();
+    lua_pushboolean(L, Usb::isMounted());
     return 1;
 }
 
-static int lua_sd_mount(lua_State* L) {
-    // Pins are board-specific; the board's Device override knows them.
-    lua_pushboolean(L, Device::inst().mountSdCard());
+static int lua_usb_mount(lua_State* L) {
+    // USB-OTG pins are fixed on ESP32-S3 (GPIO19/20): init is uniform.
+    lua_pushboolean(L, Usb::init());
     return 1;
 }
 
-static int lua_sd_unmount(lua_State* L) {
-    lua_pushboolean(L, Sd::unmount());
+static int lua_usb_unmount(lua_State* L) {
+    lua_pushboolean(L, Usb::deinit());
     return 1;
 }
 
-static int lua_sd_info(lua_State* L) {
-    if (!Sd::ensureMounted()) { lua_pushnil(L); return 1; }
+static int lua_usb_info(lua_State* L) {
+    if (!Usb::ensureMounted()) { lua_pushnil(L); return 1; }
     uint64_t total = 0, freeB = 0;
-    if (!Sd::info(total, freeB)) { lua_pushnil(L); return 1; }
+    if (!Usb::info(total, freeB)) { lua_pushnil(L); return 1; }
     lua_pushinteger(L, (lua_Integer) total);
     lua_pushinteger(L, (lua_Integer) freeB);
     return 2;
 }
 
-static int lua_sd_exists(lua_State* L) {
-    if (!Sd::ensureMounted()) { lua_pushboolean(L, 0); return 1; }
+static int lua_usb_exists(lua_State* L) {
+    if (!Usb::ensureMounted()) { lua_pushboolean(L, 0); return 1; }
     char path[256];
     if (!resolveArg(L, 1, path, sizeof(path))) { lua_pushboolean(L, 0); return 1; }
     struct stat st;
@@ -84,8 +85,8 @@ static int lua_sd_exists(lua_State* L) {
 
 // sd.isDir(path) -> true|false. False for non-existent paths too, so callers
 // can use one check before branching "enter folder vs open file".
-static int lua_sd_isDir(lua_State* L) {
-    if (!Sd::ensureMounted()) { lua_pushboolean(L, 0); return 1; }
+static int lua_usb_isDir(lua_State* L) {
+    if (!Usb::ensureMounted()) { lua_pushboolean(L, 0); return 1; }
     char path[256];
     if (!resolveArg(L, 1, path, sizeof(path))) { lua_pushboolean(L, 0); return 1; }
     struct stat st;
@@ -95,14 +96,14 @@ static int lua_sd_isDir(lua_State* L) {
 
 // sd.stat(path) -> {size=N, isDir=bool, mtime=N} | nil, err
 // mtime is a unix timestamp in seconds (0 if the FS doesn't keep one).
-static int lua_sd_stat(lua_State* L) {
-    if (!Sd::ensureMounted()) return pushNotMounted(L);
+static int lua_usb_stat(lua_State* L) {
+    if (!Usb::ensureMounted()) return pushNotMounted(L);
     char path[256];
     if (!resolveArg(L, 1, path, sizeof(path))) {
-        lua_pushnil(L); lua_pushstring(L, "sd: invalid path"); return 2;
+        lua_pushnil(L); lua_pushstring(L, "usb: invalid path"); return 2;
     }
     struct stat st;
-    if (stat(path, &st) != 0) { lua_pushnil(L); lua_pushstring(L, "sd: stat failed"); return 2; }
+    if (stat(path, &st) != 0) { lua_pushnil(L); lua_pushstring(L, "usb: stat failed"); return 2; }
     lua_newtable(L);
     lua_pushinteger(L, (lua_Integer) st.st_size);  lua_setfield(L, -2, "size");
     lua_pushboolean(L, S_ISDIR(st.st_mode));       lua_setfield(L, -2, "isDir");
@@ -110,14 +111,14 @@ static int lua_sd_stat(lua_State* L) {
     return 1;
 }
 
-static int lua_sd_list(lua_State* L) {
-    if (!Sd::ensureMounted()) return pushNotMounted(L);
+static int lua_usb_list(lua_State* L) {
+    if (!Usb::ensureMounted()) return pushNotMounted(L);
     char path[256];
     if (!resolveArg(L, 1, path, sizeof(path))) {
-        lua_pushnil(L); lua_pushstring(L, "sd: invalid path"); return 2;
+        lua_pushnil(L); lua_pushstring(L, "usb: invalid path"); return 2;
     }
     DIR* d = opendir(path);
-    if (!d) return ioFailed(L, "sd: cannot open dir");
+    if (!d) return ioFailed(L, "usb: cannot open dir");
     lua_newtable(L);
     int i = 1;
     struct dirent* e;
@@ -130,14 +131,14 @@ static int lua_sd_list(lua_State* L) {
     return 1;
 }
 
-static int lua_sd_read(lua_State* L) {
-    if (!Sd::ensureMounted()) return pushNotMounted(L);
+static int lua_usb_read(lua_State* L) {
+    if (!Usb::ensureMounted()) return pushNotMounted(L);
     char path[256];
     if (!resolveArg(L, 1, path, sizeof(path))) {
-        lua_pushnil(L); lua_pushstring(L, "sd: invalid path"); return 2;
+        lua_pushnil(L); lua_pushstring(L, "usb: invalid path"); return 2;
     }
     FILE* f = fopen(path, "rb");
-    if (!f) return ioFailed(L, "sd: cannot open file");
+    if (!f) return ioFailed(L, "usb: cannot open file");
     std::string data;
     char chunk[1024];
     size_t n;
@@ -148,64 +149,64 @@ static int lua_sd_read(lua_State* L) {
 }
 
 static int write_impl(lua_State* L, const char* mode) {
-    if (!Sd::ensureMounted()) return pushNotMounted(L);
+    if (!Usb::ensureMounted()) return pushNotMounted(L);
     char path[256];
     if (!resolveArg(L, 1, path, sizeof(path))) {
-        lua_pushnil(L); lua_pushstring(L, "sd: invalid path"); return 2;
+        lua_pushnil(L); lua_pushstring(L, "usb: invalid path"); return 2;
     }
     size_t len = 0;
     const char* data = luaL_checklstring(L, 2, &len);
     FILE* f = fopen(path, mode);
-    if (!f) return ioFailed(L, "sd: cannot open for write");
+    if (!f) return ioFailed(L, "usb: cannot open for write");
     size_t w = fwrite(data, 1, len, f);
     fclose(f);
-    if (w != len) return ioFailed(L, "sd: short write");
+    if (w != len) return ioFailed(L, "usb: short write");
     lua_pushboolean(L, 1);
     return 1;
 }
-static int lua_sd_write(lua_State* L)  { return write_impl(L, "wb"); }
-static int lua_sd_append(lua_State* L) { return write_impl(L, "ab"); }
+static int lua_usb_write(lua_State* L)  { return write_impl(L, "wb"); }
+static int lua_usb_append(lua_State* L) { return write_impl(L, "ab"); }
 
-static int lua_sd_remove(lua_State* L) {
-    if (!Sd::ensureMounted()) return pushNotMounted(L);
+static int lua_usb_remove(lua_State* L) {
+    if (!Usb::ensureMounted()) return pushNotMounted(L);
     char path[256];
     if (!resolveArg(L, 1, path, sizeof(path))) {
-        lua_pushnil(L); lua_pushstring(L, "sd: invalid path"); return 2;
+        lua_pushnil(L); lua_pushstring(L, "usb: invalid path"); return 2;
     }
     // FATFS' POSIX shim is picky: remove() on a directory fails with EISDIR,
     // rmdir() on a file with ENOTDIR. Auto-route so callers don't need to know.
     struct stat st;
     if (stat(path, &st) == 0 && S_ISDIR(st.st_mode)) {
-        if (rmdir(path) != 0) return ioFailed(L, "sd: cannot rmdir (not empty?)");
+        if (rmdir(path) != 0) return ioFailed(L, "usb: cannot rmdir (not empty?)");
     } else {
-        if (remove(path) != 0) return ioFailed(L, "sd: cannot remove");
+        if (remove(path) != 0) return ioFailed(L, "usb: cannot remove");
     }
     lua_pushboolean(L, 1);
     return 1;
 }
 
-static int lua_sd_mkdir(lua_State* L) {
-    if (!Sd::ensureMounted()) return pushNotMounted(L);
+static int lua_usb_mkdir(lua_State* L) {
+    if (!Usb::ensureMounted()) return pushNotMounted(L);
     char path[256];
     if (!resolveArg(L, 1, path, sizeof(path))) {
-        lua_pushnil(L); lua_pushstring(L, "sd: invalid path"); return 2;
+        lua_pushnil(L); lua_pushstring(L, "usb: invalid path"); return 2;
     }
-    if (mkdir(path, 0775) != 0) return ioFailed(L, "sd: cannot mkdir");
+    if (mkdir(path, 0775) != 0) return ioFailed(L, "usb: cannot mkdir");
     lua_pushboolean(L, 1);
     return 1;
 }
 
 // sd.rename(old, new) -> true | nil, err. Also covers move-within-the-mount.
-static int lua_sd_rename(lua_State* L) {
-    if (!Sd::ensureMounted()) return pushNotMounted(L);
+static int lua_usb_rename(lua_State* L) {
+    if (!Usb::ensureMounted()) return pushNotMounted(L);
     char oldp[256], newp[256];
     if (!resolveArg(L, 1, oldp, sizeof(oldp))) {
-        lua_pushnil(L); lua_pushstring(L, "sd: invalid src"); return 2;
+        lua_pushnil(L); lua_pushstring(L, "usb: invalid src"); return 2;
     }
     if (!resolveArg(L, 2, newp, sizeof(newp))) {
-        lua_pushnil(L); lua_pushstring(L, "sd: invalid dst"); return 2;
+        lua_pushnil(L); lua_pushstring(L, "usb: invalid dst"); return 2;
     }
-    if (rename(oldp, newp) != 0) return ioFailed(L, "sd: rename failed");
+    if (rename(oldp, newp) != 0) return ioFailed(L, "usb: rename failed");
     lua_pushboolean(L, 1);
     return 1;
 }
@@ -213,19 +214,19 @@ static int lua_sd_rename(lua_State* L) {
 // sd.copy(src, dst) -> true | nil, err. Streams in 4 KB chunks so multi-MB
 // files never have to fit in RAM. Removes the partial destination on failure
 // so no half-written file masquerades as the real thing.
-static int lua_sd_copy(lua_State* L) {
-    if (!Sd::ensureMounted()) return pushNotMounted(L);
+static int lua_usb_copy(lua_State* L) {
+    if (!Usb::ensureMounted()) return pushNotMounted(L);
     char srcp[256], dstp[256];
     if (!resolveArg(L, 1, srcp, sizeof(srcp))) {
-        lua_pushnil(L); lua_pushstring(L, "sd: invalid src"); return 2;
+        lua_pushnil(L); lua_pushstring(L, "usb: invalid src"); return 2;
     }
     if (!resolveArg(L, 2, dstp, sizeof(dstp))) {
-        lua_pushnil(L); lua_pushstring(L, "sd: invalid dst"); return 2;
+        lua_pushnil(L); lua_pushstring(L, "usb: invalid dst"); return 2;
     }
     FILE* in = fopen(srcp, "rb");
-    if (!in) return ioFailed(L, "sd: cannot open source");
+    if (!in) return ioFailed(L, "usb: cannot open source");
     FILE* out = fopen(dstp, "wb");
-    if (!out) { fclose(in); return ioFailed(L, "sd: cannot open destination"); }
+    if (!out) { fclose(in); return ioFailed(L, "usb: cannot open destination"); }
 
     char buf[4096];
     bool ok = true;
@@ -239,35 +240,35 @@ static int lua_sd_copy(lua_State* L) {
     fclose(out);
     if (!ok) {
         remove(dstp);   // don't leave a half-baked copy behind
-        return ioFailed(L, "sd: copy failed");
+        return ioFailed(L, "usb: copy failed");
     }
     lua_pushboolean(L, 1);
     return 1;
 }
 
 static const luaL_Reg sd_lib[] = {
-    {"mounted", lua_sd_mounted},
-    {"mount",   lua_sd_mount},
-    {"unmount", lua_sd_unmount},
-    {"info",    lua_sd_info},
-    {"list",    lua_sd_list},
-    {"read",    lua_sd_read},
-    {"write",   lua_sd_write},
-    {"append",  lua_sd_append},
-    {"exists",  lua_sd_exists},
-    {"isDir",   lua_sd_isDir},
-    {"stat",    lua_sd_stat},
-    {"remove",  lua_sd_remove},
-    {"mkdir",   lua_sd_mkdir},
-    {"rename",  lua_sd_rename},
-    {"copy",    lua_sd_copy},
+    {"mounted", lua_usb_mounted},
+    {"mount",   lua_usb_mount},
+    {"unmount", lua_usb_unmount},
+    {"info",    lua_usb_info},
+    {"list",    lua_usb_list},
+    {"read",    lua_usb_read},
+    {"write",   lua_usb_write},
+    {"append",  lua_usb_append},
+    {"exists",  lua_usb_exists},
+    {"isDir",   lua_usb_isDir},
+    {"stat",    lua_usb_stat},
+    {"remove",  lua_usb_remove},
+    {"mkdir",   lua_usb_mkdir},
+    {"rename",  lua_usb_rename},
+    {"copy",    lua_usb_copy},
     {nullptr, nullptr}
 };
 
 void registerAll(lua_State* L) {
     luaL_newlib(L, sd_lib);
-    lua_setglobal(L, "sd");
-    LOG_I(Log::SD, "Registered: sd.*");
+    lua_setglobal(L, "usb");
+    LOG_I(Log::SD, "Registered: usb.*");
 }
 
-} // namespace LuaSd
+} // namespace LuaUsb

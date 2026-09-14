@@ -37,6 +37,7 @@ namespace ClickArea {
 // ============ Handler callbacks (set by ScriptManager, survive across apps) ============
 
 extern void (*g_onclick_handler)(const char* func_name);
+extern void (*g_onitem_handler)(const char* func_name, int idx1, const char* value);
 extern void (*g_ontap_handler)(const char* func_name, int x, int y);
 extern void (*g_onhold_handler)(const char* func_name);
 extern void (*g_onhold_xy_handler)(const char* func_name, int x, int y);
@@ -65,6 +66,7 @@ struct ElementDesc {
     const char* onchange    = nullptr;
     const char* oninput     = nullptr;
     const char* bind        = nullptr;
+    const char* itemClick   = nullptr;
     const char* tpl         = nullptr;
     bool        is_page     = false;
     const char* classTpl    = nullptr;
@@ -102,6 +104,8 @@ void create_markdown(const char* astart, const char* aend, const char* content, 
 void create_qr(const char* astart, const char* aend, const char* content, lv_obj_t* parent);
 void create_tabs    (const char* astart, const char* aend, const char* content, lv_obj_t* parent);
 void create_select  (const char* astart, const char* aend, const char* content, lv_obj_t* parent);
+void create_list    (const char* astart, const char* aend, const char* content, lv_obj_t* parent);
+void list_rebuild_from_array(lv_obj_t* list, int elementIdx, const P::String& arrayName);
 
 // Layout: table/tr/td (recursive child parsing)
 void parse_children(const char *html, int len, lv_obj_t *parent);

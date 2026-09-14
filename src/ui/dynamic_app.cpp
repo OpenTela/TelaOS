@@ -45,6 +45,7 @@ int DynamicApp::addElement(ElementDesc& d) {
     el->onchange = (d.onchange && d.onchange[0]) ? d.onchange : "";
     el->oninput  = (d.oninput  && d.oninput[0])  ? d.oninput  : "";
     el->bind     = (d.bind     && d.bind[0])     ? d.bind     : "";
+    el->itemClick = (d.itemClick && d.itemClick[0]) ? d.itemClick : "";
     el->tpl      = (d.tpl && strchr(d.tpl, '{')) ? d.tpl : "";
     el->classTemplate = (d.classTpl && strchr(d.classTpl, '{')) ? d.classTpl : "";
     

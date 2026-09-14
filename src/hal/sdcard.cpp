@@ -10,6 +10,7 @@ static const char* TAG = "SD";
 bool mountSpi(int, int, int, int, int) { return false; }
 bool unmount() { return false; }
 bool isMounted() { return false; }
+bool ensureMounted() { return false; }
 const char* mountPoint() { return kMountPoint; }
 bool info(uint64_t& t, uint64_t& f) { t = 0; f = 0; return false; }
 
@@ -20,6 +21,7 @@ bool info(uint64_t& t, uint64_t& f) { t = 0; f = 0; return false; }
 #include "driver/sdspi_host.h"
 #include "driver/spi_common.h"
 #include "ff.h"  // FATFS direct API (f_getfree) — works on IDF 4.4 and 5.x
+#include "hal/device.h"
 
 static sdmmc_card_t* s_card    = nullptr;
 static bool          s_mounted = false;
@@ -83,6 +85,14 @@ bool unmount() {
 
 bool isMounted() { return s_mounted; }
 const char* mountPoint() { return kMountPoint; }
+
+bool ensureMounted() {
+    if (s_mounted) return true;
+    // Pins are board-specific; delegate to the active Device — same path the
+    // boot-time mount takes. If no card is inserted, mountSpi fails quietly
+    // inside and we stay unmounted; the next call will try again.
+    return Device::inst().mountSdCard();
+}
 
 bool info(uint64_t& totalBytes, uint64_t& freeBytes) {
     totalBytes = 0; freeBytes = 0;

@@ -245,6 +245,35 @@ inline lv_obj_t* lv_bar_create(lv_obj_t* parent) { return alloc_obj("Bar", paren
 inline lv_obj_t* lv_arc_create(lv_obj_t* parent) { return alloc_obj("Arc", parent); }
 inline lv_obj_t* lv_checkbox_create(lv_obj_t* parent) { return alloc_obj("Checkbox", parent); }
 inline lv_obj_t* lv_dropdown_create(lv_obj_t* parent) { return alloc_obj("Dropdown", parent); }
+
+// ===== List (LVGL 9.x) =====
+lv_obj_t* lv_obj_get_child(lv_obj_t* obj, int idx);  // defined below
+
+inline lv_obj_t* lv_list_create(lv_obj_t* parent) { return alloc_obj("List", parent); }
+inline lv_obj_t* lv_list_add_text(lv_obj_t* list, const char* txt) {
+    auto* o = alloc_obj("Label", list);
+    if (o && o->mock_widget && txt) o->mock_widget->text = txt;
+    return o;
+}
+inline lv_obj_t* lv_list_add_button(lv_obj_t* list, const void*, const char* txt) {
+    auto* btn = alloc_obj("Button", list);
+    auto* lbl = alloc_obj("Label", btn);
+    if (lbl && lbl->mock_widget && txt) lbl->mock_widget->text = txt;
+    return btn;
+}
+inline const char* lv_list_get_button_text(lv_obj_t*, lv_obj_t* btn) {
+    if (!btn) return "";
+    if (auto* lbl = lv_obj_get_child(btn, 0)) {
+        if (lbl->mock_widget) return lbl->mock_widget->text.c_str();
+    }
+    return "";
+}
+inline void lv_list_set_button_text(lv_obj_t*, lv_obj_t* btn, const char* txt) {
+    if (!btn || !txt) return;
+    if (auto* lbl = lv_obj_get_child(btn, 0)) {
+        if (lbl->mock_widget) lbl->mock_widget->text = txt;
+    }
+}
 inline lv_obj_t* lv_roller_create(lv_obj_t* parent) { return alloc_obj("Roller", parent); }
 inline lv_obj_t* lv_table_create(lv_obj_t* parent) { return alloc_obj("Table", parent); }
 inline lv_obj_t* lv_chart_create(lv_obj_t* parent) { return alloc_obj("Chart", parent); }
@@ -279,7 +308,9 @@ inline void lv_obj_del(lv_obj_t* obj) { delete obj; }
 inline void lv_obj_delete(lv_obj_t* obj) { delete obj; }
 inline void lv_obj_delete_async(lv_obj_t* obj) { delete obj; }
 inline lv_obj_t* lv_layer_top() { return nullptr; }
-inline void lv_obj_clean(lv_obj_t*) {}
+inline void lv_obj_clean(lv_obj_t* obj) {
+    if (obj && obj->mock_widget) obj->mock_widget->children.clear();
+}
 inline void lv_obj_invalidate(lv_obj_t*) {}
 inline bool lv_obj_has_flag(lv_obj_t*, int) { return false; }
 inline bool lv_obj_has_state(lv_obj_t*, int) { return false; }

@@ -48,6 +48,8 @@ namespace Tag {
         constexpr const char* Tr = "tr";
         constexpr const char* Td = "td";
         constexpr const char* Div = "div";
+        constexpr const char* List = "list";
+        constexpr const char* Item = "item";
     }
     
     namespace TypeTag {
@@ -119,10 +121,15 @@ struct Element {
     P::String onhold;
     
     P::String bind;
+    P::String itemClick;   // <list itemClick="fn">: Lua fn(idx, value), 1-based
     P::String tpl;
     P::String classTemplate;
     P::String visibleBind;
     P::String disabledBind;
+    bool is_list = false;                 // <list> — items rebuilt from a state array
+    // Static <item onclick="..."> callback names: keeps c_str() pointers alive
+    // for LVGL user_data over the app's lifetime (dynamic lists don't use it).
+    P::Array<P::String> staticItemOnclicks;
     P::String bgcolorBind;
     P::String colorBind;
     

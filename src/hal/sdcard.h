@@ -30,6 +30,13 @@ bool unmount();
 
 bool isMounted();
 
+// Make sure the card is ready for I/O. If already mounted — instant true with
+// zero cost. Otherwise asks the active Device to perform a fresh SPI mount
+// (the board knows its own pins). Designed to be called at the top of every
+// sd.* operation so that inserting a card after boot — or re-inserting it
+// after a pull — works on the next call without a reboot.
+bool ensureMounted();
+
 const char* mountPoint();
 
 // Total / free bytes of the mounted volume. Returns false if not mounted.

@@ -75,6 +75,7 @@ public:
     using OnTapHandler = void (*)(const char* func_name, int x, int y);
     using OnHoldHandler = void (*)(const char* func_name);
     using OnHoldXYHandler = void (*)(const char* func_name, int x, int y);
+    using OnItemClickHandler = void (*)(const char* func_name, int idx1, const char* value);
     using StateChangeHandler = void (*)(const char* var_name, const char* value);
     
     // Handler setters
@@ -82,6 +83,7 @@ public:
     void setOnTapHandler(OnTapHandler handler);
     void setOnHoldHandler(OnHoldHandler handler);
     void setOnHoldXYHandler(OnHoldXYHandler handler);
+    void setOnItemClickHandler(OnItemClickHandler handler);
     void setStateChangeHandler(StateChangeHandler handler);
     
     // Widget sync
