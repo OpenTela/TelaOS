@@ -1720,3 +1720,172 @@ void create_select(const char *astart, const char *aend, const char *content, lv
           elemIdx >= 0 ? (int)g_core.app().elements[elemIdx]->dropdownValues.size() : 0,
           initIdx);
 }
+
+// ===================== <list> =====================
+//
+// Two flavours:
+//
+//   Static:    <list><item>Foo</item><item onclick="doX">Bar</item></list>
+//   Dynamic:   <list bind="files" itemClick="onTap"/>
+//
+// Dynamic items come from a state array (declared as <array name="files"/> in
+// <state>, or via YAML). When the array is reassigned in Lua
+// (state.files = {...}) the list rebuilds; when one item changes
+// (state.files[3] = "x") only that button's text is patched. Tap invokes
+//   itemClick(idx, value)   -- idx is 1-based, value is the item string.
+//
+// Static <item> children may carry onclick="fn" — invoked as a plain no-arg
+// call, same as a regular <button>.
+
+// Per-list click bridge: user_data packs (elementIdx << 16) | itemIdx1.
+// Both stay well under 16 bits on this class of devices.
+static int listItemUserData(int elementIdx, int itemIdx1) {
+    return ((elementIdx & 0xFFFF) << 16) | (itemIdx1 & 0xFFFF);
+}
+
+static void list_item_click_handler(lv_event_t* e) {
+    intptr_t packed = (intptr_t) lv_event_get_user_data(e);
+    int elementIdx = ((int)packed >> 16) & 0xFFFF;
+    int itemIdx1   = ((int)packed)       & 0xFFFF;
+
+    if (elementIdx < 0 || elementIdx >= (int)g_core.app().elements.size()) return;
+    const auto& el = g_core.app().elements[elementIdx];
+    if (!el) return;
+
+    const P::String& cb = el->itemClick;
+    if (cb.empty() || !g_onitem_handler) return;
+
+    P::String value;
+    if (!el->bind.empty()) {
+        // Dynamic: current value from the bound array (idx is 1-based).
+        value = g_core.store().getArrayItem(el->bind, itemIdx1 - 1);
+    } else {
+        // Static: the button's own text.
+        lv_obj_t* btn = (lv_obj_t*) lv_event_get_target(e);
+        const char* txt = lv_list_get_button_text(el->w.handle, btn);
+        if (txt) value = txt;
+    }
+    g_onitem_handler(cb.c_str(), itemIdx1, value.c_str());
+}
+
+// Append one button with click wired. `onclickName` non-null ⇒ static item
+// with its own no-arg onclick; otherwise the (idx,value) itemClick bridge.
+static void list_append_item(lv_obj_t* list, int elementIdx, int itemIdx1,
+                             const char* text, const char* onclickName) {
+    lv_obj_t* btn = lv_list_add_button(list, nullptr, text ? text : "");
+    if (!btn) return;
+    if (onclickName && onclickName[0]) {
+        struct StaticHook {
+            static void cb(lv_event_t* e) {
+                const char* fn = (const char*) lv_event_get_user_data(e);
+                if (fn && fn[0] && g_onclick_handler) g_onclick_handler(fn);
+            }
+        };
+        lv_obj_add_event_cb(btn, StaticHook::cb, LV_EVENT_CLICKED, (void*) onclickName);
+    } else {
+        lv_obj_add_event_cb(btn, list_item_click_handler, LV_EVENT_CLICKED,
+                            (void*)(intptr_t) listItemUserData(elementIdx, itemIdx1));
+    }
+}
+
+// Build/rebuild contents from a state array. Clears existing children first —
+// used both at creation (initial fill) and on full-array updates.
+void list_rebuild_from_array(lv_obj_t* list, int elementIdx, const P::String& arrayName) {
+    lv_obj_clean(list);
+    auto& store = g_core.store();
+    int n = store.getArraySize(arrayName);
+    for (int i = 0; i < n; i++) {
+        P::String v = store.getArrayItem(arrayName, i);
+        list_append_item(list, elementIdx, i + 1, v.c_str(), nullptr);
+    }
+}
+
+// Parse static <item>text</item> children (optionally with onclick="fn").
+// Item styling inherits LVGL list-button defaults for now.
+static void parse_static_items(const char* content, lv_obj_t* list, int elementIdx) {
+    if (!content) return;
+    const char* p = content;
+    int idx = 1;
+    while (p && *p) {
+        const char* open = strstr(p, "<item");
+        if (!open) break;
+        const char* attrEnd = strchr(open, '>');
+        if (!attrEnd) break;
+        const char* close = strstr(attrEnd, "</item>");
+        if (!close) break;
+
+        P::String onclickAttr = getAttr(open + 5, attrEnd, "onclick");
+
+        P::String txt(attrEnd + 1, (size_t)(close - attrEnd - 1));
+        size_t s = 0, e = txt.size();
+        while (s < e && (txt[s]==' '||txt[s]=='\n'||txt[s]=='\t'||txt[s]=='\r')) s++;
+        while (e > s && (txt[e-1]==' '||txt[e-1]=='\n'||txt[e-1]=='\t'||txt[e-1]=='\r')) e--;
+        P::String clean(txt.c_str() + s, e - s);
+
+        // Keep the callback string alive for the app's lifetime: LVGL only
+        // stores the pointer we hand it.
+        const char* onclickPtr = nullptr;
+        if (!onclickAttr.empty() && elementIdx >= 0 &&
+            elementIdx < (int)g_core.app().elements.size()) {
+            g_core.app().elements[elementIdx]->staticItemOnclicks.push_back(onclickAttr);
+            onclickPtr = g_core.app().elements[elementIdx]->staticItemOnclicks.back().c_str();
+        }
+        list_append_item(list, elementIdx, idx++, clean.c_str(), onclickPtr);
+        p = close + 7;
+    }
+}
+
+void create_list(const char* astart, const char* aend, const char* content, lv_obj_t* parent) {
+    auto attrs     = parseCommonAttrs(astart, aend);
+    auto bind      = getAttr(astart, aend, "bind");
+    auto itemClick = getAttr(astart, aend, "itemClick");
+
+    int32_t x = getAttrCoordW(astart, aend, "x", 0, parent);
+    int32_t y = getAttrCoordH(astart, aend, "y", 0, parent);
+    int32_t w = getAttrSize(astart, aend, "w");
+    int32_t h = getAttrSize(astart, aend, "h");
+
+    ensureId(attrs, "_list", !bind.empty() || !itemClick.empty());
+
+    lv_obj_t* list = lv_list_create(parent);
+    set_pos(list, x, y);
+    if (w != 0) lv_obj_set_width(list, w);
+    if (h != 0) lv_obj_set_height(list, h);
+
+    {
+        P::String cls = attrs.hasDynamicClass
+            ? render_template(attrs.cssClass.c_str())
+            : attrs.cssClass;
+        Widget{list}.applyCss("list", attrs.id.c_str(), cls.c_str());
+    }
+
+    // Inline bg/color on the container; per-item styling stays LVGL default.
+    P::String bgcolorAttr = getAttr(astart, aend, "bgcolor");
+    P::String colorAttr   = getAttr(astart, aend, "color");
+    if (!bgcolorAttr.empty()) Widget{list}.applyBgColor(parse_color(bgcolorAttr.c_str()));
+    if (!colorAttr.empty())   Widget{list}.applyColor(parse_color(colorAttr.c_str()));
+
+    ElementDesc d;
+    d.id           = attrs.id.c_str();
+    d.obj          = list;
+    d.bind         = bind.c_str();
+    d.itemClick    = itemClick.c_str();
+    d.visibleBind  = attrs.hasDynamicVisible  ? attrs.visible.c_str()  : nullptr;
+    d.disabledBind = attrs.hasDynamicDisabled ? attrs.disabled.c_str() : nullptr;
+    d.zIndex       = attrs.zIndex;
+    int elemIdx = g_core.app().addElement(d);
+    applyStaticDisabled(list, attrs);
+
+    if (elemIdx >= 0 && elemIdx < (int)g_core.app().elements.size()) {
+        g_core.app().elements[elemIdx]->is_list = true;
+
+        if (!bind.empty()) {
+            list_rebuild_from_array(list, elemIdx, P::String(bind.c_str()));
+        } else {
+            parse_static_items(content, list, elemIdx);
+        }
+    }
+
+    LOG_I(Log::UI, "create_list: id=%s bind=%s items=%d",
+          attrs.id.c_str(), bind.c_str(), (int) lv_obj_get_child_cnt(list));
+}

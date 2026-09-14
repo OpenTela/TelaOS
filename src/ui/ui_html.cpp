@@ -63,6 +63,7 @@ void (*g_onclick_handler)(const char* func_name) = nullptr;
 void (*g_ontap_handler)(const char* func_name, int x, int y) = nullptr;
 void (*g_onhold_handler)(const char* func_name) = nullptr;
 void (*g_onhold_xy_handler)(const char* func_name, int x, int y) = nullptr;
+void (*g_onitem_handler)(const char* func_name, int idx1, const char* value) = nullptr;
 void (*g_state_change_handler)(const char* var_name, const char* value) = nullptr;
 
 // Freeze: defer UI binding updates, flush on unfreeze
@@ -223,6 +224,58 @@ static void parse_vars_to_store(const UI::ParsedElement& section, Store& store) 
         else if (var.is("int"))    store.defineInt(nameStr, var.getInt("default"));
         else if (var.is("float"))  store.defineFloat(nameStr, var.getFloat("default"));
         else if (var.is("string")) store.defineString(nameStr, P::String(var.get("default")));
+        else if (var.is("array")) {
+            // <array name="files" default="['a','b','c']"/>
+            //
+            // Bracketed list of quoted strings. Quotes may be either ' or "
+            // so authors keep the outer XML attribute in the usual double
+            // quotes and pick the inner style that fits. Missing/empty
+            // default ⇒ empty array. Inside a quoted item, \\ \' \" \n \r \t
+            // are recognised escapes; anything else is literal.
+            P::Array<P::String> items;
+            auto def = var.get("default");
+            const char* p = def.data();
+            const char* end = p + def.size();
+            auto skipWs = [&]() {
+                while (p < end && (*p==' '||*p=='\t'||*p=='\n'||*p=='\r')) p++;
+            };
+            skipWs();
+            if (p < end && *p == '[') {
+                p++;
+                while (p < end) {
+                    skipWs();
+                    if (p < end && *p == ']') { p++; break; }
+                    if (p >= end) break;
+                    char q = *p;
+                    if (q != '\'' && q != '"') break;  // malformed; stop here
+                    p++;
+                    P::String item;
+                    while (p < end && *p != q) {
+                        if (*p == '\\' && p + 1 < end) {
+                            char e2 = p[1];
+                            switch (e2) {
+                                case 'n':  item += '\n'; break;
+                                case 'r':  item += '\r'; break;
+                                case 't':  item += '\t'; break;
+                                case '\\': item += '\\'; break;
+                                case '\'': item += '\''; break;
+                                case '"':  item += '"';  break;
+                                default:   item += e2;   break;
+                            }
+                            p += 2;
+                        } else {
+                            item += *p++;
+                        }
+                    }
+                    if (p < end && *p == q) p++;
+                    items.push_back(item);
+                    skipWs();
+                    if (p < end && *p == ',') { p++; continue; }
+                    if (p < end && *p == ']') { p++; break; }
+                }
+            }
+            store.defineArray(nameStr, items);
+        }
     }
 }
 
@@ -1138,6 +1191,32 @@ static void ui_update_bindings_internal(const char *varname, const char *value) 
                         break;
                     }
                 }
+            } else if (g_core.app().elements[i]->is_list) {
+                // Full-array assignment (state.files = {...}) notifies with the
+                // bare array name: rebuild the whole list from the store.
+                list_rebuild_from_array(obj, (int)i, g_core.app().elements[i]->bind);
+            }
+        }
+
+        // Per-index array update for lists: varname arrives as "files[2]"
+        // (0-based) from setArrayItem. Match the prefix against the bind name
+        // and patch just that one button's text — no rebuild.
+        if (g_core.app().elements[i]->is_list &&
+            !g_core.app().elements[i]->bind.empty()) {
+            const char* lb = strchr(varname, '[');
+            if (lb) {
+                size_t prefixLen = (size_t)(lb - varname);
+                const P::String& bindName = g_core.app().elements[i]->bind;
+                if (bindName.size() == prefixLen &&
+                    strncmp(varname, bindName.c_str(), prefixLen) == 0) {
+                    int idx0 = atoi(lb + 1);
+                    lv_obj_t* listObj = g_core.app().elements[i]->w.handle;
+                    uint32_t cnt = lv_obj_get_child_cnt(listObj);
+                    if (idx0 >= 0 && idx0 < (int)cnt) {
+                        lv_obj_t* btn = lv_obj_get_child(listObj, idx0);
+                        if (btn) lv_list_set_button_text(listObj, btn, value);
+                    }
+                }
             }
         }
         
@@ -1567,6 +1646,8 @@ void parse_children(const char *html, int len, lv_obj_t *parent) {
             create_tabs(astart, aend, content.c_str(), parent);
         } else if (strcmp(tag, Element::Select) == 0) {
             create_select(astart, aend, content.c_str(), parent);
+        } else if (strcmp(tag, Element::List) == 0) {
+            create_list(astart, aend, content.c_str(), parent);
         } else if (strcmp(tag, Element::Div) == 0) {
             // --- Div container (general-purpose, supports flex) ---
             lv_obj_t *container = lv_obj_create(parent);

@@ -209,6 +209,10 @@ void Core::setOnHoldXYHandler(OnHoldXYHandler handler) {
     g_onhold_xy_handler = handler;
 }
 
+void Core::setOnItemClickHandler(OnItemClickHandler handler) {
+    g_onitem_handler = handler;
+}
+
 void Core::setStateChangeHandler(StateChangeHandler handler) {
     g_state_change_handler = handler;
 }

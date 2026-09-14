@@ -364,6 +364,22 @@ static P::String luaValueToString(lua_State* L, int idx) {
 // Helper: write value from Lua stack to store, typed
 static void storeWriteFromLua(lua_State* L, int valIdx, Store& store, const P::String& key) {
     int vtype = lua_type(L, valIdx);
+    // Table on the right side ⇒ whole-array assignment: state.files = {"a","b"}.
+    // Sequential integer keys 1..N are read and stringified (store arrays hold
+    // strings); non-sequential keys are ignored. setArray notifies with the
+    // bare name so <list bind=...> widgets rebuild.
+    if (vtype == LUA_TTABLE) {
+        P::Array<P::String> items;
+        int n = (int)lua_rawlen(L, valIdx);
+        items.reserve(n);
+        for (int i = 1; i <= n; i++) {
+            lua_rawgeti(L, valIdx, i);
+            items.push_back(luaValueToString(L, -1));
+            lua_pop(L, 1);
+        }
+        store.setArray(key, items);
+        return;
+    }
     VarType stype = store.getType(key);
     switch (vtype) {
         case LUA_TBOOLEAN:

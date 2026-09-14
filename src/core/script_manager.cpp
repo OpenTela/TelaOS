@@ -59,6 +59,7 @@ bool ScriptManager::init(IScriptEngine* engine) {
     setupOnclickHandler();
     setupOnTapHandler();
     setupOnHoldHandler();
+    setupOnItemClickHandler();
     setupWidgetHandler();
     connectStateToUI();
     syncState();
@@ -220,6 +221,33 @@ void ScriptManager::setupOnTapHandler() {
             snprintf(call_str, sizeof(call_str), "%s(%d, %d)", func_name, x, y);
             s_engine->execute(call_str);
         }
+    });
+}
+
+void ScriptManager::setupOnItemClickHandler() {
+    LOG_D(Log::LUA, "Setting up onitem handler (idx, value)");
+
+    s_engine = m_engine;
+
+    g_core.setOnItemClickHandler([](const char* func_name, int idx1, const char* value) {
+        if (!s_engine || !func_name || !func_name[0]) return;
+        // Lua-safe escape of `value` so the call string fn(1, "...") stays
+        // valid whatever quotes/backslashes/newlines the array item contains.
+        P::String esc;
+        for (const char* p = value ? value : ""; *p; ++p) {
+            switch (*p) {
+                case '\\': esc += "\\\\"; break;
+                case '"':  esc += "\\\""; break;
+                case '\n': esc += "\\n";  break;
+                case '\r': esc += "\\r";  break;
+                case '\t': esc += "\\t";  break;
+                default:   esc += *p;     break;
+            }
+        }
+        char call_str[512];
+        snprintf(call_str, sizeof(call_str), "%s(%d, \"%s\")",
+                 func_name, idx1, esc.c_str());
+        s_engine->execute(call_str);
     });
 }
 
