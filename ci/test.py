@@ -102,7 +102,8 @@ def compile_test(test: TestInfo, project_dir: Path, objs: list) -> tuple:
     out = test.bin_path()
     out.parent.mkdir(parents=True, exist_ok=True)
 
-    cmd = [CXX, f"-std={STD}", "-DLVGL_MOCK_ENABLED"]
+    cmd = [CXX, f"-std={STD}", "-DLVGL_MOCK_ENABLED",
+           f'-DTELAOS_ROOT="{project_dir}"']
     cmd += [f"-I{inc}" for inc in get_includes(project_dir)]
     cmd += [str(test.src), str(externals)]
     cmd += [str(o) for o in objs]

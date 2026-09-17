@@ -1,0 +1,307 @@
+<app os="1.0" title="Files" version="1.0" category="utility">
+  <!--
+    File manager over the SD card. Exercises the new runtime capabilities:
+      <list bind=... itemClick=...>  — reactive file listing
+      state.entries = {...}          — whole-array assignment from Lua
+      disabled="{atRoot}"            — reactive button disabling
+      sd.stat / sd.rename / smart sd.remove — extended SD API
+      ui.confirm                     — destructive-action guard
+      SD hot-plug                    — insert a card mid-session, tap Refresh
+
+    v1 scope: browse, view text files, rename, delete, new folder.
+    Not here yet (by design): copy/move UI (needs a destination picker),
+    binary viewer, sort options, multi-select.
+  -->
+
+  <ui default="/browse">
+
+    <!-- ===== Browser ===== -->
+    <page id="browse" bgcolor="#0e0e10">
+      <label x="0"   y="0"  w="100%" h="44" bgcolor="#1a1a1f"/>
+      <label x="4%"  y="12" w="70%"  color="#cfcfd4" font="18">{cwd}</label>
+      <label x="72%" y="14" w="26%"  color="#7a7a82" font="14">{status}</label>
+
+      <list id="entries" bind="entries" itemClick="onPick"
+            x="2%" y="50" w="96%" h="72%" bgcolor="#15151a"/>
+
+      <button x="2%"  y="88%" w="20%" h="42" bgcolor="#26262e" color="#ffffff" radius="8"
+              onclick="goUp" disabled="{atRoot}">Up</button>
+      <button x="24%" y="88%" w="30%" h="42" bgcolor="#2e7d32" color="#ffffff" radius="8"
+              onclick="newFolder">+ Folder</button>
+      <button x="56%" y="88%" w="24%" h="42" bgcolor="#3a7afe" color="#ffffff" radius="8"
+              onclick="refresh">Refresh</button>
+      <button x="82%" y="88%" w="16%" h="42" bgcolor="#26262e" color="#aaaaaa" radius="8"
+              onclick="quitApp">Exit</button>
+    </page>
+
+    <!-- ===== Text viewer ===== -->
+    <page id="view" bgcolor="#0e0e10">
+      <label align="center" y="6"  color="#7fc7ff" font="20">{viewName}</label>
+      <label align="center" y="34" color="#6c6c74" font="14">{viewSize}</label>
+      <label x="4%" y="60" w="92%" h="66%" bgcolor="#15151a" radius="8"/>
+      <label x="6%" y="68" w="88%" h="62%" color="#e6e6ec" font="16">{viewBody}</label>
+
+      <button x="2%"  y="88%" w="30%" h="42" bgcolor="#7a1f1f" color="#ffffff" radius="8"
+              onclick="deleteCurrent">Delete</button>
+      <button x="34%" y="88%" w="30%" h="42" bgcolor="#3a7afe" color="#ffffff" radius="8"
+              onclick="renameCurrent">Rename</button>
+      <button x="66%" y="88%" w="32%" h="42" bgcolor="#26262e" color="#ffffff" radius="8"
+              onclick="backToBrowse">Back</button>
+    </page>
+
+    <!-- ===== Name prompt (new folder / rename) ===== -->
+    <page id="prompt" bgcolor="#0e0e10">
+      <label align="center" y="24"  color="#cfcfd4" font="22">{promptTitle}</label>
+      <label align="center" y="64"  color="#aaaaaa" font="14">{promptHint}</label>
+
+      <input id="promptField" x="6%" y="110" w="88%" h="44" bind="promptValue"
+             placeholder="name" onenter="promptOk"/>
+
+      <label align="center" y="170" color="#ff6b6b" font="14">{promptError}</label>
+
+      <button x="6%"  y="88%" w="42%" h="44" bgcolor="#26262e" color="#ffffff" radius="8"
+              onclick="promptCancel">Cancel</button>
+      <button x="52%" y="88%" w="42%" h="44" bgcolor="#2e7d32" color="#ffffff" radius="8"
+              onclick="promptOk">OK</button>
+    </page>
+
+  </ui>
+
+  <state>
+    <string name="cwd"         default="/"/>
+    <string name="status"      default=""/>
+    <array  name="entries"/>
+    <bool   name="atRoot"      default="true"/>
+
+    <string name="viewName"    default=""/>
+    <string name="viewSize"    default=""/>
+    <string name="viewBody"    default=""/>
+
+    <string name="promptTitle" default=""/>
+    <string name="promptHint"  default=""/>
+    <string name="promptValue" default=""/>
+    <string name="promptError" default=""/>
+  </state>
+
+  <script language="lua">
+    -- Script-local state (not exposed to UI)
+    local rawEntries = {}     -- filenames parallel to state.entries
+                              -- (display adds a "/ " prefix to folders)
+    local viewPath   = ""     -- file currently open in /view
+    local pendingOp  = nil    -- closure run when the prompt confirms
+
+    local FOLDER_MARK = "/ "
+
+    local function joinPath(dir, name)
+      if dir == "/" then return "/" .. name end
+      return dir .. "/" .. name
+    end
+
+    local function parentOf(path)
+      if path == "/" or path == "" then return "/" end
+      local trimmed = path:gsub("/+$", "")
+      local cut = trimmed:match("^(.*)/[^/]+$")
+      if not cut or cut == "" then return "/" end
+      return cut
+    end
+
+    local function humanSize(n)
+      if n < 1024 then return string.format("%d B", n)
+      elseif n < 1048576 then return string.format("%.1f KB", n / 1024)
+      else return string.format("%.1f MB", n / 1048576) end
+    end
+
+    -- ===== Listing =====
+    local function refreshNow(newCwd)
+      if newCwd then state.cwd = newCwd end
+      local cwd = state.cwd
+      state.atRoot = (cwd == "/" or cwd == "")
+
+      if not sd.mounted() then
+        state.status  = "No SD"
+        state.entries = {}
+        rawEntries = {}
+        return
+      end
+
+      local names, err = sd.list(cwd)
+      if not names then
+        state.status  = err or "?"
+        state.entries = {}
+        rawEntries = {}
+        return
+      end
+      table.sort(names)
+
+      -- Folders first, then files, both alphabetical
+      local dirs, files = {}, {}
+      for _, n in ipairs(names) do
+        local s = sd.stat(joinPath(cwd, n))
+        if s and s.isDir then dirs[#dirs + 1] = n
+        else files[#files + 1] = n end
+      end
+
+      rawEntries = {}
+      local display = {}
+      for _, n in ipairs(dirs)  do
+        rawEntries[#rawEntries + 1] = n
+        display[#display + 1] = FOLDER_MARK .. n
+      end
+      for _, n in ipairs(files) do
+        rawEntries[#rawEntries + 1] = n
+        display[#display + 1] = n
+      end
+
+      state.entries = display
+      state.status  = string.format("%d item%s", #display, #display == 1 and "" or "s")
+    end
+
+    function refresh() refreshNow(nil) end
+
+    function goUp()
+      if state.cwd == "/" or state.cwd == "" then return end
+      refreshNow(parentOf(state.cwd))
+    end
+
+    -- ===== Item tap =====
+    function onPick(idx, _display)
+      local name = rawEntries[idx]
+      if not name then return end
+      local full = joinPath(state.cwd, name)
+
+      local st = sd.stat(full)
+      if st and st.isDir then
+        refreshNow(full)
+        return
+      end
+
+      local data, err = sd.read(full)
+      if not data then
+        state.status = err or "read failed"
+        return
+      end
+
+      -- Binary heuristic: NUL in the first KB
+      if data:sub(1, 1024):find("\0", 1, true) then
+        state.status = "binary: " .. name
+        return
+      end
+
+      local LIMIT = 8 * 1024
+      local total = #data
+      if total > LIMIT then
+        data = data:sub(1, LIMIT) .. "\n...(truncated)"
+      end
+
+      viewPath       = full
+      state.viewName = name
+      state.viewSize = humanSize(total) .. (total > LIMIT and " (showing 8 KB)" or "")
+      state.viewBody = data
+      navigate("/view")
+    end
+
+    function backToBrowse()
+      state.viewBody = ""
+      state.viewSize = ""
+      viewPath = ""
+      navigate("/browse")
+    end
+
+    -- ===== Prompt (shared by New Folder and Rename) =====
+    local function openPrompt(title, hint, onOk)
+      state.promptTitle = title
+      state.promptHint  = hint
+      state.promptValue = ""
+      state.promptError = ""
+      pendingOp = onOk
+      navigate("/prompt")
+      focus("promptField")
+    end
+
+    function promptCancel()
+      pendingOp = nil
+      state.promptValue = ""
+      state.promptError = ""
+      navigate("/browse")
+    end
+
+    function promptOk()
+      local name = (state.promptValue or ""):gsub("^%s+", ""):gsub("%s+$", "")
+      if name == "" then
+        state.promptError = "Empty name"
+        return
+      end
+      if name:find("/", 1, true) then
+        state.promptError = "No slashes"
+        return
+      end
+      local op = pendingOp
+      pendingOp = nil
+      state.promptValue = ""
+      state.promptError = ""
+      if op then op(name) end
+    end
+
+    function newFolder()
+      openPrompt("New folder", "Created in " .. state.cwd, function(name)
+        local target = joinPath(state.cwd, name)
+        if sd.exists(target) then
+          state.status = "Already exists"
+        else
+          local ok, err = sd.mkdir(target)
+          state.status = ok and ("Created: " .. name) or ("mkdir failed: " .. (err or "?"))
+        end
+        refreshNow(nil)
+        navigate("/browse")
+      end)
+    end
+
+    function renameCurrent()
+      if viewPath == "" then return end
+      local oldName = state.viewName
+      openPrompt("Rename", "New name for " .. oldName, function(newName)
+        local newPath = joinPath(state.cwd, newName)
+        if sd.exists(newPath) then
+          state.status = "Already exists"
+          navigate("/browse")
+          return
+        end
+        local ok, err = sd.rename(viewPath, newPath)
+        if ok then
+          state.status   = "Renamed to " .. newName
+          viewPath       = newPath
+          state.viewName = newName
+        else
+          state.status = "Rename failed: " .. (err or "?")
+        end
+        refreshNow(nil)
+        navigate("/browse")
+      end)
+    end
+
+    function deleteCurrent()
+      if viewPath == "" then return end
+      local name = state.viewName
+      ui.confirm("Delete '" .. name .. "'?", function()
+        local ok, err = sd.remove(viewPath)
+        if ok then
+          state.status = "Deleted: " .. name
+          state.viewBody = ""
+          viewPath = ""
+          refreshNow(nil)
+          navigate("/browse")
+        else
+          state.status = "Delete failed: " .. (err or "?")
+        end
+      end)
+    end
+
+    function quitApp()
+      app.exit()
+    end
+
+    -- Boot: the retroactive state->UI flush means these top-level writes
+    -- reach the rendered page.
+    refreshNow("/")
+  </script>
+</app>

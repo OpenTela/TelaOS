@@ -8,6 +8,7 @@
 #include "engines/lua/lua_yaml.h"
 #include "engines/lua/lua_crypto.h"
 #include "engines/lua/lua_sd.h"
+#include "engines/lua/lua_usb.h"
 #include "utils/log_config.h"
 #include "esp_heap_caps.h"
 #include <cstring>
@@ -63,6 +64,7 @@ bool LuaEngine::init() {
     LuaYAML::registerAll(m_lua);
     LuaCrypto::registerAll(m_lua);
     LuaSd::registerAll(m_lua);
+    LuaUsb::registerAll(m_lua);
     
     LOG_I(Log::LUA, "Lua initialized successfully");
     return true;
