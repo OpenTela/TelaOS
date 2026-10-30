@@ -13,6 +13,7 @@
  */
 
 #include "ui/css_parser.h"
+#include "ui/css_colors.h"
 #include "ui/ui_coords.h"
 #include "ui/ui_html_internal.h"
 #include "core/core.h"
@@ -336,16 +337,8 @@ uint32_t Css::parseColorValue(std::string_view color) {
     while (!color.empty() && std::isspace(static_cast<unsigned char>(color.back()))) color = color.substr(0, color.size() - 1);
     if (!color.empty() && color[0] == '#') color = color.substr(1);
 
-    if (color == "black") return 0x000000;
-    if (color == "white") return 0xFFFFFF;
-    if (color == "red") return 0xFF0000;
-    if (color == "green") return 0x00FF00;
-    if (color == "blue") return 0x0000FF;
-    if (color == "yellow") return 0xFFFF00;
-    if (color == "cyan") return 0x00FFFF;
-    if (color == "magenta") return 0xFF00FF;
-    if (color == "gray" || color == "grey") return 0x808080;
-    if (color == "orange") return 0xFFA500;
+    uint32_t named;
+    if (cssNamedColor(color, named)) return named;  // all 148 CSS names (css_colors.h)
     if (color == "transparent") return 0x000000;
 
     char buf[8];

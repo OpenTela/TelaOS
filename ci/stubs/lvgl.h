@@ -346,6 +346,9 @@ inline void lv_obj_set_y(lv_obj_t* obj, int y) { if (obj && obj->mock_widget) ob
 inline void lv_label_set_text(lv_obj_t* obj, const char* txt) {
     if (obj && obj->mock_widget) obj->mock_widget->text = txt ? txt : "";
 }
+inline void lv_checkbox_set_text(lv_obj_t* obj, const char* txt) {
+    if (obj && obj->mock_widget) obj->mock_widget->text = txt ? txt : "";
+}
 inline void _unique_id(lv_obj_t* obj, const char* id) { if (obj && obj->mock_widget && id) obj->mock_widget->id = id; }
 
 // Event setters for mock
@@ -496,6 +499,7 @@ inline void lv_obj_set_style_pad_column(lv_obj_t* obj, int pad, int) {
 inline void lv_obj_add_flag(lv_obj_t*, int) {}
 inline void lv_obj_clear_flag(lv_obj_t*, int) {}
 inline void lv_label_set_text(lv_obj_t*, const char*) {}
+inline void lv_checkbox_set_text(lv_obj_t*, const char*) {}
 inline void lv_obj_set_pos(lv_obj_t*, int, int) {}
 inline void lv_obj_set_size(lv_obj_t*, int, int) {}
 inline void lv_obj_set_width(lv_obj_t*, int) {}
@@ -562,6 +566,7 @@ inline void lv_obj_align(lv_obj_t*, lv_align_t, int, int) {}
 inline void lv_obj_set_scroll_dir(lv_obj_t*, lv_dir_t) {}
 inline void lv_obj_set_scrollbar_mode(lv_obj_t*, int) {}
 inline void lv_obj_scroll_to_view(lv_obj_t*, int) {}
+inline void lv_obj_scroll_to_view_recursive(lv_obj_t*, int) {}
 inline void lv_obj_set_tile_id(lv_obj_t*, int, int, int) {}
 
 #ifndef lv_obj_set_flex_flow
