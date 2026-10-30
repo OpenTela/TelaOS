@@ -71,8 +71,9 @@ def run_sim(binary, out_dir, script=None, run=None, extra_data=None, timeout=300
         return -1, out + f"\n[sim_screens] timeout after {timeout}s\n"
 
 
-def firmware_apps(binary, extra_data, tmp):
-    """App names in launcher order, as the firmware prints them at boot."""
+def firmware_apps(binary, extra_data, tmp, roots):
+    """App names in launcher order, as the firmware prints them at boot. If that table is
+    gone (the boot log changed), the app folders: fewer apps (no native ones), never none."""
     _, out = run_sim(binary, tmp, run="wait 100", extra_data=extra_data, timeout=120)
     apps, inside = [], False
     for line in out.splitlines():
@@ -84,6 +85,10 @@ def firmware_apps(binary, extra_data, tmp):
             if not m:
                 break
             apps.append(m.group(1))
+    if not apps:
+        print("[screens] warning: no app table in the boot log, taking app folders instead", flush=True)
+        apps = sorted({p.parent.name for root in roots for p in Path(root).glob("apps/*/*.bax")
+                       if p.stem == p.parent.name})
     return apps
 
 
@@ -126,7 +131,7 @@ def shoot(binary, roots, extra_data, out_dir, work):
     out_dir.mkdir(parents=True, exist_ok=True)
     work.mkdir(parents=True, exist_ok=True)
     jobs = [("launcher", f"wait {LAUNCH_MS}\nshot launcher\n")]
-    for app in firmware_apps(binary, extra_data, work / "boot"):
+    for app in firmware_apps(binary, extra_data, work / "boot", roots):
         first, pages = bax_pages(app, roots)
         jobs.append((app, screens_script(app, first, pages)))
 

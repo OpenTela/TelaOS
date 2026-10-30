@@ -118,9 +118,11 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
+          # Only our own comment: a person quoting the marker must not be overwritten (nor could be)
           marker='<!-- telaos-sim-screens -->'
           id=$(gh api "repos/${GITHUB_REPOSITORY}/issues/${PR}/comments" --paginate \
-                 --jq ".[] | select(.body | startswith(\"${marker}\")) | .id" | head -n 1)
+                 --jq ".[] | select(.user.login == \"github-actions[bot]\" and (.body | startswith(\"${marker}\"))) | .id" \
+                 | head -n 1)
           if [ -n "$id" ]; then
             gh api -X PATCH "repos/${GITHUB_REPOSITORY}/issues/comments/${id}" -F body=@out/report.md > /dev/null
           else
