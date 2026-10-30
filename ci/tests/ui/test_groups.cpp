@@ -1,7 +1,7 @@
 /**
  * Test: Groups - tabs/swipe navigation
  * 
- * Check group with multiple pages
+ * Check group with multiple pages: they belong to the group, navigation reaches each of them
  */
 #include <cstdio>
 #include "lvgl.h"
@@ -81,22 +81,45 @@ int main() {
     // === Navigate within group ===
     printf("\nNavigate within group:\n");
     
-    TEST("showPage('main/stats') succeeds");
+    auto& grp = g_core.app().group(0);
+    
+    TEST("group 'main' holds its 3 pages");
     {
-        g_core.showPage("main/stats");
-        PASS();
+        if (grp.page_ids.size() == 3 && grp.page_ids[0] == "home" && grp.page_ids[2] == "profile") PASS();
+        else FAIL("pages are not in the group");
     }
     
-    TEST("showPage('main/profile') succeeds");
+    TEST("only 'settings' is a standalone page");
+    {
+        if (g_core.app().pagesCount() == 1 && g_core.app().pageId(0) == "settings") PASS();
+        else FAIL("group pages leaked into standalone pages");
+    }
+    
+    TEST("default: group shown on 'home'");
+    {
+        if (g_core.app().currentGroup() == 0 && grp.current_page_idx == 0) PASS();
+        else FAIL("group not shown");
+    }
+    
+    TEST("showPage('main/stats') goes to page 1");
+    {
+        g_core.showPage("main/stats");
+        if (g_core.app().currentGroup() == 0 && grp.current_page_idx == 1) PASS();
+        else FAIL("not on stats");
+    }
+    
+    TEST("showPage('main/profile') goes to page 2");
     {
         g_core.showPage("main/profile");
-        PASS();
+        if (grp.current_page_idx == 2) PASS();
+        else FAIL("not on profile");
     }
     
     TEST("showPage('main/home') back to first");
     {
         g_core.showPage("main/home");
-        PASS();
+        if (grp.current_page_idx == 0) PASS();
+        else FAIL("not on home");
     }
     
     // === Navigate to standalone page ===
@@ -105,13 +128,15 @@ int main() {
     TEST("showPage('settings') to standalone");
     {
         g_core.showPage("settings");
-        PASS();
+        if (g_core.app().currentPage() == 0 && g_core.app().currentGroup() < 0) PASS();
+        else FAIL("settings not shown");
     }
     
-    TEST("showPage('main') back to group");
+    TEST("showPage('main') back to group, default page");
     {
         g_core.showPage("main");
-        PASS();
+        if (g_core.app().currentGroup() == 0 && grp.current_page_idx == 0) PASS();
+        else FAIL("group not shown");
     }
     
     // === Summary ===
