@@ -8,7 +8,7 @@ every app the firmware lists (data/apps, native apps, sim/tests/fixtures/apps), 
 robot tests (sim/tests/*.sim) on --head, compares the screens pixel by pixel and writes:
 
     out/report.md        the PR comment: what changed, in words and in pictures
-                         (images from --image-url, if given)
+                         (images from --image-url, if given), and how much C is left in src/
     out/publish/         before/ after/ diff/ — only the screens that changed
     out/status.json      machine-readable summary
     out/shots-base/ out/shots-head/ out/tests/   everything, for artifacts (a .png and the
@@ -30,6 +30,7 @@ import sys
 import zlib
 from pathlib import Path
 
+from code_meter import measure as measure_code, summary as code_summary
 from tree_diff import describe
 
 MARKER = "<!-- telaos-sim-screens -->"
@@ -342,6 +343,8 @@ def report(entries, tests, meta, url):
                 out.append(f"- `{t['name']}`: {err}")
         if any(t["errors"] for t in tests):
             out.append("")
+    if meta.get("code"):
+        out += [code_summary(*meta["code"]), ""]
 
     described = [e for e in changed if e.get("changes")]
     if described:
@@ -441,12 +444,15 @@ def main():
 
     print("[screens] comparing ...", flush=True)
     entries = compare(out / "shots-base", out / "shots-head", out / "publish")
-    meta = {"base": args.base_label, "head": args.head_label, "base_built": base_bin is not None or not base}
+    code = (measure_code(head), measure_code(base) if base else None)  # how much C is left in src/
+    meta = {"base": args.base_label, "head": args.head_label, "base_built": base_bin is not None or not base,
+            "code": code}
     (out / "report.md").write_text(report(entries, tests, meta, args.image_url.rstrip("/")))
     ok = all(t["ok"] for t in tests)
     counts = {s: sum(1 for e in entries if e["status"] == s) for s in ("changed", "added", "removed", "same")}
     (out / "status.json").write_text(json.dumps({"ok": ok, "head_built": True, "base_built": meta["base_built"],
-                                                 "screens": counts, "tests": tests, "entries": entries},
+                                                 "screens": counts, "tests": tests, "entries": entries,
+                                                 "code": {"head": code[0], "base": code[1]}},
                                                 indent=1, ensure_ascii=False))
     print(f"[screens] {counts} · tests " + ", ".join(f"{t['name']} {t['passed']}/{t['failed']}" for t in tests))
     return 0 if ok else 1
