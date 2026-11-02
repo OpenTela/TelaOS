@@ -1809,7 +1809,9 @@ void build_table_part(const UI::StartTag& tag, const P::String& content, lv_obj_
             lv_obj_set_height(container, LV_SIZE_CONTENT);
         }
     } else if (tag.id == TagId::Td) {
-        lv_obj_set_flex_grow(container, 1);
+        // a cell takes its share of the row; colspan="2" takes two shares, as two cells would
+        const int span = atoi(a.get("colspan").c_str());
+        lv_obj_set_flex_grow(container, span > 1 ? span : 1);
         if (s_tableHasHeight && hAttr.empty()) {
             lv_obj_set_height(container, lv_pct(100));
         } else {

@@ -752,7 +752,8 @@ inline void lv_img_set_src(lv_obj_t*, const void*) {}
 inline void lv_img_set_zoom(lv_obj_t*, int) {}
 
 // Canvas
-inline void lv_canvas_set_buffer(lv_obj_t*, void*, int, int, int) {}
+// LVGL sizes a canvas by its buffer (an image sized by its source)
+inline void lv_canvas_set_buffer(lv_obj_t* obj, void*, int w, int h, int) { lv_obj_set_size(obj, w, h); }
 inline void lv_canvas_fill_bg(lv_obj_t*, lv_color_t, lv_opa_t) {}
 inline void lv_canvas_set_px(lv_obj_t*, int, int, lv_color_t, lv_opa_t) {}
 
