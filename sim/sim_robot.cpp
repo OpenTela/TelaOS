@@ -540,7 +540,9 @@ bool Robot::saveTree(const std::string& path) {
     lv_refr_now(nullptr);
     std::ofstream f(path);
     if (!f) return false;
-    f << "{\"time_ms\": " << lv_tick_get() << ",\n\"screen\":\n";
+    f << "{\"time_ms\": " << lv_tick_get() << ",\n";
+    if (hooks_.memJson) f << "\"mem\": " << hooks_.memJson() << ",\n";
+    f << "\"screen\":\n";
     dumpObj(f, lv_screen_active(), 0, hooks_.nameOf);
     f << ",\n\"top\":\n";
     dumpObj(f, lv_layer_top(), 0, hooks_.nameOf);
@@ -605,6 +607,24 @@ bool Robot::exec(const std::vector<std::string>& a, const std::string& where) {
             std::printf("[robot %6u] ✓ %s %s\n", t, a[1].c_str(), a[2].c_str());
         } else {
             fail(a[1] + (o ? (visible ? " is visible" : " is hidden") : " not found") + ", expected " + a[2]);
+        }
+        return true;
+    }
+    // expect mem.<heap>_<field> <value | lo..hi>   e.g. expect mem.dram_free 40000..999999
+    if (cmd == "expect" && need(3) && a[1].rfind("mem.", 0) == 0) {
+        double v = 0;
+        if (!hooks_.memValue) return fail("no memory model in this build");
+        if (!hooks_.memValue(a[1].substr(4), v)) {
+            fail(a[1] + ": no such memory figure (dram_|psram_ + free, min_free, largest, total, blocks, failed)");
+            return true;
+        }
+        char buf[32];
+        std::snprintf(buf, sizeof buf, "%.0f", v);
+        if (valueMatches(buf, unquote(a[2]))) {
+            ++passed_;
+            std::printf("[robot %6u] ✓ %s = %s\n", t, a[1].c_str(), buf);
+        } else {
+            fail(a[1] + " = " + buf + ", expected " + unquote(a[2]));
         }
         return true;
     }
@@ -673,6 +693,11 @@ bool Robot::exec(const std::vector<std::string>& a, const std::string& where) {
         }
         if (!ok) return fail("cannot write " + path);
         std::printf("[robot %6u] %s %s\n", t, cmd.c_str(), path.c_str());
+        return true;
+    }
+    if (cmd == "mem") {  // the watch's heaps right now, in the log
+        if (!hooks_.memJson) return fail("no memory model in this build");
+        std::printf("[robot %6u] mem %s\n", t, hooks_.memJson().c_str());
         return true;
     }
     if (cmd == "log") {
