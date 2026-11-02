@@ -202,6 +202,19 @@ static const char* APP_HIDDEN = R"HTML(
 </page></ui></app>
 )HTML";
 
+// Table, canvas and meter attributes: colspan, width/height, optimum
+static const char* APP_MORE_ATTRS = R"HTML(
+<app><ui default="/m"><page id="m">
+  <table id="tb"><tr><td colspan="2" id="wide">A</td><td id="one">B</td></tr></table>
+  <canvas id="cv" width="120" height="60"></canvas>
+  <p><meter id="good" min="0" max="10" low="3" high="7" optimum="1" value="1"></meter>
+     <meter id="soso" min="0" max="10" low="3" high="7" optimum="1" value="5"></meter>
+     <meter id="bad" min="0" max="10" low="3" high="7" optimum="1" value="9"></meter>
+     <meter id="edge" min="0" max="10" low="3" high="7" optimum="1" value="3"></meter>
+     <meter id="mid" min="0" max="10" low="3" high="7" value="9"></meter></p>
+</page></ui></app>
+)HTML";
+
 static const char* APP_FLOW = R"HTML(
 <app><ui default="/m"><page id="m">
   <!-- a comment > with a bracket -->
@@ -372,6 +385,22 @@ int main() {
     render(APP_HIDDEN);
     expectText("template/noscript/head hidden, fallbacks shown", "mn",
                "No video [audio] [iframe] Site [svg] Unknown Slotted");
+
+    printf("\nTable, canvas, meter attributes:\n");
+    render(APP_MORE_ATTRS);
+    expectTrue("<td colspan=2>: two shares of the row", byId("wide") && byId("wide")->flexGrow == 2 &&
+               byId("one") && byId("one")->flexGrow == 1);
+    const MW* cv = byId("cv");
+    const std::string cvSize = cv ? std::to_string(cv->w) + "x" + std::to_string(cv->h) : "no canvas";
+    expectTrue("<canvas width height>", cv && cv->w == 120 && cv->h == 60, cvSize.c_str());
+    const auto bar = [](const char* id) { return byId(id) ? byId(id)->bgcolor : 0u; };
+    expectTrue("<meter optimum>: in its part green", bar("good") == lv_color_hex(0x81C784).full);
+    expectTrue("<meter optimum>: next part yellow", bar("soso") == lv_color_hex(0xFFD54F).full);
+    expectTrue("<meter optimum>: far part red", bar("bad") == lv_color_hex(0xE57373).full);
+    expectTrue("<meter optimum>: on a boundary, the part nearer the optimum",
+               bar("edge") == lv_color_hex(0x81C784).full);
+    expectTrue("<meter> without optimum: outside [low, high] yellow, as before",
+               bar("mid") == lv_color_hex(0xFFD54F).full);
 
     printf("\nFlow:\n");
     render(APP_FLOW);

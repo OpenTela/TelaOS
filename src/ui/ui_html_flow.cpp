@@ -50,7 +50,8 @@ constexpr uint32_t kH2 = 0xDDDDDD;
 constexpr uint32_t kAccent = 0x4FC3F7;   // strong, b, links, dt
 constexpr uint32_t kDim = 0xAAAAAA;      // em, i, small, markers, captions
 constexpr uint32_t kCode = 0x81C784;     // code, kbd, samp
-constexpr uint32_t kMark = 0xFFD54F;     // mark, meter outside its optimum
+constexpr uint32_t kMark = 0xFFD54F;     // mark, meter next to its optimum
+constexpr uint32_t kBad = 0xE57373;      // meter far from its optimum
 constexpr uint32_t kRule = 0x555555;     // hr, borders, bar track
 constexpr uint32_t kPanel = 0x222222;    // dialog, placeholders
 constexpr uint32_t kInherit = 0xFF000000;
@@ -1283,6 +1284,7 @@ void imgElement(const TagRef& t, lv_obj_t* parent) {
     if (!w.empty()) a += " w=\"" + w + "\"";
     if (!h.empty()) a += " h=\"" + h + "\"";
     if (!oc.empty()) a += " onclick=\"" + oc + "\"";
+    if (const P::String alt = attr(t, "alt"); !alt.empty()) a += " alt=\"" + alt + "\"";  // shown if the file is not there
     if (!id.empty()) a += " id=\"" + id + "\"";
     create_image(a.c_str(), a.c_str() + a.size(), parent);
 }
@@ -1473,9 +1475,21 @@ void barElement(const TagRef& t, lv_obj_t* parent, bool meter) {
     lv_bar_set_range(b, 0, 1000);
     lv_bar_set_value(b, static_cast<int32_t>((v - mn) / span * 1000 + 0.5), LV_ANIM_OFF);
     uint32_t color = kAccent;
-    if (meter) {  // inside [low, high] (or no bounds) = fine; outside = warning
-        const double lo = attrNum(t.astart, t.aend, "low", mn), hi = attrNum(t.astart, t.aend, "high", mx);
-        color = (v < lo || v > hi) ? kMark : kCode;
+    if (meter) {
+        // HTML: low and high cut [min, max] in three parts; the part with optimum (the middle by
+        // default) is good, the next one not so good, the far one bad. A value on a boundary
+        // counts in the part nearer the optimum, as browsers draw it.
+        const auto clamp = [](double x, double a, double b) { return x < a ? a : x > b ? b : x; };
+        const double top = mx > mn ? mx : mn;
+        const double val = clamp(v, mn, top);
+        const double lo = clamp(attrNum(t.astart, t.aend, "low", mn), mn, top);
+        const double hi = clamp(attrNum(t.astart, t.aend, "high", top), lo, top);
+        const double opt = clamp(attrNum(t.astart, t.aend, "optimum", (mn + top) / 2), mn, top);
+        int far;  // parts from the optimum's to the value's
+        if (opt < lo) far = val <= lo ? 0 : val <= hi ? 1 : 2;
+        else if (opt > hi) far = val >= hi ? 0 : val >= lo ? 1 : 2;
+        else far = (val >= lo && val <= hi) ? 0 : 1;
+        color = far == 0 ? kCode : far == 1 ? kMark : kBad;
     }
     lv_obj_set_style_radius(b, 5, LV_PART_MAIN);
     lv_obj_set_style_bg_color(b, lv_color_hex(kRule), LV_PART_MAIN);
