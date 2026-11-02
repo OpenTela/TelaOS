@@ -7,10 +7,12 @@ Builds the simulator (sim/ of --head) against both checkouts, photographs every 
 every app the firmware lists (data/apps, native apps, sim/tests/fixtures/apps), runs the
 robot tests (sim/tests/*.sim) on --head, compares the screens pixel by pixel and writes:
 
-    out/report.md        the PR comment (images from --image-url, if given)
+    out/report.md        the PR comment: what changed, in words and in pictures
+                         (images from --image-url, if given)
     out/publish/         before/ after/ diff/ — only the screens that changed
     out/status.json      machine-readable summary
-    out/shots-base/ out/shots-head/ out/tests/   everything, for artifacts
+    out/shots-base/ out/shots-head/ out/tests/   everything, for artifacts (a .png and the
+                         widget tree .json of every screen)
 
 Exit code 1 if --head does not build or a robot test fails. A changed screen is not a
 failure: it is what a reviewer looks at. Python standard library only.
@@ -28,7 +30,10 @@ import sys
 import zlib
 from pathlib import Path
 
+from tree_diff import describe
+
 MARKER = "<!-- telaos-sim-screens -->"
+SAME_TREE = "Виджеты те же — изменились только цвета, шрифты или картинки"
 BOOT_MS = 500     # virtual ms before the first command: the launcher is up
 LAUNCH_MS = 1000  # after "app launch": the app's default page is drawn
 NAV_MS = 400      # after "ui nav": the page is drawn
@@ -118,11 +123,16 @@ def bax_pages(app, roots):
     return None, []
 
 
+def snap(name):
+    """The picture of a screen and its widget tree, taken at the same moment."""
+    return [f"shot {name}", f"tree {name}"]
+
+
 def screens_script(app, first, pages):
     lines = [f"wait {BOOT_MS}", f"> app launch {app}", f"wait {LAUNCH_MS}",
-             f"shot {app}__{first}" if first else f"shot {app}"]
+             *snap(f"{app}__{first}" if first else app)]
     for path, name in pages:
-        lines += [f"> ui nav {path}", f"wait {NAV_MS}", f"shot {app}__{name}"]
+        lines += [f"> ui nav {path}", f"wait {NAV_MS}", *snap(f"{app}__{name}")]
     return "\n".join(lines) + "\n"
 
 
@@ -130,7 +140,7 @@ def shoot(binary, roots, extra_data, out_dir, work):
     """Every screen into out_dir: the launcher, then each app in its own simulator process."""
     out_dir.mkdir(parents=True, exist_ok=True)
     work.mkdir(parents=True, exist_ok=True)
-    jobs = [("launcher", f"wait {LAUNCH_MS}\nshot launcher\n")]
+    jobs = [("launcher", "\n".join([f"wait {LAUNCH_MS}", *snap("launcher")]) + "\n")]
     for app in firmware_apps(binary, extra_data, work / "boot", roots):
         first, pages = bax_pages(app, roots)
         jobs.append((app, screens_script(app, first, pages)))
@@ -253,6 +263,15 @@ def diff_image(before, after):
     return changed, (w, h, bytes(out))
 
 
+def changes(before, after):
+    """What changed on a screen, in words, from its two widget trees; None if a tree is missing."""
+    try:
+        trees = [json.loads(Path(p).read_text("utf-8")) for p in (before, after)]
+    except (OSError, ValueError):
+        return None
+    return describe(*trees) or [SAME_TREE]
+
+
 def compare(base_dir, head_dir, publish):
     names = sorted({p.stem for d in (base_dir, head_dir) if d.is_dir() for p in d.glob("*.png")})
     entries = []
@@ -277,6 +296,9 @@ def compare(base_dir, head_dir, publish):
                 if img:
                     (publish / "diff").mkdir(parents=True, exist_ok=True)
                     write_png(publish / "diff" / f"{name}.png", *img)
+                words = changes(base_dir / f"{name}.json", head_dir / f"{name}.json")
+                if words is not None:
+                    e["changes"] = words
         for kind, src in (("before", a), ("after", b)):
             if e["status"] != "same" and src.exists():
                 (publish / kind).mkdir(parents=True, exist_ok=True)
@@ -321,6 +343,21 @@ def report(entries, tests, meta, url):
         if any(t["errors"] for t in tests):
             out.append("")
 
+    described = [e for e in changed if e.get("changes")]
+    if described:
+        out += ["**Что изменилось**", ""]
+        for e in described[:MAX_ROWS]:
+            words = e["changes"]
+            if len(words) == 1:
+                w = words[0]
+                w = w if w[1:2].isupper() else w[:1].lower() + w[1:]  # "QR-код" stays
+                out.append(f"- {screen_title(e['name'])}: {w}")
+            else:
+                out.append(f"- {screen_title(e['name'])}")
+                out += [f"    - {w}" for w in words]  # 4 spaces: nested on GitHub and everywhere
+        if len(described) > MAX_ROWS:
+            out.append("- И ещё: " + ", ".join(screen_title(e["name"]) for e in described[MAX_ROWS:]))
+        out.append("")
     if changed:
         out += ["| Экран | До | После | Разница |", "|---|---|---|---|"]
         for e in changed[:MAX_ROWS]:

@@ -120,6 +120,15 @@ int main(int argc, char** argv) {
         return true;
     };
     hooks.console = [](const std::string& line) { Serial.appendInput((line + "\n").c_str()); };
+    // Ids the author wrote; generated ones ("_html_3", "_sw1") change from run to run
+    hooks.nameOf = [](const lv_obj_t* o) -> std::string {
+        DynamicApp& app = g_core.app();
+        for (int i = 0; i < app.elementsCount(); ++i) {
+            const UI::Element* e = app.elementAt(i);
+            if (e && e->obj() == o && !e->id.empty() && e->id.c_str()[0] != '_') return e->id.c_str();
+        }
+        return {};
+    };
 
     Sim::Robot robot(panel, advance, opt.out_dir, hooks);
     bool ok = true;

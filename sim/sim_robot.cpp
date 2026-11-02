@@ -357,13 +357,20 @@ lv_obj_t* findText(lv_obj_t* o, const std::string& text, int& x, int& y) {
     return nullptr;
 }
 
-void dumpObj(std::ostream& f, lv_obj_t* o, int depth) {
+using NameOf = std::function<std::string(const lv_obj_t*)>;
+
+void dumpObj(std::ostream& f, lv_obj_t* o, int depth, const NameOf& nameOf) {
     lv_area_t a;
     lv_obj_get_coords(o, &a);
     const lv_obj_class_t* cls = lv_obj_get_class(o);
     const std::string pad(depth * 2, ' ');
     f << pad << "{\"type\": " << jsonEscape(cls && cls->name ? cls->name : "obj");
-    if (const char* n = objName(o)) f << ", \"name\": " << jsonEscape(n);
+    if (const char* n = objName(o)) {
+        f << ", \"name\": " << jsonEscape(n);
+    } else if (nameOf) {
+        const std::string id = nameOf(o);
+        if (!id.empty()) f << ", \"name\": " << jsonEscape(id.c_str());
+    }
     f << ", \"x\": " << a.x1 << ", \"y\": " << a.y1 << ", \"w\": " << lv_area_get_width(&a)
       << ", \"h\": " << lv_area_get_height(&a);
     if (!lv_obj_is_visible(o)) f << ", \"visible\": false";
@@ -380,7 +387,7 @@ void dumpObj(std::ostream& f, lv_obj_t* o, int depth) {
     if (n) {
         f << ", \"children\": [\n";
         for (uint32_t i = 0; i < n; ++i) {
-            dumpObj(f, lv_obj_get_child(o, i), depth + 1);
+            dumpObj(f, lv_obj_get_child(o, i), depth + 1, nameOf);
             f << (i + 1 < n ? ",\n" : "\n");
         }
         f << pad << "]";
@@ -534,9 +541,9 @@ bool Robot::saveTree(const std::string& path) {
     std::ofstream f(path);
     if (!f) return false;
     f << "{\"time_ms\": " << lv_tick_get() << ",\n\"screen\":\n";
-    dumpObj(f, lv_screen_active(), 0);
+    dumpObj(f, lv_screen_active(), 0, hooks_.nameOf);
     f << ",\n\"top\":\n";
-    dumpObj(f, lv_layer_top(), 0);
+    dumpObj(f, lv_layer_top(), 0, hooks_.nameOf);
     f << "\n}\n";
     return true;
 }

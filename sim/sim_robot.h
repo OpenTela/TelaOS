@@ -16,7 +16,8 @@
 //   expect $var <value>      check app state variable (TelaOS)
 //   > <console line>         type a line into the firmware serial console (TelaOS)
 //   shot <name>              save <out>/<name>.png
-//   tree <name>              save <out>/<name>.json: widget tree with boxes and values
+//   tree <name>              save <out>/<name>.json: widget tree with boxes, values and
+//                            the ids the app gave its elements ("name")
 //   log <text> | quit
 #pragma once
 
@@ -33,6 +34,8 @@ struct RobotHooks {
     std::function<lv_obj_t*(const std::string& id)> findById;
     std::function<bool(const std::string& var, std::string& value)> stateVar;
     std::function<void(const std::string& line)> console;
+    // The id the app gave this object, or "" (generated ids are not names)
+    std::function<std::string(const lv_obj_t* obj)> nameOf;
 };
 
 class Robot {
