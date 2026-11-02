@@ -1550,6 +1550,12 @@ void create_qr(const char *astart, const char *aend, const char *content, lv_obj
     // Initial render (empty payload -> leave blank, qrcodegen rejects 0-length)
     if (!payload.empty()) {
         lv_qrcode_update(qr, payload.c_str(), payload.length());
+    } else {
+        // Blank = all light. lv_qrcode_set_size() clears the pixels but not the two-colour
+        // palette in front of them: without this the square shows whatever colour was in
+        // that memory before (a different one on every boot)
+        lv_canvas_set_palette(qr, 0, lv_color_to_32(lv_color_hex(lightRgb), LV_OPA_COVER));
+        lv_canvas_set_palette(qr, 1, lv_color_to_32(lv_color_hex(darkRgb), LV_OPA_COVER));
     }
 
     // Store element
