@@ -9,7 +9,8 @@ robot tests (sim/tests/*.sim) on --head, compares the screens pixel by pixel and
 
     out/report.md        the PR comment: what changed, in words and in pictures
                          (images from --image-url, if given), the watch's memory on every
-                         screen, and how much C is left in src/
+                         screen, how much C is left in src/, and with --pages N: N random
+                         pages through both builds (sim_pages.py)
     out/publish/         before/ after/ diff/ — only the screens that changed
     out/status.json      machine-readable summary
     out/shots-base/ out/shots-head/ out/tests/   everything, for artifacts (a .png and the
@@ -33,6 +34,7 @@ from pathlib import Path
 
 from code_meter import measure as measure_code, summary as code_summary
 import mem_report
+import sim_pages
 from tree_diff import describe
 
 MARKER = "<!-- telaos-sim-screens -->"
@@ -348,6 +350,7 @@ def report(entries, tests, meta, url):
     if meta.get("code"):
         out += [code_summary(*meta["code"]), ""]
     out += meta.get("memory", [])
+    out += meta.get("pages", [])
 
     described = [e for e in changed if e.get("changes")]
     if described:
@@ -408,6 +411,8 @@ def main():
     ap.add_argument("--image-url", default="", help="where out/publish/ will be served from")
     ap.add_argument("--base-label", default="")
     ap.add_argument("--head-label", default="")
+    ap.add_argument("--pages", type=int, default=0, help="random pages through both builds (sim_pages.py)")
+    ap.add_argument("--pages-seed", type=int, default=1)
     args = ap.parse_args()
 
     head = Path(args.head).resolve()
@@ -447,17 +452,23 @@ def main():
 
     print("[screens] comparing ...", flush=True)
     entries = compare(out / "shots-base", out / "shots-head", out / "publish")
+    pages = None
+    if args.pages and base_bin:
+        print(f"[screens] {args.pages} random pages through both builds ...", flush=True)
+        pages = sim_pages.check(base_bin, head_bin, out / "pages", args.pages, args.pages_seed)
     code = (measure_code(head), measure_code(base) if base else None)  # how much C is left in src/
     mem_base, mem_head = mem_report.load(out / "shots-base"), mem_report.load(out / "shots-head")
     meta = {"base": args.base_label, "head": args.head_label, "base_built": base_bin is not None or not base,
-            "code": code, "memory": mem_report.lines(mem_base, mem_head)}
+            "code": code, "memory": mem_report.lines(mem_base, mem_head),
+            "pages": sim_pages.lines(pages)}
     (out / "report.md").write_text(report(entries, tests, meta, args.image_url.rstrip("/")))
     ok = all(t["ok"] for t in tests)
     counts = {s: sum(1 for e in entries if e["status"] == s) for s in ("changed", "added", "removed", "same")}
     (out / "status.json").write_text(json.dumps({"ok": ok, "head_built": True, "base_built": meta["base_built"],
                                                  "screens": counts, "tests": tests, "entries": entries,
                                                  "code": {"head": code[0], "base": code[1]},
-                                                 "memory": {"head": mem_head, "base": mem_base}},
+                                                 "memory": {"head": mem_head, "base": mem_base},
+                                                 "pages": sim_pages.summary(pages)},
                                                 indent=1, ensure_ascii=False))
     print(f"[screens] {counts} · tests " + ", ".join(f"{t['name']} {t['passed']}/{t['failed']}" for t in tests))
     return 0 if ok else 1
