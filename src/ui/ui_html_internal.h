@@ -88,6 +88,13 @@ static inline uint32_t rgb_to_native(uint32_t rgb) {
     return (b << 24) | (g << 16) | (r << 8) | 0xFF;
 }
 
+/// <input type="range" step>: the nearest of min, min + step, min + 2·step… (halfway goes up, as in HTML)
+constexpr int32_t snapToStep(int32_t value, int32_t min, int32_t step) {
+    if (step <= 1 || value <= min) return value;
+    const int32_t k = (value - min + step / 2) / step;
+    return min + k * step;
+}
+
 /// Parse color string (#RGB, #RRGGBB, or decimal) to RGB888
 uint32_t parse_color(const char* s);
 bool is_color(const char* s);  // "#RGB", "#RRGGBB" or a CSS color name

@@ -57,6 +57,8 @@ public:
 
     // Value of the attribute `name`; "" if it is absent or empty
     P::String get(const char* name) const;
+    // The attribute is there, with a value or without one (`checked`, `selected`); any case
+    bool has(std::string_view name) const;
     // <label ... />
     bool selfClosing() const { return !text_.empty() && text_.back() == '/'; }
     std::string_view text() const { return text_; }

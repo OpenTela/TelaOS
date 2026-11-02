@@ -45,6 +45,9 @@ bool isPositioned(const char* tag, const char* astart, const char* aend);
 // The flow box of a container: the container itself if it is one, else its implicit root
 lv_obj_t* flowBox(lv_obj_t* parent);
 
+// <label for="id">: a tap on `label` works the control with that id, as in a browser
+void labelFor(lv_obj_t* label, const char* id);
+
 // ui.setText() on an element built here (text with spans, a block, a checkbox, <li>, <dialog>).
 // false: not ours, the caller handles it.
 bool setText(lv_obj_t* obj, const char* text);

@@ -15,6 +15,8 @@
 #include "ui/xml_utils.h"
 #include "ui/css_parser.h"
 #include "ui/css_colors.h"
+#include "ui/ui_html_flow.h"
+#include "ui/ui_tag_reader.h"
 #include "ui_layout.h"
 #include "widgets/widgets.h"
 #include "widgets/widget_common.h"
@@ -102,6 +104,14 @@ static void applyStaticDisabled(lv_obj_t* obj, const CommonAttrs& attrs) {
         (attrs.disabled == "true" || attrs.disabled == "1")) {
         lv_obj_add_state(obj, LV_STATE_DISABLED);
     }
+}
+
+// A boolean attribute: present without a value (HTML: <input readonly>) or "true"/"1" (TelaOS)
+static bool flagAttr(const char* astart, const char* aend, const char* name) {
+    const UI::Attrs a(std::string_view(astart, static_cast<size_t>(aend - astart)));
+    if (!a.has(name)) return false;
+    const P::String v = a.get(name);
+    return v.empty() || v == "true" || v == "1" || v == name;
 }
 
 static void ensureId(CommonAttrs& attrs, const char* prefix, bool hasDynamicContent = false) {
@@ -229,6 +239,11 @@ static void slider_event_handler(lv_event_t *e) {
     
     lv_obj_t *slider = g_core.app().elements[idx]->obj();
     int value = lv_slider_get_value(slider);
+    const auto& el = *g_core.app().elements[idx];
+    if (const int snapped = snapToStep(value, el.sliderMin, el.sliderStep); snapped != value) {
+        lv_slider_set_value(slider, snapped, LV_ANIM_OFF);  // step="5": the thumb stops on 0, 5, 10…
+        value = snapped;
+    }
     char val_str[SMALL_BUF_LEN];
     snprintf(val_str, sizeof(val_str), "%d", value);
     
@@ -639,6 +654,8 @@ void create_label(const char *astart, const char *aend, const char *content, lv_
     };
     widget.create(parent);
     auto *lbl = widget.handle;
+    // <label for="id">: a tap on the label works that control, as in a browser
+    if (const P::String target = getAttr(astart, aend, "for"); !target.empty()) HtmlFlow::labelFor(lbl, target.c_str());
     
     // Apply CSS (tag, #id, .class cascade)
     {
@@ -1047,6 +1064,7 @@ void create_slider(const char *astart, const char *aend, lv_obj_t *parent) {
     int32_t w = getAttrSize(astart, aend, "w", Defaults::Slider::WIDTH);
     int min_val = getAttrInt(astart, aend, "min", Defaults::Slider::MIN);
     int max_val = getAttrInt(astart, aend, "max", Defaults::Slider::MAX);
+    const int step = getAttrInt(astart, aend, "step", 0);
     
     ensureId(attrs, "_sl", !bind.empty() || !onchange.empty());
     
@@ -1054,7 +1072,7 @@ void create_slider(const char *astart, const char *aend, lv_obj_t *parent) {
     int initValue = 0;
     if (!bind.empty()) {
         if (auto *init_val = get_state_value(bind.c_str())) {
-            initValue = atoi(init_val);
+            initValue = snapToStep(atoi(init_val), min_val, step);
         }
     }
     
@@ -1087,6 +1105,10 @@ void create_slider(const char *astart, const char *aend, lv_obj_t *parent) {
     applyStaticDisabled(sld.obj, attrs);
     sld.zIndex      = attrs.zIndex;
     int idx = g_core.app().addElement(sld);
+    if (idx >= 0 && idx < (int)g_core.app().elements.size()) {
+        g_core.app().elements[idx]->sliderStep = step;
+        g_core.app().elements[idx]->sliderMin = min_val;
+    }
     
     widget.on(LV_EVENT_VALUE_CHANGED, slider_event_handler, idx);
     widget.on(LV_EVENT_RELEASED, slider_event_handler, idx);
@@ -1102,6 +1124,8 @@ void create_input(const char *astart, const char *aend, const char *content, lv_
     auto placeholder = getAttr(astart, aend, "placeholder");
     auto bgcolorAttr = getAttr(astart, aend, "bgcolor");
     auto colorAttr = getAttr(astart, aend, "color");
+    const int maxLength = getAttrInt(astart, aend, "maxlength", 0);
+    const bool readOnly = flagAttr(astart, aend, "readonly");  // shown, but no keyboard
     
     int32_t x = getAttrCoordW(astart, aend, "x", 0, parent);
     int32_t y = getAttrCoordH(astart, aend, "y", 0, parent);
@@ -1132,6 +1156,7 @@ void create_input(const char *astart, const char *aend, const char *content, lv_
     };
     widget.create(parent);
     auto *ta = widget.handle;
+    if (maxLength > 0) lv_textarea_set_max_length(ta, static_cast<uint32_t>(maxLength));
     
     // Apply bgcolor: explicit or transparent
     if (!bgcolorAttr.empty()) {
@@ -1170,7 +1195,7 @@ void create_input(const char *astart, const char *aend, const char *content, lv_
     int idx = g_core.app().addElement(ind);
     
     widget.on(LV_EVENT_VALUE_CHANGED, input_event_handler, idx);
-    widget.on(LV_EVENT_FOCUSED, input_focus_handler, idx);
+    if (!readOnly) widget.on(LV_EVENT_FOCUSED, input_focus_handler, idx);
     widget.on(LV_EVENT_DEFOCUSED, input_defocus_handler, idx);
     widget.on(LV_EVENT_DEFOCUSED, input_complete_handler, idx);
 }
@@ -1601,7 +1626,14 @@ static void dropdown_event_handler(lv_event_t *e) {
     lv_obj_t *dd = g_core.app().elements[idx]->obj();
     uint16_t sel = lv_dropdown_get_selected(dd);
 
-    const auto& values = g_core.app().elements[idx]->dropdownValues;
+    auto& el = *g_core.app().elements[idx];
+    if (sel < el.dropdownDisabled.size() && el.dropdownDisabled[sel]) {
+        lv_dropdown_set_selected(dd, el.dropdownChosen);  // <option disabled>: cannot be chosen
+        return;
+    }
+    el.dropdownChosen = sel;
+
+    const auto& values = el.dropdownValues;
     if (sel >= values.size()) return;
 
     const char* val = values[sel].c_str();
@@ -1624,41 +1656,31 @@ static void dropdown_event_handler(lv_event_t *e) {
 struct SelectOptions {
     P::Array<P::String> values;
     P::Array<P::String> labels;
-    P::String           lvglStr;   // "Label1\nLabel2\n..."
+    P::Array<bool>      disabled;       // <option disabled>
+    int                 selected = -1;  // <option selected>, the first one
+    P::String           lvglStr;        // "Label1\nLabel2\n..."
 };
 
+// The <option>s of a <select>, read like a browser reads them: </option> may be left out
 static SelectOptions parse_options(const char* content) {
     SelectOptions out;
     if (!content) return out;
-
-    const char* p = content;
-    while (*p) {
-        const char* tag = strstr(p, "<option");
-        if (!tag) break;
-
-        const char* attrStart = tag + 7;
-        const char* gt = strchr(attrStart, '>');
-        if (!gt) break;
-
-        char valBuf[64] = {};
-        bool hasValue = getAttr(attrStart, gt, "value", valBuf, sizeof(valBuf));
-
-        const char* textStart = gt + 1;
-        const char* close = strstr(textStart, "</option>");
-        if (!close) { p = gt + 1; continue; }
-
-        P::String label = trimmed(P::String(textStart, close - textStart));
+    UI::TagReader reader(content);
+    UI::StartTag tag;
+    for (auto step = reader.next(tag); step != UI::TagReader::Step::End; step = reader.next(tag)) {
+        if (step != UI::TagReader::Step::Tag || tag.name != "option") continue;
+        P::String label = trimmed(reader.content(tag));
         if (contains(label, '{')) label = render_template(label.c_str());
+        P::String value = tag.attrs.get("value");
+        if (value.empty()) value = label;
+        else if (contains(value, '{')) value = render_template(value.c_str());
 
-        P::String value = hasValue ? P::String(valBuf) : label;
-        if (contains(value, '{')) value = render_template(value.c_str());
-
+        if (out.selected < 0 && tag.attrs.has("selected")) out.selected = static_cast<int>(out.values.size());
+        out.disabled.push_back(tag.attrs.has("disabled"));
         out.values.push_back(value);
         out.labels.push_back(label);
         if (!out.lvglStr.empty()) out.lvglStr += '\n';
         out.lvglStr += label;
-
-        p = close + 9;
     }
     return out;
 }
@@ -1684,14 +1706,18 @@ void create_select(const char *astart, const char *aend, const char *content, lv
     lv_obj_t* dd = lv_dropdown_create(parent);
     lv_dropdown_set_options(dd, opts.lvglStr.c_str());
 
-    // Initial selection from state
-    int initIdx = 0;
+    // Initial selection: the state, else <option selected>, else the first option that can be chosen
+    int initIdx = opts.selected;
     if (!bind.empty()) {
         if (const char* sv = get_state_value(bind.c_str()); sv && sv[0]) {
             for (int i = 0; i < (int)opts.values.size(); ++i) {
                 if (opts.values[i] == sv) { initIdx = i; break; }
             }
         }
+    }
+    if (initIdx < 0) {
+        initIdx = 0;
+        while (initIdx + 1 < (int)opts.disabled.size() && opts.disabled[initIdx]) ++initIdx;
     }
     lv_dropdown_set_selected(dd, (uint16_t)initIdx);
 
@@ -1730,8 +1756,10 @@ void create_select(const char *astart, const char *aend, const char *content, lv
     int elemIdx = g_core.app().addElement(sd);
 
     if (elemIdx >= 0 && elemIdx < (int)g_core.app().elements.size()) {
-        g_core.app().elements[elemIdx]->is_dropdown    = true;
-        g_core.app().elements[elemIdx]->dropdownValues = std::move(opts.values);
+        g_core.app().elements[elemIdx]->is_dropdown      = true;
+        g_core.app().elements[elemIdx]->dropdownValues   = std::move(opts.values);
+        g_core.app().elements[elemIdx]->dropdownDisabled = std::move(opts.disabled);
+        g_core.app().elements[elemIdx]->dropdownChosen   = static_cast<uint16_t>(initIdx);
 
         if (attrs.hasDynamicVisible && !attrs.visible.empty()) {
             P::String vb  = extractBindVar(attrs.visible.c_str());

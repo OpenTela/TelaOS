@@ -1,4 +1,4 @@
-# HTML Tags v0.1
+# HTML Tags v0.2
 
 Стандартные HTML-элементы в TelaOS: все элементы справочника MDN
 ([HTML elements reference](https://developer.mozilla.org/en-US/docs/Web/HTML/Reference/Elements)),
@@ -6,6 +6,8 @@
 
 ## Changelog
 
+- **v0.2**: Атрибуты форм: `<label for>`, `<option selected>` и `disabled` (а `</option>` можно опустить),
+  `maxlength` и `readonly` у полей, `step` у ползунка, `disabled` у любых полей и кнопок, `<fieldset disabled>`.
 - **v0.1**: Все элементы справочника MDN. Поток HTML на странице, в `<div>` и `<td>`; текст прямо
   в контейнере; опущенные закрывающие теги; `<input type=…>` по HTML. Тесты: CI (mock) и симулятор.
 
@@ -119,17 +121,17 @@
 
 | Элемент | Статус | В TelaOS |
 |---------|--------|----------|
-| `form`, `fieldset`, `legend` | актуальный | блок; `fieldset` — рамка, `legend` приглушена |
+| `form`, `fieldset`, `legend` | актуальный | блок; `fieldset` — рамка, `legend` приглушена; `<fieldset disabled>` выключает все поля и кнопки внутри |
 | `input` без `type` | — | **TelaOS** `<input>` (как раньше) |
-| `input type="text"` (и `email`, `search`, `tel`, `url`, `number`, `date`…) | актуальный | TelaOS-поле: `bind`, `placeholder`, `value`, события |
+| `input type="text"` (и `email`, `search`, `tel`, `url`, `number`, `date`…) | актуальный | TelaOS-поле: `bind`, `placeholder`, `value`, `maxlength`, `readonly` (текст виден, клавиатура не открывается), `disabled`, события |
 | `input type="password"` | актуальный | поле с `password="true"` |
 | `input type="checkbox"`, `"radio"` | актуальный | флажок: `checked`, `disabled`, `bind` ("true"/"false"), `onchange`; радио — группа по `name` |
-| `input type="range"` | актуальный | TelaOS `<slider>`: `min`, `max`, `value`, `bind` |
-| `input type="submit"`, `"reset"`, `"button"` | актуальный | TelaOS `<button>` с текстом `value`, `onclick` |
+| `input type="range"` | актуальный | TelaOS `<slider>`: `min`, `max`, `step` (ползунок встаёт на min + k·step, `value` тоже), `value`, `bind`, `disabled` |
+| `input type="submit"`, `"reset"`, `"button"` | актуальный | TelaOS `<button>` с текстом `value`, `onclick`, `disabled` |
 | `input type="image"` | актуальный | как `img` |
 | `input type="hidden"` | актуальный | ничего |
-| `textarea` | актуальный | многострочное поле, содержимое — начальный текст, `rows` → высота |
-| `button`, `label`, `select`, `option` | актуальный | **TelaOS** (`<select>` с `<option>` — уже HTML-совместим) |
+| `textarea` | актуальный | многострочное поле, содержимое — начальный текст, `rows` → высота, `maxlength`, `readonly`, `disabled` |
+| `button`, `label`, `select`, `option` | актуальный | **TelaOS**. `<label for="id">`: тап по подписи — как тап по полю (флажок переключается, радио включается, поле открывает клавиатуру, список раскрывается). `<option selected>` — выбран сразу, если `bind` не задаёт другое; `<option disabled>` выбрать нельзя; без них выбран первый доступный. `</option>` можно не писать |
 | `optgroup`, `datalist` | актуальный | не отображаются |
 | `selectedcontent` | экспериментальный | внутри `<select>` игнорируется |
 | `progress` | актуальный | полоса 160px: `value`/`max` |
@@ -206,6 +208,8 @@
 - `id` у строчного элемента внутри текста (`<span id>`) не адресуется: у него нет своего объекта.
 - `<label>` и `<button>` — TelaOS-виджеты: HTML-теги внутри них показываются как текст.
 - `img` с несуществующим файлом не заменяется на `alt`.
+- `<option disabled>` в раскрытом списке выглядит как остальные: выбрать его нельзя, но он не серый
+  (у списка LVGL один стиль на все пункты).
 - SVG, MathML, видео и звук не воспроизводятся — только запасное содержимое или рамка.
 
 ## Тесты
