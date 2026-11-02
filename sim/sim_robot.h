@@ -14,6 +14,9 @@
 //   expect @id contains <v>  substring of the value
 //   expect <@id|"text"> :visible | :hidden   on screen, or hidden / scrolled out of view
 //   expect $var <value>      check app state variable (TelaOS)
+//   expect mem.<figure> <v>  the watch's memory: dram_|psram_ + free, min_free, largest,
+//                            total, blocks, failed (ranges: 40000..999999)
+//   mem                      log the watch's memory
 //   > <console line>         type a line into the firmware serial console (TelaOS)
 //   shot <name>              save <out>/<name>.png
 //   tree <name>              save <out>/<name>.json: widget tree with boxes, values and
@@ -36,6 +39,9 @@ struct RobotHooks {
     std::function<void(const std::string& line)> console;
     // The id the app gave this object, or "" (generated ids are not names)
     std::function<std::string(const lv_obj_t* obj)> nameOf;
+    // The watch's heaps: JSON for `tree` and `mem`, one figure for `expect mem.<figure>`
+    std::function<std::string()> memJson;
+    std::function<bool(const std::string& figure, double& value)> memValue;
 };
 
 class Robot {

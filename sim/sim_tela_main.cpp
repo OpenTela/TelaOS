@@ -11,6 +11,7 @@
 #include "sim_robot.h"
 #include "sim_tela.h"
 #include "sim_window.h"
+#include "sim_heap.h"
 
 #include "Arduino.h"
 #include "core/core.h"
@@ -31,6 +32,8 @@ namespace {
 struct Options {
     bool headless = false;
     int zoom = 1;
+    size_t dram_kb = 0;   // the watch's heaps; 0 = the estimate in sim_heap.h
+    size_t psram_kb = 0;
     std::string out_dir = "shots";
     std::string data_dir = TELAOS_DATA_DIR;
     std::vector<std::string> extra_data;  // test fixtures flashed on top of data/
@@ -54,6 +57,8 @@ bool parseArgs(int argc, char** argv, Options& o) {
         else if (a == "--zoom") o.zoom = std::atoi(v);
         else if (a == "--data") o.data_dir = v;
         else if (a == "--extra-data") o.extra_data.push_back(v);
+        else if (a == "--dram-kb") o.dram_kb = std::strtoul(v, nullptr, 10);
+        else if (a == "--psram-kb") o.psram_kb = std::strtoul(v, nullptr, 10);
         else return false;
     }
     return true;
@@ -65,7 +70,7 @@ int main(int argc, char** argv) {
     Options opt;
     if (!parseArgs(argc, argv, opt)) {
         std::printf("TelaOS simulator: --headless | --script <file> | --run \"<cmds>\" | --out <dir> | "
-                    "--zoom <n> | --data <dir> | --extra-data <dir>\n");
+                    "--zoom <n> | --data <dir> | --extra-data <dir> | --dram-kb <n> | --psram-kb <n>\n");
         return 2;
     }
     std::setvbuf(stdout, nullptr, _IOLBF, 0);
@@ -96,6 +101,7 @@ int main(int argc, char** argv) {
         const uint32_t wall_start = SDL_GetTicks();
         // wall_start by value: the hook outlives this block
         SimTela::setDelayHook([&window, &closed, wall_start](uint32_t) {
+            SimHeap::Host host;  // the window is the simulator's, not the watch's memory
             if (!window.pump()) closed = true;
             window.present();
             const uint32_t wall = SDL_GetTicks() - wall_start;
@@ -103,12 +109,20 @@ int main(int argc, char** argv) {
         });
     }
 
-    setup();  // firmware boot: display_init() → SimDevice, launcher
+    // The firmware's memory is the watch's: two heaps sized like the chip's (sim_heap.h)
+    SimHeap::configure(opt.dram_kb * 1024, opt.psram_kb * 1024);
+    {
+        SimHeap::Firmware fw;
+        setup();  // firmware boot: display_init() → SimDevice, launcher
+    }
 
     // Virtual time moves only through the firmware's own loop(): each pass ends with delay(5).
     auto advance = [&](uint32_t ms) -> bool {
         const uint32_t target = SimTela::now() + ms;
-        while (SimTela::now() < target && !closed) loop();
+        while (SimTela::now() < target && !closed) {
+            SimHeap::Firmware fw;
+            loop();
+        }
         return !closed;
     };
 
@@ -129,6 +143,22 @@ int main(int argc, char** argv) {
         }
         return {};
     };
+    hooks.memJson = [] { return SimHeap::json(); };
+    hooks.memValue = [](const std::string& figure, double& value) {
+        const size_t cut = figure.find('_');
+        if (cut == std::string::npos) return false;
+        const std::string heap = figure.substr(0, cut), field = figure.substr(cut + 1);
+        if (heap != "dram" && heap != "psram") return false;
+        const SimHeap::Stats s = SimHeap::stats(heap == "dram" ? SimHeap::DRAM : SimHeap::PSRAM);
+        if (field == "free") value = static_cast<double>(s.free);
+        else if (field == "min_free") value = static_cast<double>(s.min_free);
+        else if (field == "largest") value = static_cast<double>(s.largest_free);
+        else if (field == "total") value = static_cast<double>(s.total);
+        else if (field == "blocks") value = static_cast<double>(s.blocks);
+        else if (field == "failed") value = static_cast<double>(s.failed);
+        else return false;
+        return true;
+    };
 
     Sim::Robot robot(panel, advance, opt.out_dir, hooks);
     bool ok = true;
@@ -144,12 +174,21 @@ int main(int argc, char** argv) {
         }
     } else if (!has_window && opt.scripts.empty() && opt.runs.empty()) {
         advance(2000);
-        lv_refr_now(nullptr);
+        {
+            SimHeap::Firmware fw;
+            lv_refr_now(nullptr);
+        }
         panel.savePng(opt.out_dir + "/screen.png");
     }
 
     std::printf("[sim] virtual time %u ms, %u frames, %u flushes\n", SimTela::now(), panel.frames(),
                 panel.flushes());
+    for (const SimHeap::Region r : {SimHeap::DRAM, SimHeap::PSRAM}) {
+        const SimHeap::Stats s = SimHeap::stats(r);
+        std::printf("[sim] %s%s: free %zu of %zu, lowest %zu, largest block %zu, %zu blocks, %zu failed\n",
+                    r == SimHeap::DRAM ? "DRAM" : "PSRAM", SimHeap::estimated() ? " (estimate)" : "", s.free,
+                    s.total, s.min_free, s.largest_free, s.blocks, s.failed);
+    }
     std::printf("[sim] robot: %d passed, %d failed\n", robot.passed(), robot.failed());
     if (has_window) window.close();
     return (ok && robot.failed() == 0) ? 0 : 1;
