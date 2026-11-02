@@ -82,7 +82,7 @@ jobs:
           if [ "$SAME_REPO" = "true" ]; then
             url="https://raw.githubusercontent.com/${GITHUB_REPOSITORY}/sim-screens/pr-${PR}/${HEAD_SHA}"
           fi
-          python3 head/sim/tools/sim_screens.py --head head --base base --out out \
+          python3 head/sim/tools/sim_screens.py --head head --base base --out out --pages 300 \
             --image-url "$url" --base-label "${BASE_SHA::7}" --head-label "${HEAD_SHA::7}" \
             || echo "failed=1" >> "$GITHUB_OUTPUT"
 
