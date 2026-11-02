@@ -120,6 +120,13 @@
         <p>Sum: <output>42</output></p>
         <input type="submit" id="send" value="Send" onclick="submitted">
         <input type="hidden" name="secret" value="x">
+        <p><label for="terms">Terms</label> <input type="checkbox" id="terms"></p>
+        <select id="lang">
+          <option value="en">English</option><option value="ru" selected>Русский</option><option disabled>Klingon</option>
+        </select>
+        <input type="range" id="steps" min="0" max="10" step="5" value="3">
+        <input type="text" id="fixed" value="fixed" readonly>
+        <fieldset disabled><legend>Locked</legend><input type="checkbox" id="locked"> off</fieldset>
         <p id="home_forms"><a href="/home">Home</a></p>
       </form>
     </page>

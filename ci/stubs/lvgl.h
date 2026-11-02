@@ -437,6 +437,9 @@ inline void lv_textarea_set_password_mode(lv_obj_t* obj, bool en) {
 inline void lv_textarea_set_text(lv_obj_t* obj, const char* txt) {
     if (obj && obj->mock_widget) obj->mock_widget->text = txt ? txt : "";
 }
+inline void lv_textarea_set_max_length(lv_obj_t* obj, uint32_t n) {
+    if (obj && obj->mock_widget) obj->mock_widget->maxLength = (int)n;
+}
 
 #define lv_obj_set_style_bg_color lv_obj_set_style_bg_color
 #define lv_obj_set_style_text_color lv_obj_set_style_text_color
@@ -717,6 +720,10 @@ inline void lv_textarea_set_placeholder_text(lv_obj_t*, const char*) {}
 inline void lv_textarea_set_password_mode(lv_obj_t*, bool) {}
 #endif
 inline void lv_textarea_set_one_line(lv_obj_t*, bool) {}
+#ifndef LVGL_MOCK_ENABLED
+inline void lv_textarea_set_max_length(lv_obj_t*, uint32_t) {}
+#endif
+inline void lv_dropdown_open(lv_obj_t*) {}
 inline const char* lv_textarea_get_text(lv_obj_t* obj) {
     if (obj && obj->mock_widget) return obj->mock_widget->text.c_str();
     return "";

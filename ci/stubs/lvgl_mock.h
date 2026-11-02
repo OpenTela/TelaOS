@@ -52,6 +52,7 @@ struct Widget {
     // Input
     std::string placeholder;
     bool password = false;
+    int maxLength = 0;       // lv_textarea_set_max_length
     
     // Flex layout
     int flexFlow = -1;
