@@ -1,4 +1,4 @@
-# Simulator v0.2
+# Simulator v0.3
 
 Настоящая прошивка TelaOS на ПК: тот же `src/`, LVGL 9.2 из `lib/lvgl`, `include/lv_conf.h`,
 шрифты, Lua, `data/`. Окно, где мышь — палец; робот, который тапает и проверяет; скриншоты
@@ -6,6 +6,8 @@
 
 ## Changelog
 
+- **v0.3**: Счётчик «сишных» мест: `sim/tools/code_meter.py`, в отчёте PR — сколько их было
+  и стало в `src/`.
 - **v0.2**: Изменения словами: `sim/tools/tree_diff.py` сравнивает деревья виджетов «до» и
   «после», в отчёте PR — раздел «Что изменилось». В дереве `tree` — id, которые элементам дал
   автор приложения.
@@ -121,6 +123,19 @@ python3 sim/tools/sim_screens.py --head . --base ../telaos-future --out build/sc
 или картинки». Одни и те же деревья всегда дают одни и те же слова. Вручную:
 `python3 sim/tools/tree_diff.py before.json after.json`. Тесты:
 `python3 -m unittest discover -s sim/tools -p 'test_*.py'`.
+
+### Сколько в коде осталось C
+
+Рефакторинг ведёт код от C на сырых указателях к типизированному C++. `sim/tools/code_meter.py`
+считает в `src/` то, что типы заменяют: `strcmp` и его родню, `strstr`/`strchr`, `snprintf`,
+`strcpy`/`strcat`, буферы `char x[N]`, голые `malloc`/`free`. Комментарии и строки не считаются,
+шрифты (`src/font/*.c`) — тоже. В отчёте PR одна строка:
+
+```
+Сишные места в src/: 451 → 437 (−14): `strcmp` −10, `char x[N]` −4
+```
+
+Вручную: `python3 sim/tools/code_meter.py <checkout> [<база>]` — плюс самые «сишные» файлы.
 
 ## Проверка PR
 
