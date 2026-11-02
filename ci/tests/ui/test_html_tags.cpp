@@ -180,6 +180,8 @@ static const char* APP_FORMS = R"HTML(
     <meter id="mt" min="0" max="10" value="5"></meter>
     <select id="sel"><option value="a">A</option><option value="b">B</option></select>
     <input id="tela" bind="name"/>
+    <input checked type="checkbox" id="cb3">
+    <input disabled id="off" type="checkbox">
   </form>
 </page></ui></app>
 )HTML";
@@ -363,6 +365,8 @@ int main() {
     expectTrue("meter 5 of 0..10 -> 500/1000", byId("mt") && byId("mt")->curValue == 500);
     expectTrue("select stays TelaOS dropdown", byId("sel") && byId("sel")->type == "Dropdown");
     expectTrue("input without type= stays TelaOS input", byId("tela") && byId("tela")->type == "TextArea");
+    expectTrue("checked before type=: still a checked checkbox", byId("cb3") && byId("cb3")->checked);
+    expectTrue("disabled before id=: the id is kept", byId("off") != nullptr);
 
     printf("\nHidden and fallback content:\n");
     render(APP_HIDDEN);
