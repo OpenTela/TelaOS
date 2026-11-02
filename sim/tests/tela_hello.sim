@@ -21,3 +21,7 @@ wait 1500
 shot tela_03_result
 expect $_stdout contains "Thank you, Анатолий"
 expect @stdin "Анатолий"
+
+# the watch's memory held: nothing failed to allocate on the way
+expect mem.dram_failed 0
+expect mem.psram_failed 0
