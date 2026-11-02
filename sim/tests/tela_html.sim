@@ -1,0 +1,152 @@
+# tela_html.sim — standard HTML elements (MDN element reference) on the real TelaOS engine.
+# Fixture: sim/tests/fixtures/apps/html_tags (flashed with --extra-data sim/tests/fixtures).
+# Every page is reached by tapping its <a href>, like a person would. See docs/HTML_TAGS.md.
+
+wait 300
+> app launch html_tags
+wait 800
+
+# ---- home: headings, inline text, links, live {count} -----------------------------------
+expect "HTML tags" :visible
+expect @intro "Every current element of the MDN reference, on a watch."
+expect @taps "Taps: 0"
+tap @inc
+tap @inc
+expect $count 2
+expect @taps "Taps: 2"
+shot html_01_home
+
+# ---- text semantics ------------------------------------------------------------------
+tap "Text"
+wait 200
+expect @h2 "Text"
+expect "Heading 3" :visible
+expect @inline1 "b strong i em u ins s del mark small H2O x2"
+expect @inline2 "code Ctrl samp x “quote” cite dfn HTML today seven"
+expect @inline3 "bdi span tela(TL) longword"
+expect @entities "& <tag> © — € A"
+expect @lines contains "first line"
+expect @lines contains "second line"
+expect @code contains "  indented"
+expect @code contains "    more"
+expect @quote "Simplicity is prerequisite for reliability."
+expect @addr "watch@example.com"
+expect @obsolete "font big tt strike"
+expect @centered "center"
+expect @literal "<b>not bold</b>"
+expect @ticker "marquee keeps scrolling"
+shot html_02_text
+scroll @home_text
+tap @home_text
+wait 200
+
+# ---- lists: markers, numbering, omitted end tags --------------------------------------
+tap "Lists"
+wait 200
+expect @ul contains "Apple"
+expect @ul contains "Nested"
+expect @ul contains "Plum"
+expect "3." :visible
+expect "4." :visible
+expect "ii." :visible
+expect "i." :visible
+expect "Z." :visible
+expect "AA." :visible
+expect @dl "Term Definition Unclosed Implied end"
+shot html_03_lists
+scroll @home_lists
+tap @home_lists
+wait 200
+
+# ---- blocks: div text, figure, fieldset, table with caption/th -------------------------
+tap "Blocks"
+wait 200
+expect @plain "Text right inside a div"
+expect @figimg :visible
+expect @cap "Figure caption"
+expect "Fieldset" :visible
+expect "Inside the frame" :visible
+expect "Cities" :visible
+expect @tbl "Cities City Temp Moscow -3"
+shot html_04_blocks
+tap @home_blocks
+wait 200
+
+# ---- forms -----------------------------------------------------------------------------
+tap "Forms"
+wait 200
+expect @agree off
+tap @agree
+expect @agree on
+expect $agree "true"
+expect @r1 on
+expect @r2 off
+tap @r2
+expect @r2 on
+expect @r1 off
+tap @r2
+expect @r2 on
+expect @vol 4
+expect @notes "Hello & welcome"
+expect @load 700
+expect @disk 900
+expect @city "Moscow"
+expect $sent "no"
+tap "Send"
+expect $sent "yes"
+shot html_05_forms
+# typing opens the on-screen keyboard over the lower half: last on this page
+expect @who ""
+> ui type who Anatoly
+wait 100
+expect $name "Anatoly"
+expect @who "Anatoly"
+shot html_05_forms_keyboard
+> ui nav home
+wait 200
+
+# ---- live: bindings in plain and formatted text, details, dialog, in-page anchor -------
+tap "Live"
+wait 200
+expect @plainLive "Count is 2"
+expect @richLive "Count is 2 now"
+expect "An evolutionary OS for watches." :hidden
+tap "What is TelaOS?"
+expect "An evolutionary OS for watches." :visible
+expect "Visible answer" :visible
+shot html_06_details
+tap "What is TelaOS?"
+expect "An evolutionary OS for watches." :hidden
+expect @dlg :hidden
+tap @openDlg
+expect $dialogOpen "true"
+expect @dlg :visible
+expect @dlg contains "Modal on top of the page."
+shot html_07_dialog
+tap @closeDlg
+expect @dlg :hidden
+expect "The end" :hidden
+tap "Jump"
+wait 600
+expect "The end" :visible
+shot html_08_anchor
+> ui nav home
+wait 200
+
+# ---- media: fallback content, placeholders, hidden elements ----------------------------
+tap "Media"
+wait 200
+expect @vid "Video is not supported on the watch."
+expect @aud "[audio]"
+expect @frame "[iframe] Example site"
+expect @obj "Object fallback text"
+expect @pic "[svg]"
+expect @cnv :visible
+expect @picimg :visible
+expect "noscript is hidden" :hidden
+expect "template is hidden" :hidden
+expect "Unknown element shows its content." :visible
+shot html_09_media
+tap @home_media
+wait 200
+expect @taps "Taps: 2"

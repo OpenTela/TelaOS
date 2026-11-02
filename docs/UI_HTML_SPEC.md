@@ -1,9 +1,10 @@
-# UI HTML Specification v0.7
+# UI HTML Specification v0.8
 
 Декларативный язык разметки для создания интерфейсов на ESP32 с LVGL.
 
 ## Changelog
 
+- **v0.8**: Стандартные HTML-элементы (`p`, `h1`–`h6`, `ul`/`ol`/`li`, `a`, `img`, `form`, `details`, `dialog`…), полный список — [HTML_TAGS.md](HTML_TAGS.md). Текст прямо в странице, `<div>`, `<td>`. `<input type=…>` по HTML. Виджеты без `x`/`y`/`align` на странице с HTML встают в поток. `<br>`, `<img>` без `/>`, `<td>`/`<li>`/`<p>` без закрывающего тега. Все 148 имён цветов CSS (`green` теперь `#008000`, как в браузере; ярко-зелёный — `lime`).
 - **v0.7**: `oninput` для input. Canvas: `ondraw`, `ontap`, `onhold`. `onclick` с аргументами. `overflow` для label.
 - **v0.6**: Namespaces (`ui.*`, `app.*`, `net.*`, `timer.*`). Templates + `@for`. `<table>`/`<tr>`/`<td>`. setTimeout порядок аргументов. CSV/YAML API.
 - **v0.5**: z-index (HTML атрибут, CSS, setAttr)
@@ -345,7 +346,29 @@ canvas.refresh("draw")
 | `<tr>` | `h`, `visible`, `bgcolor` | Flex-row (строка) |
 | `<td>` | `w`, `visible`, `bgcolor` | Flex-cell (ячейка). Без `w` → равные доли |
 
-Дочерние виджеты внутри `<td>` заполняют ячейку целиком.
+Дочерние виджеты внутри `<td>` заполняют ячейку целиком. Текст прямо в `<td>` тоже виден;
+`<th>`, `<caption>`, `<thead>`/`<tbody>`/`<tfoot>` — как в HTML.
+
+---
+
+## Стандартный HTML
+
+Кроме TelaOS-виджетов, движок понимает стандартные HTML-элементы: блоки идут сверху вниз,
+текст переносится, как в браузере. Виджеты с `x`/`y`/`align` остаются на своих местах.
+
+```html
+<page id="main">
+  <h1>Погода</h1>
+  <p>Сегодня <b>+3°</b>, ветер <i>слабый</i>. <a href="/week">На неделю</a></p>
+  <ul>
+    <li>Утром туман
+    <li>Днём солнце
+  </ul>
+  <details><summary>Подробнее</summary><p>Давление 750 мм</p></details>
+</page>
+```
+
+Все элементы справочника MDN и что с каждым делает TelaOS — [HTML_TAGS.md](HTML_TAGS.md).
 
 ---
 

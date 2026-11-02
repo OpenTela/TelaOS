@@ -11,6 +11,7 @@
 #include "ui/ui_types.h"
 #include "ui/html_parser.h"
 #include "ui/css_parser.h"
+#include "ui/ui_html_flow.h"
 #include "utils/string_utils.h"
 #include "ui/xml_utils.h"
 #include "utils/font.h"
@@ -976,11 +977,11 @@ void ui_set_text_internal(const char *id, const char *text) {
     
     // TODO: Наши шрифты поддерживают только ASCII + кириллицу.
     // Нужно сделать warning или горячую замену Unicode символов.
-    if (lv_obj_get_child_cnt(obj) > 0) {
-        lv_label_set_text(lv_obj_get_child(obj, 0), text);
-    } else {
-        lv_label_set_text(obj, text);
-    }
+    if (HtmlFlow::setText(obj, text)) return;  // HTML text with spans, blocks, checkboxes
+    lv_obj_t *label = (lv_obj_get_child_cnt(obj) > 0) ? lv_obj_get_child(obj, 0) : obj;
+    // Only a label takes text: a slider, bar or image has none (and must not be written as one)
+    if (!lv_obj_check_type(label, &lv_label_class)) return;
+    lv_label_set_text(label, text);
 }
 
 void ui_set_switch(const char *id, bool checked) {
@@ -1606,13 +1607,31 @@ void parse_children(const char *html, int len, lv_obj_t *parent) {
         LOG_D(Log::UI, "preprocess: %d -> %d bytes", len, (int)expanded.size());
     }
     
+    // HTML here (text, <p>, <ul>...): the container flows like a browser page, and its
+    // TelaOS widgets without x/y/align take their place in that flow (see ui_html_flow.h)
+    const bool flowHere = HtmlFlow::hasHtml(p, end - p);
+    
     char tag[TAG_BUF_LEN];
     
     while (p < end) {
+        // Direct text and inline HTML (<b>, <a>, <br>...) form one line box, as in a browser
+        if (flowHere) {
+            const char *run = HtmlFlow::inlineRun(p, end, parent);
+            if (run != p) {
+                p = run;
+                continue;
+            }
+        }
         while (p < end && *p != '<') p++;
         if (p >= end) break;
         p++;
         
+        // <!-- comment --> may contain '>'
+        if (end - p >= 3 && strncmp(p, "!--", 3) == 0) {
+            const char *c = strstr(p + 3, "-->");
+            p = (c && c < end) ? c + 3 : end;
+            continue;
+        }
         if (*p == '/' || *p == '!') {
             while (p < end && *p != '>') p++;
             if (p < end) p++;
@@ -1644,50 +1663,69 @@ void parse_children(const char *html, int len, lv_obj_t *parent) {
         p++;
         
         P::String content;
-        if (!self_close) {
+        // HTML void elements (<br>, <hr>, <img>, <input type=...>) have no end tag
+        // (TelaOS <input> without type= keeps its own rule)
+        const bool htmlVoid = HtmlFlow::isVoid(tag) &&
+                              (strcmp(tag, Element::Input) != 0 || HtmlFlow::isHtmlInput(astart, aend));
+        if (!self_close && !htmlVoid) {
             const char *cstart = p;
             const char *cend = nullptr;
-            // Div is nestable — use depth-aware close
-            if (strcmp(tag, Element::Div) == 0) {
+            // Div and HTML containers are nestable — use depth-aware close
+            if (strcmp(tag, Element::Div) == 0 || HtmlFlow::isNestable(tag)) {
                 cend = findTagClose(p, tag);
             } else {
                 char closing[PATTERN_BUF_LEN];
                 snprintf(closing, sizeof(closing), "</%s>", tag);
                 cend = strstr(p, closing);
             }
-            if (cend && cend < end) {
+            // <td>, <tr>, <li>, <p> may omit their end tag: such an element ends at the next
+            // sibling that implies it (<td>1<td>2), not at a later </td> of another cell
+            const char *implied = HtmlFlow::hasOptionalEnd(tag) ? HtmlFlow::impliedEnd(tag, p, end) : nullptr;
+            if (implied && (!cend || cend >= end || implied < cend)) {
+                content.assign(cstart, implied - cstart);
+                p = implied;
+            } else if (cend && cend < end) {
                 content.assign(cstart, cend - cstart);
                 p = cend + tagCloseLen(tag);
             }
         }
         
+        lv_obj_t *const host = (flowHere && !HtmlFlow::isPositioned(tag, astart, aend))
+                                   ? HtmlFlow::flowBox(parent)
+                                   : parent;
+        
         if (strcmp(tag, Element::Label) == 0) {
-            create_label(astart, aend, content.c_str(), parent);
+            create_label(astart, aend, content.c_str(), host);
         } else if (strcmp(tag, Element::Button) == 0) {
-            create_button(astart, aend, content.c_str(), parent);
+            create_button(astart, aend, content.c_str(), host);
         } else if (strcmp(tag, Element::Switch) == 0) {
-            create_switch(astart, aend, parent);
+            create_switch(astart, aend, host);
         } else if (strcmp(tag, Element::Slider) == 0) {
-            create_slider(astart, aend, parent);
+            create_slider(astart, aend, host);
         } else if (strcmp(tag, Element::Input) == 0) {
-            create_input(astart, aend, content.c_str(), parent);
+            // <input type="checkbox|radio|range|submit|..."> follows HTML; without type= it is TelaOS input
+            if (HtmlFlow::isHtmlInput(astart, aend)) {
+                HtmlFlow::create(tag, astart, aend, content.c_str(), host);
+            } else {
+                create_input(astart, aend, content.c_str(), host);
+            }
         } else if (strcmp(tag, Element::Canvas) == 0) {
-            create_canvas(astart, aend, parent);
+            create_canvas(astart, aend, host);
         } else if (strcmp(tag, Element::Image) == 0) {
-            create_image(astart, aend, parent);
+            create_image(astart, aend, host);
         } else if (strcmp(tag, Element::Markdown) == 0) {
-            create_markdown(astart, aend, content.c_str(), parent);
+            create_markdown(astart, aend, content.c_str(), host);
         } else if (strcmp(tag, Element::Qr) == 0) {
-            create_qr(astart, aend, content.c_str(), parent);
+            create_qr(astart, aend, content.c_str(), host);
         } else if (strcmp(tag, Element::Tabs) == 0) {
-            create_tabs(astart, aend, content.c_str(), parent);
+            create_tabs(astart, aend, content.c_str(), host);
         } else if (strcmp(tag, Element::Select) == 0) {
-            create_select(astart, aend, content.c_str(), parent);
+            create_select(astart, aend, content.c_str(), host);
         } else if (strcmp(tag, Element::List) == 0) {
-            create_list(astart, aend, content.c_str(), parent);
+            create_list(astart, aend, content.c_str(), host);
         } else if (strcmp(tag, Element::Div) == 0) {
             // --- Div container (general-purpose, supports flex) ---
-            lv_obj_t *container = lv_obj_create(parent);
+            lv_obj_t *container = lv_obj_create(host);
             lv_obj_remove_style_all(container);
             lv_obj_clear_flag(container, LV_OBJ_FLAG_SCROLLABLE);
             
@@ -1711,12 +1749,13 @@ void parse_children(const char *html, int len, lv_obj_t *parent) {
             
             lv_obj_set_width(container, LV_SIZE_CONTENT);
             lv_obj_set_height(container, LV_SIZE_CONTENT);
+            if (host != parent) lv_obj_set_width(container, lv_pct(100));  // in HTML flow: a block
             if (!wAttr.empty()) lv_obj_set_width(container, parse_size(wAttr.c_str()));
             if (!hAttr.empty()) lv_obj_set_height(container, parse_size(hAttr.c_str()));
             
             if (!xAttr.empty() || !yAttr.empty()) {
-                int32_t xv = xAttr.empty() ? 0 : parse_coord_w(xAttr.c_str(), parent);
-                int32_t yv = yAttr.empty() ? 0 : parse_coord_h(yAttr.c_str(), parent);
+                int32_t xv = xAttr.empty() ? 0 : parse_coord_w(xAttr.c_str(), host);
+                int32_t yv = yAttr.empty() ? 0 : parse_coord_h(yAttr.c_str(), host);
                 lv_obj_set_pos(container, xv, yv);
             }
             
@@ -1823,7 +1862,13 @@ void parse_children(const char *html, int len, lv_obj_t *parent) {
                      flexAttr.empty() ? "-" : flexAttr.c_str());
             
             if (!content.empty()) {
-                parse_children(content.c_str(), content.length(), container);
+                // Direct text (<div>Hello</div>) used to be dropped; render it as HTML flow
+                if (HtmlFlow::hasFlowContent(content.c_str(), content.length())) {
+                    if (flexAttr.empty()) HtmlFlow::makeFlow(container);
+                    HtmlFlow::renderContent(content.c_str(), content.length(), container);
+                } else {
+                    parse_children(content.c_str(), content.length(), container);
+                }
             }
 
             // align="stretch" emulation: LVGL flex has no STRETCH enum value,
@@ -1843,7 +1888,7 @@ void parse_children(const char *html, int len, lv_obj_t *parent) {
                    strcmp(tag, Element::Tr) == 0 ||
                    strcmp(tag, Element::Td) == 0) {
             // --- Layout container ---
-            lv_obj_t *container = lv_obj_create(parent);
+            lv_obj_t *container = lv_obj_create(host);
             lv_obj_remove_style_all(container);  // clean slate: no theme defaults
             
             // Flex direction: table=column, tr=row, td=none
@@ -1868,7 +1913,8 @@ void parse_children(const char *html, int len, lv_obj_t *parent) {
             static bool s_tableHasHeight = false;
             
             if (strcmp(tag, Element::Table) == 0) {
-                lv_obj_set_width(container, LV_SIZE_CONTENT);
+                // in HTML flow a table is a block; content-sized, its 100%-wide rows would get 0
+                lv_obj_set_width(container, host != parent ? lv_pct(100) : LV_SIZE_CONTENT);
                 lv_obj_set_height(container, LV_SIZE_CONTENT);
                 s_tableHasHeight = !hAttr.empty();
             } else if (strcmp(tag, Element::Tr) == 0) {
@@ -1892,8 +1938,8 @@ void parse_children(const char *html, int len, lv_obj_t *parent) {
             if (!hAttr.empty()) lv_obj_set_height(container, parse_size(hAttr.c_str()));
             
             if (!xAttr.empty() || !yAttr.empty()) {
-                int32_t x = xAttr.empty() ? 0 : parse_coord_w(xAttr.c_str(), parent);
-                int32_t y = yAttr.empty() ? 0 : parse_coord_h(yAttr.c_str(), parent);
+                int32_t x = xAttr.empty() ? 0 : parse_coord_w(xAttr.c_str(), host);
+                int32_t y = yAttr.empty() ? 0 : parse_coord_h(yAttr.c_str(), host);
                 lv_obj_set_pos(container, x, y);
             }
             
@@ -1960,10 +2006,19 @@ void parse_children(const char *html, int len, lv_obj_t *parent) {
                      classAttr.empty() ? "-" : classAttr.c_str(),
                      visAttr.empty() ? "-" : visAttr.c_str());
             
-            // Recursive parse children
+            // Recursive parse children; direct cell text (<td>Moscow</td>) renders as HTML flow
             if (!content.empty()) {
-                parse_children(content.c_str(), content.length(), container);
+                if (strcmp(tag, Element::Td) == 0 &&
+                    HtmlFlow::hasFlowContent(content.c_str(), content.length())) {
+                    HtmlFlow::makeFlow(container);
+                    HtmlFlow::renderContent(content.c_str(), content.length(), container);
+                } else {
+                    parse_children(content.c_str(), content.length(), container);
+                }
             }
+        } else if (HtmlFlow::handles(tag)) {
+            // --- Standard HTML elements (p, h1, ul, img, details...) — see ui_html_flow.h ---
+            HtmlFlow::create(tag, astart, aend, content.c_str(), host);
         }
         
         // Apply flex-grow on any non-container child widget
@@ -1973,7 +2028,7 @@ void parse_children(const char *html, int len, lv_obj_t *parent) {
             strcmp(tag, Element::Td) != 0) {
             auto growVal = getAttr(astart, aend, "grow");
             if (!growVal.empty()) {
-                lv_obj_t* lastChild = lv_obj_get_child(parent, -1);
+                lv_obj_t* lastChild = lv_obj_get_child(host, -1);
                 if (lastChild) {
                     lv_obj_set_flex_grow(lastChild, atoi(growVal.c_str()));
                 }
@@ -1988,6 +2043,8 @@ int ui_html_render_internal(const char *html) {
     LOG_D(Log::UI, "render_internal: starting");
     
     const char *p = html;
+    
+    HtmlFlow::reset();  // a new app: the HTML layer forgets the previous one's objects
     
     // Pass 0: Parse <head>/<app> sections
     LOG_D(Log::UI, "render_internal: parse_head...");

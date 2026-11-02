@@ -14,6 +14,7 @@
 #include "ui/ui_html_internal.h"
 #include "ui/xml_utils.h"
 #include "ui/css_parser.h"
+#include "ui/css_colors.h"
 #include "ui_layout.h"
 #include "widgets/widgets.h"
 #include "widgets/widget_common.h"
@@ -22,6 +23,7 @@
 #include "utils/string_utils.h"
 #include "utils/log_config.h"
 #include <string>
+#include <cctype>
 
 #include "esp_heap_caps.h"
 
@@ -390,8 +392,29 @@ static void input_focus_handler(lv_event_t *e) {
     lv_obj_clear_flag(g_core.app().keyboards[page_idx], LV_OBJ_FLAG_HIDDEN);
 }
 
+// CSS named colors: color="teal", bgcolor="navy" (same table as CSS, see css_colors.h)
+static bool named_color(const char *s, uint32_t &rgb) {
+    return s && UI::cssNamedColor(s, rgb);
+}
+
+// "#RGB", "#RRGGBB", "RRGGBB" or a CSS color name
+bool is_color(const char *s) {
+    if (!s || !*s) return false;
+    uint32_t rgb;
+    if (named_color(s, rgb)) return true;
+    if (*s == '#') s++;
+    const size_t len = strlen(s);
+    if (len != 3 && len != 6) return false;
+    for (size_t i = 0; i < len; i++) {
+        if (!isxdigit((unsigned char)s[i])) return false;
+    }
+    return true;
+}
+
 uint32_t parse_color(const char *s) {
     if (!s) return 0xFFFFFF;
+    uint32_t named;
+    if (*s != '#' && named_color(s, named)) return named;
     if (*s == '#') s++;
     
     size_t len = strlen(s);
