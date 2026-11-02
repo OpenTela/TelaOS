@@ -1606,7 +1606,10 @@ void parse_children(const char *html, int len, lv_obj_t *parent) {
         end = p + expanded.length();
         LOG_D(Log::UI, "preprocess: %d -> %d bytes", len, (int)expanded.size());
     }
-    
+    // The markup actually scanned: `html`, or its expanded copy (another allocation —
+    // never compare pointers into one with the other)
+    const char *const begin = p;
+
     // HTML here (text, <p>, <ul>...): the container flows like a browser page, and its
     // TelaOS widgets without x/y/align take their place in that flow (see ui_html_flow.h)
     const bool flowHere = HtmlFlow::hasHtml(p, end - p);
@@ -1659,7 +1662,7 @@ void parse_children(const char *html, int len, lv_obj_t *parent) {
         while (p < end && *p != '>') p++;
         if (p >= end) break;
         const char *aend = p;
-        bool self_close = (p > html && *(p-1) == '/');
+        bool self_close = (p > begin && *(p-1) == '/');
         p++;
         
         P::String content;
