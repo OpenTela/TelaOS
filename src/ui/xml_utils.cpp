@@ -76,7 +76,12 @@ P::String getAttr(const char* start, const char* end, const char* name) {
         size_t alen = p - astart;
         
         while (p < end && std::isspace(static_cast<unsigned char>(*p))) p++;
-        if (p >= end || *p != '=') { p++; continue; }
+        if (p >= end || *p != '=') {
+            // An attribute without a value (`checked`, `open`): the next one starts right here.
+            // Step over a character only if no name was read (a stray '>'), else this would loop.
+            if (alen == 0) p++;
+            continue;
+        }
         p++;
         
         while (p < end && std::isspace(static_cast<unsigned char>(*p))) p++;
