@@ -131,6 +131,42 @@ int main() {
         }
     }
 
+    // An attribute without a value (checked, disabled, open) used to eat the first letter
+    // of the next one: <input checked type="checkbox"> had no type, so no checkbox
+    {
+        const char* attrs = " checked type=\"checkbox\" disabled id=\"x\" open class=\"c\"";
+        const char* end = attrs + strlen(attrs);
+
+        TEST("type after `checked`") {
+            auto val = getAttr(attrs, end, "type");
+            if (val == "checkbox") PASS();
+            else FAIL(val.empty() ? "lost" : val.c_str());
+        }
+
+        TEST("id after `disabled`") {
+            auto val = getAttr(attrs, end, "id");
+            if (val == "x") PASS();
+            else FAIL(val.empty() ? "lost" : val.c_str());
+        }
+
+        TEST("class after `open`") {
+            auto val = getAttr(attrs, end, "class");
+            if (val == "c") PASS();
+            else FAIL(val.empty() ? "lost" : val.c_str());
+        }
+    }
+
+    {
+        const char* attrs = "> id=\"q\"";  // a stray '>' is stepped over, not looped on
+        const char* end = attrs + strlen(attrs);
+
+        TEST("stray '>' before an attribute") {
+            auto val = getAttr(attrs, end, "id");
+            if (val == "q") PASS();
+            else FAIL(val.c_str());
+        }
+    }
+
     // === getAttrInt ===
     printf("\ngetAttrInt:\n");
 
