@@ -1,0 +1,201 @@
+<app os="1.0" title="HTML tags" version="0.1" category="test">
+  <!--
+    Test fixture for the standard HTML elements (MDN element reference) in TelaOS.
+    Flashed by the simulator with --extra-data; driven by tests/tela_html.sim.
+    No TelaOS coordinates below: everything is placed by HTML flow.
+  -->
+  <ui default="/home">
+
+    <page id="home">
+      <main>
+        <h1>HTML tags</h1>
+        <p id="intro">Every <b>current</b> element of the MDN reference, on a watch.</p>
+        <nav id="menu">
+          <a href="/text">Text</a> <a href="/lists">Lists</a> <a href="/blocks">Blocks</a>
+          <br>
+          <a href="/forms">Forms</a> <a href="/live">Live</a> <a href="/media">Media</a>
+        </nav>
+        <p id="taps">Taps: <strong>{count}</strong></p>
+        <button id="inc" onclick="increment">+1</button>
+      </main>
+    </page>
+
+    <page id="text">
+      <article>
+        <h2 id="h2">Text</h2>
+        <h3>Heading 3</h3>
+        <h6>Heading 6</h6>
+        <p id="inline1"><b>b</b> <strong>strong</strong> <i>i</i> <em>em</em> <u>u</u> <ins>ins</ins>
+           <s>s</s> <del>del</del> <mark>mark</mark> <small>small</small> H<sub>2</sub>O x<sup>2</sup></p>
+        <p id="inline2"><code>code</code> <kbd>Ctrl</kbd> <samp>samp</samp> <var>x</var> <q>quote</q>
+           <cite>cite</cite> <dfn>dfn</dfn> <abbr title="HyperText Markup Language">HTML</abbr>
+           <time datetime="2026-10-30">today</time> <data value="7">seven</data></p>
+        <p id="inline3"><bdi>bdi</bdi> <span style="color:#FF8A65">span</span>
+           <ruby>tela<rp>(</rp><rt>TL</rt><rp>)</rp></ruby> long<wbr>word</p>
+        <p id="entities">&amp; &lt;tag&gt; &copy; &mdash; &#8364; &#x41;</p>
+        <p id="lines">first line<br>second line</p>
+        <pre id="code">
+  indented
+    more</pre>
+        <blockquote id="quote">Simplicity is prerequisite for reliability.</blockquote>
+        <address id="addr">watch@example.com</address>
+        <hr>
+        <p id="obsolete"><font color="#FFD54F">font</font> <big>big</big> <tt>tt</tt> <strike>strike</strike></p>
+        <center id="centered">center</center>
+        <xmp id="literal"><b>not bold</b></xmp>
+        <marquee id="ticker">marquee keeps scrolling</marquee>
+        <p id="home_text"><a href="/home">Home</a></p>
+      </article>
+    </page>
+
+    <page id="lists">
+      <section>
+        <h2>Lists</h2>
+        <ul id="ul">
+          <li>Apple</li>
+          <li>Pear
+            <ul>
+              <li>Nested</li>
+            </ul>
+          </li>
+          <li>Plum
+        </ul>
+        <ol id="ol" start="3">
+          <li>three</li>
+          <li>four</li>
+        </ol>
+        <ol type="i" reversed>
+          <li>roman</li><li>last</li>
+        </ol>
+        <ol type="A"><li value="26">Z</li><li>AA</li></ol>
+        <dl id="dl">
+          <dt>Term</dt><dd>Definition</dd>
+          <dt>Unclosed<dd>Implied end</dl>
+        <menu><li>menu item</li></menu>
+        <p id="home_lists"><a href="/home">Home</a></p>
+      </section>
+    </page>
+
+    <page id="blocks">
+      <div id="plain">Text right inside a div</div>
+      <header><h2>Blocks</h2></header>
+      <section>
+        <aside>aside</aside>
+        <hgroup><h3>hgroup</h3><p>subtitle</p></hgroup>
+        <figure>
+          <img id="figimg" src="pic.png" alt="settings">
+          <figcaption id="cap">Figure caption</figcaption>
+        </figure>
+        <fieldset>
+          <legend>Fieldset</legend>
+          <p>Inside the frame</p>
+        </fieldset>
+        <search>search block</search>
+        <table id="tbl">
+          <caption>Cities</caption>
+          <thead><tr><th>City</th><th>Temp</th></tr></thead>
+          <tbody><tr><td>Moscow</td><td>-3</td></tr></tbody>
+        </table>
+      </section>
+      <footer id="home_blocks"><a href="/home">Home</a></footer>
+    </page>
+
+    <page id="forms">
+      <form>
+        <h2>Forms</h2>
+        <label>Name</label>
+        <input type="text" id="who" bind="name" placeholder="Your name">
+        <input type="password" id="pin" placeholder="PIN">
+        <p><input type="checkbox" id="agree" bind="agree"> I agree</p>
+        <p><input type="radio" id="r1" name="size" checked> Small
+           <input type="radio" id="r2" name="size"> Medium</p>
+        <input type="range" id="vol" min="0" max="10" value="4">
+        <textarea id="notes" rows="2">Hello &amp; welcome</textarea>
+        <p>Load <progress id="load" value="70" max="100"></progress></p>
+        <p>Disk <meter id="disk" value="0.9" low="0.2" high="0.8"></meter></p>
+        <select id="city" bind="city">
+          <option value="msk">Moscow</option>
+          <option value="spb">Saint Petersburg</option>
+        </select>
+        <p>Sum: <output>42</output></p>
+        <input type="submit" id="send" value="Send" onclick="submitted">
+        <input type="hidden" name="secret" value="x">
+        <p id="home_forms"><a href="/home">Home</a></p>
+      </form>
+    </page>
+
+    <page id="live">
+      <section>
+        <h2>Live</h2>
+        <p id="plainLive">Count is {count}</p>
+        <p id="richLive">Count is <b>{count}</b> now</p>
+        <details id="faq">
+          <summary>What is TelaOS?</summary>
+          <p>An evolutionary OS for watches.</p>
+        </details>
+        <details open>
+          <summary>Open by default</summary>
+          <p>Visible answer</p>
+        </details>
+        <p><button id="openDlg" onclick="openDialog">Open dialog</button></p>
+        <p id="jump"><a href="#endmark">Jump to the end</a> <a href="/home">Home</a></p>
+        <div h="420" bgcolor="#202830">A tall TelaOS div in the flow</div>
+        <p id="endmark">The end</p>
+      </section>
+      <dialog id="dlg" visible="{dialogOpen}">
+        <h3>Dialog</h3>
+        <p>Modal on top of the page.</p>
+        <button id="closeDlg" onclick="closeDialog">Close</button>
+      </dialog>
+    </page>
+
+    <page id="media">
+      <section>
+        <h2>Media</h2>
+        <video id="vid" src="clip.mp4">Video is not supported on the watch.</video>
+        <audio id="aud" src="beep.mp3"></audio>
+        <iframe id="frame" src="https://example.com" title="Example site"></iframe>
+        <object id="obj" data="movie.swf">Object fallback text</object>
+        <svg id="pic" width="40" height="40"><circle r="10"/></svg>
+        <canvas id="cnv" w="60" h="30"></canvas>
+        <picture>
+          <source srcset="big.png">
+          <img id="picimg" src="pic.png" alt="picture">
+        </picture>
+        <noscript>noscript is hidden</noscript>
+        <template><p>template is hidden</p></template>
+        <map name="m"><area shape="rect" href="/home"></map>
+        <p>Unknown <blink>element</blink> shows its content.</p>
+        <p id="home_media"><a href="/home">Home</a></p>
+      </section>
+    </page>
+
+  </ui>
+
+  <state>
+    <int name="count" default="0"/>
+    <string name="name" default=""/>
+    <string name="agree" default="false"/>
+    <string name="city" default="msk"/>
+    <string name="dialogOpen" default="false"/>
+    <string name="sent" default="no"/>
+  </state>
+
+  <script language="lua">
+function increment()
+  state.count = state.count + 1
+end
+
+function openDialog()
+  state.dialogOpen = "true"
+end
+
+function closeDialog()
+  state.dialogOpen = "false"
+end
+
+function submitted()
+  state.sent = "yes"
+end
+  </script>
+</app>

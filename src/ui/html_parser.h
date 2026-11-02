@@ -81,6 +81,7 @@ private:
     struct ParseContext {
         std::string_view src;
         size_t pos = 0;
+        P::Array<P::String> open;  // elements being parsed, outermost first (for implied end tags)
         
         bool eof() const { return pos >= src.size(); }
         char peek() const { return eof() ? '\0' : src[pos]; }

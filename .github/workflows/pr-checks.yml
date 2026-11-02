@@ -1,0 +1,160 @@
+# PR checks: unit tests (TelaCI) and the screens of every app in the simulator.
+#
+# The simulator job builds sim/ against the PR base and against the PR, photographs every
+# page of every app on both, and posts one comment: what changed, before / after / diff.
+# Pictures live in the sim-screens branch (one commit, no history), removed on PR close.
+# PRs from forks get the same report in the job summary and the artifact, without pictures.
+name: PR checks
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, closed]
+  push:
+    branches: [main, future]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: pr-checks-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  telaci:
+    name: TelaCI
+    if: github.event.action != 'closed'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v6
+      - name: Dependencies
+        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends libmbedtls-dev
+      - name: Libraries (Lua, ckdl)
+        run: bash ci/lib/build_libs.sh
+      - name: Build (mock)
+        run: python3 ci/build.py "$GITHUB_WORKSPACE" --mock
+      - name: Tests
+        run: python3 ci/test.py "$GITHUB_WORKSPACE"
+
+  screens:
+    name: Simulator screens
+    if: github.event_name == 'pull_request' && github.event.action != 'closed'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 40
+    permissions:
+      contents: write        # pictures go to the sim-screens branch
+      pull-requests: write   # the comment that shows them
+    env:
+      PR: ${{ github.event.pull_request.number }}
+      HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+      BASE_SHA: ${{ github.event.pull_request.base.sha }}
+      SAME_REPO: ${{ github.event.pull_request.head.repo.full_name == github.repository }}
+    steps:
+      - name: Checkout PR
+        uses: actions/checkout@v6
+        with:
+          path: head
+      - name: Checkout base
+        uses: actions/checkout@v6
+        with:
+          ref: ${{ github.event.pull_request.base.sha }}
+          path: base
+
+      - name: Dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends cmake ninja-build ccache \
+            libsdl2-dev libpng-dev libmbedtls-dev
+      - name: Compiler cache
+        uses: actions/cache@v5
+        with:
+          path: ~/.cache/ccache
+          key: ccache-sim-${{ runner.os }}-${{ github.sha }}
+          restore-keys: ccache-sim-${{ runner.os }}-
+
+      - name: Build, photograph, compare
+        id: screens
+        run: |
+          url=""
+          if [ "$SAME_REPO" = "true" ]; then
+            url="https://raw.githubusercontent.com/${GITHUB_REPOSITORY}/sim-screens/pr-${PR}/${HEAD_SHA}"
+          fi
+          python3 head/sim/tools/sim_screens.py --head head --base base --out out \
+            --image-url "$url" --base-label "${BASE_SHA::7}" --head-label "${HEAD_SHA::7}" \
+            || echo "failed=1" >> "$GITHUB_OUTPUT"
+
+      - name: Report in the job summary
+        if: always()
+        run: cat out/report.md >> "$GITHUB_STEP_SUMMARY" || true
+
+      - name: Artifact
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: sim-screens
+          path: |
+            out/report.md
+            out/status.json
+            out/publish/
+            out/shots-head/
+            out/tests/
+            out/*.log
+            out/work-head/*.log
+          retention-days: 14
+          if-no-files-found: ignore
+
+      - name: Pictures to the sim-screens branch
+        if: always() && env.SAME_REPO == 'true' && hashFiles('out/publish/**') != ''
+        env:
+          TOKEN: ${{ github.token }}
+        run: |
+          bash head/sim/tools/publish_screens.sh \
+            "https://x-access-token:${TOKEN}@github.com/${GITHUB_REPOSITORY}.git" \
+            "$PR" "$HEAD_SHA" out/publish
+
+      - name: Comment on the PR
+        if: always() && env.SAME_REPO == 'true' && hashFiles('out/report.md') != ''
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          # Only our own comment: a person quoting the marker must not be overwritten (nor could be)
+          marker='<!-- telaos-sim-screens -->'
+          id=$(gh api "repos/${GITHUB_REPOSITORY}/issues/${PR}/comments" --paginate \
+                 --jq ".[] | select(.user.login == \"github-actions[bot]\" and (.body | startswith(\"${marker}\"))) | .id" \
+                 | head -n 1)
+          if [ -n "$id" ]; then
+            gh api -X PATCH "repos/${GITHUB_REPOSITORY}/issues/comments/${id}" -F body=@out/report.md > /dev/null
+          else
+            gh api -X POST "repos/${GITHUB_REPOSITORY}/issues/${PR}/comments" -F body=@out/report.md > /dev/null
+          fi
+
+      - name: Robot tests or build failed
+        if: steps.screens.outputs.failed == '1'
+        run: |
+          echo "::error::The simulator did not build or a robot test failed: see the report and the sim-screens artifact"
+          exit 1
+
+  cleanup:
+    name: Remove PR screens
+    if: >-
+      github.event_name == 'pull_request' && github.event.action == 'closed' &&
+      github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: ${{ github.event.pull_request.base.ref }}
+          sparse-checkout: sim/tools
+      - name: Remove pr-${{ github.event.pull_request.number }}/ from sim-screens
+        env:
+          TOKEN: ${{ github.token }}
+          PR: ${{ github.event.pull_request.number }}
+        run: |
+          if [ -f sim/tools/publish_screens.sh ]; then
+            bash sim/tools/publish_screens.sh \
+              "https://x-access-token:${TOKEN}@github.com/${GITHUB_REPOSITORY}.git" "$PR"
+          fi

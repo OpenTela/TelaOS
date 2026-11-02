@@ -3,6 +3,7 @@
  */
 
 #include "ui/html_parser.h"
+#include "ui/css_colors.h"
 #include "ui/ui_types.h"
 #include <algorithm>
 #include <cctype>
@@ -12,6 +13,31 @@
 namespace UI {
 
 using namespace Tag;
+
+namespace {
+
+// HTML void elements: no content, no end tag (<br>, <img src="...">)
+bool isVoidElement(const P::String& tag) {
+    static const char* const kVoid[] = {"area", "base", "br",   "col",   "embed", "frame", "hr",  "img",
+                                        "input", "link", "meta", "param", "source", "track", "wbr"};
+    for (const char* v : kVoid) {
+        if (tag == v) return true;
+    }
+    return false;
+}
+
+// Name of the end tag at the start of rem ("</Name ...>" → "name")
+P::String endTagName(std::string_view rem) {
+    P::String name;
+    for (size_t i = 2; i < rem.size(); ++i) {
+        const char c = rem[i];
+        if (!std::isalnum(static_cast<unsigned char>(c)) && c != '-' && c != '_' && c != ':') break;
+        name += static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
+    }
+    return name;
+}
+
+}  // namespace
 
 // ============ ATTRIBUTE ============
 
@@ -214,6 +240,11 @@ ParsedElement Parser::parseElement(ParseContext& ctx) {
         return elem;
     }
     
+    // <br>, <img ...>, <input ...>: nothing inside, nothing to close
+    if (isVoidElement(elem.tag)) return elem;
+    
+    ctx.open.push_back(elem.tag);
+    
     // Parse content
     while (!ctx.eof()) {
         ctx.skipWs();
@@ -227,12 +258,20 @@ ParsedElement Parser::parseElement(ParseContext& ctx) {
             
             // Closing tag?
             if (ctx.remaining().size() > 1 && ctx.remaining()[1] == '/') {
-                // Skip </tag>
+                // </tag> closes this element. An end tag of an enclosing element closes it too
+                // (<li> and <p> may omit theirs) and is left for that element; a stray one is dropped.
+                const P::String name = endTagName(ctx.remaining());
+                bool ancestor = false;
+                for (size_t i = 0; i + 1 < ctx.open.size() && !ancestor; ++i) ancestor = (ctx.open[i] == name);
+                if (ancestor && name != elem.tag) break;
                 size_t closeEnd = ctx.remaining().find('>');
                 if (closeEnd != std::string_view::npos) {
                     ctx.skip(closeEnd + 1);
+                } else {
+                    ctx.skip(ctx.remaining().size());
                 }
-                break;
+                if (name == elem.tag || name.empty()) break;
+                continue;  // stray end tag
             }
             
             // Nested element
@@ -249,6 +288,7 @@ ParsedElement Parser::parseElement(ParseContext& ctx) {
         }
     }
     
+    ctx.open.pop_back();
     return elem;
 }
 
@@ -435,17 +475,9 @@ uint32_t StyleParser::parseColor(std::string_view color) {
     // Skip #
     if (color[0] == '#') color = color.substr(1);
     
-    // Named colors
-    if (color == "black") return 0x000000;
-    if (color == "white") return 0xFFFFFF;
-    if (color == "red") return 0xFF0000;
-    if (color == "green") return 0x00FF00;
-    if (color == "blue") return 0x0000FF;
-    if (color == "yellow") return 0xFFFF00;
-    if (color == "cyan") return 0x00FFFF;
-    if (color == "magenta") return 0xFF00FF;
-    if (color == "gray" || color == "grey") return 0x808080;
-    if (color == "orange") return 0xFFA500;
+    // Named colors: all 148 CSS names (css_colors.h)
+    uint32_t named;
+    if (cssNamedColor(color, named)) return named;
     
     // Hex - use stack buffer, no heap alloc
     char buf[8];

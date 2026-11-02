@@ -65,7 +65,7 @@ void PageGroup::create(lv_obj_t* parent) {
 }
 
 lv_obj_t* PageGroup::addTile(const P::String& pageId) {
-    int col = (int)g_core.app().pagesCount();
+    int col = (int)page_ids.size();  // position of this page inside its group
     
     // Determine swipe directions
     int dirs_int = 0;
@@ -86,7 +86,10 @@ lv_obj_t* PageGroup::addTile(const P::String& pageId) {
     lv_obj_set_style_bg_opa(tile, LV_OPA_TRANSP, 0);
     lv_obj_set_scrollbar_mode(tile, LV_SCROLLBAR_MODE_OFF);
     
-    g_core.app().pushPage(pageId.c_str(), tile);
+    // The page belongs to this group (navigation, swipes and dots look here),
+    // not to the app's standalone pages
+    page_ids.push_back(pageId);
+    page_objs.push_back(tile);
 
     return tile;
 }

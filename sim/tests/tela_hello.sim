@@ -1,0 +1,23 @@
+# tela_hello.sim — Hello World on the real TelaOS engine: data/apps/hello (Brainfuck).
+# Console lines ("> ...") are the same commands the watch takes over Serial and BLE.
+
+wait 500
+shot tela_01_launcher
+
+> app launch hello
+wait 800
+shot tela_02_hello
+tree tela_02_tree
+expect $_stdout ""
+expect @stdin ""
+
+> ui type stdin Анатолий
+wait 100
+expect $_stdin "Анатолий"
+
+# the robot finger presses "Run" through the touch panel, like a person would
+tap "Run"
+wait 1500
+shot tela_03_result
+expect $_stdout contains "Thank you, Анатолий"
+expect @stdin "Анатолий"

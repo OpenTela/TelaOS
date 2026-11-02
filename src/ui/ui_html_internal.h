@@ -90,6 +90,7 @@ static inline uint32_t rgb_to_native(uint32_t rgb) {
 
 /// Parse color string (#RGB, #RRGGBB, or decimal) to RGB888
 uint32_t parse_color(const char* s);
+bool is_color(const char* s);  // "#RGB", "#RRGGBB" or a CSS color name
 
 // ============ Widget builders (defined in ui_widget_builder.cpp) ============
 
