@@ -1231,6 +1231,8 @@ void textElement(const TagRef& t, lv_obj_t* box, const Ctx& ctx) {
     renderInto(t, b, ctx);
 }
 
+void disableControls(lv_obj_t* o);
+
 void blockElement(const TagRef& t, lv_obj_t* box, const Ctx& ctx) {
     const char* n = t.name;
     if (is(n, "body")) {  // the flow root already is the body
@@ -1267,6 +1269,7 @@ void blockElement(const TagRef& t, lv_obj_t* box, const Ctx& ctx) {
     }
     applyGlobal(t, b);
     renderInto(t, b, ctx);
+    if (is(n, "fieldset") && has(t, "disabled")) disableControls(b);  // every control inside is off
 }
 
 // ---- Lists ----
@@ -1485,6 +1488,63 @@ void checkboxElement(const TagRef& t, lv_obj_t* parent, bool radio) {
     applyGlobal(t, cb);
 }
 
+bool isButton(lv_obj_t* o) {
+#if defined(LVGL_MOCK_ENABLED)
+    return lv_obj_check_type(o, &lv_btn_class);
+#else
+    return lv_obj_check_type(o, &lv_button_class);
+#endif
+}
+
+bool isControl(lv_obj_t* o) {
+    return s_toggles.count(o) || isButton(o) || lv_obj_check_type(o, &lv_textarea_class) ||
+           lv_obj_check_type(o, &lv_slider_class) || lv_obj_check_type(o, &lv_dropdown_class) ||
+           lv_obj_check_type(o, &lv_switch_class);
+}
+
+void disableControls(lv_obj_t* o) {
+    for (uint32_t i = 0; i < lv_obj_get_child_count(o); ++i) {
+        lv_obj_t* c = lv_obj_get_child(o, static_cast<int32_t>(i));
+        if (isControl(c)) lv_obj_add_state(c, LV_STATE_DISABLED);
+        disableControls(c);
+    }
+}
+
+// What a tap on a <label for> does to its control: a checkbox or a switch toggles, a radio
+// turns on, a text field takes the keyboard, a list opens, anything else is clicked
+void activate(lv_obj_t* target) {
+    if (!target || lv_obj_has_state(target, LV_STATE_DISABLED)) return;
+    const auto toggle = s_toggles.find(target);
+    if (toggle != s_toggles.end() || lv_obj_check_type(target, &lv_switch_class)) {
+        const bool radio = toggle != s_toggles.end() && toggle->second.radio;
+        if (radio || !lv_obj_has_state(target, LV_STATE_CHECKED)) lv_obj_add_state(target, LV_STATE_CHECKED);
+        else lv_obj_remove_state(target, LV_STATE_CHECKED);
+        lv_obj_send_event(target, LV_EVENT_VALUE_CHANGED, nullptr);
+    } else if (lv_obj_check_type(target, &lv_textarea_class)) {
+        lv_obj_send_event(target, LV_EVENT_FOCUSED, nullptr);
+    } else if (lv_obj_check_type(target, &lv_dropdown_class)) {
+        lv_dropdown_open(target);
+    } else {
+        lv_obj_send_event(target, LV_EVENT_CLICKED, nullptr);
+    }
+}
+
+std::unordered_map<lv_obj_t*, P::String> s_labelFor;  // label -> id of its control
+
+void onLabelClick(lv_event_t* e) {
+    const auto it = s_labelFor.find(static_cast<lv_obj_t*>(lv_event_get_user_data(e)));
+    if (it != s_labelFor.end()) activate(g_core.app().findElement(it->second.c_str()));
+}
+
+void onLabelDelete(lv_event_t* e) { s_labelFor.erase(static_cast<lv_obj_t*>(lv_event_get_user_data(e))); }
+
+// A boolean attribute (`readonly`, `disabled`) passed on to a TelaOS builder
+P::String flagFor(const TagRef& t, const char* name) {
+    if (!has(t, name)) return "";
+    const P::String v = attr(t, name);
+    return P::String(" ") + name + "=\"" + (v.empty() ? P::String("true") : v) + "\"";
+}
+
 // Find the textarea a TelaOS input builder just created in parent
 lv_obj_t* lastTextarea(lv_obj_t* parent) {
     lv_obj_t* last = lv_obj_get_child(parent, -1);
@@ -1514,19 +1574,24 @@ void inputElement(const TagRef& t, lv_obj_t* parent) {
         return;
     }
     if (type == "range") {
-        P::String a = keepAttrs(t, {"id", "class", "min", "max", "bind", "onchange", "w", "h"});
+        P::String a = keepAttrs(t, {"id", "class", "min", "max", "step", "bind", "onchange", "w", "h"}) +
+                      flagFor(t, "disabled");
         if (attr(t, "min").empty()) a += " min=\"0\"";
         if (attr(t, "max").empty()) a += " max=\"100\"";
         create_slider(a.c_str(), a.c_str() + a.size(), parent);
         lv_obj_t* s = lv_obj_get_child(parent, -1);
-        if (s && attr(t, "bind").empty() && !attr(t, "value").empty())
-            lv_slider_set_value(s, atoi(attr(t, "value").c_str()), LV_ANIM_OFF);
+        if (s && attr(t, "bind").empty() && !attr(t, "value").empty()) {
+            const int32_t value = atoi(attr(t, "value").c_str());
+            lv_slider_set_value(s, snapToStep(value, atoi(attr(t, "min").c_str()), atoi(attr(t, "step").c_str())),
+                                LV_ANIM_OFF);
+        }
         return;
     }
     if (type == "button" || type == "submit" || type == "reset") {
         P::String label = attr(t, "value");
         if (label.empty()) label = type == "submit" ? "Submit" : type == "reset" ? "Reset" : "";
-        P::String a = keepAttrs(t, {"id", "class", "onclick", "href", "w", "h", "bgcolor", "color"});
+        P::String a = keepAttrs(t, {"id", "class", "onclick", "href", "w", "h", "bgcolor", "color"}) +
+                      flagFor(t, "disabled");
         create_button(a.c_str(), a.c_str() + a.size(), label.c_str(), parent);
         return;
     }
@@ -1536,7 +1601,8 @@ void inputElement(const TagRef& t, lv_obj_t* parent) {
     }
     // text-like: text, password, email, search, tel, url, number, date, time, color, file...
     P::String a = keepAttrs(t, {"id", "class", "bind", "placeholder", "onchange", "oninput", "onenter", "onblur",
-                                "w", "h", "bgcolor", "color"});
+                                "w", "h", "bgcolor", "color", "maxlength"}) +
+                  flagFor(t, "readonly") + flagFor(t, "disabled");
     if (type == "password") a += " password=\"true\"";
     create_input(a.c_str(), a.c_str() + a.size(), "", parent);
     if (attr(t, "bind").empty() && !attr(t, "value").empty()) {
@@ -1546,7 +1612,8 @@ void inputElement(const TagRef& t, lv_obj_t* parent) {
 
 void textareaElement(const TagRef& t, lv_obj_t* parent) {
     P::String a = keepAttrs(t, {"id", "class", "bind", "placeholder", "onchange", "oninput", "onblur", "w",
-                                "bgcolor", "color"});
+                                "bgcolor", "color", "maxlength"}) +
+                  flagFor(t, "readonly") + flagFor(t, "disabled");
     a += " multiline=\"true\"";
     P::String h = attr(t, "h");
     if (h.empty() && !attr(t, "rows").empty()) {
@@ -2028,7 +2095,16 @@ bool setText(lv_obj_t* obj, const char* text) {
     return false;
 }
 
+void labelFor(lv_obj_t* label, const char* id) {
+    if (!label || !id || !*id) return;
+    s_labelFor[label] = id;
+    lv_obj_add_flag(label, LV_OBJ_FLAG_CLICKABLE);
+    lv_obj_add_event_cb(label, onLabelClick, LV_EVENT_CLICKED, label);
+    lv_obj_add_event_cb(label, onLabelDelete, LV_EVENT_DELETE, label);
+}
+
 void reset() {
+    s_labelFor.clear();
     s_flow.clear();
     s_rootOf.clear();
     s_contentOf.clear();

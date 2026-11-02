@@ -60,6 +60,34 @@ TagId tagId(std::string_view name) {
 
 P::String Attrs::get(const char* name) const { return XmlUtils::getAttr(begin(), end(), name); }
 
+bool Attrs::has(std::string_view name) const {
+    const std::string_view s = text_;
+    size_t p = 0;
+    while (p < s.size()) {
+        while (p < s.size() && (isSpace(s[p]) || s[p] == '/')) ++p;
+        const size_t start = p;
+        while (p < s.size() && s[p] != '=' && !isSpace(s[p]) && s[p] != '/') ++p;
+        if (p - start == name.size() && !name.empty()) {
+            bool same = true;
+            for (size_t i = 0; i < name.size() && same; ++i) same = lowerAscii(s[start + i]) == lowerAscii(name[i]);
+            if (same) return true;
+        }
+        while (p < s.size() && isSpace(s[p])) ++p;
+        if (p < s.size() && s[p] == '=') {  // pass over the value
+            ++p;
+            while (p < s.size() && isSpace(s[p])) ++p;
+            if (p < s.size() && (s[p] == '"' || s[p] == '\'')) {
+                const char quote = s[p++];
+                while (p < s.size() && s[p] != quote) ++p;
+                if (p < s.size()) ++p;
+            } else {
+                while (p < s.size() && !isSpace(s[p])) ++p;
+            }
+        }
+    }
+    return false;
+}
+
 TagReader::Step TagReader::next(StartTag& tag) {
     const size_t n = html_.size();
     size_t p = html_.find('<', pos_);

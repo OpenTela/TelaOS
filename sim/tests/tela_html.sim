@@ -96,10 +96,26 @@ expect $sent "no"
 tap "Send"
 expect $sent "yes"
 shot html_05_forms
+# form attributes: <label for>, <option selected>, step, readonly, <fieldset disabled>
+scroll @terms
+tap "Terms"
+expect @terms on
+tap "Terms"
+expect @terms off
+expect @lang "Русский"
+expect @steps 5
+scroll @locked
+tap @locked
+expect @locked off
+scroll @fixed
+tap @fixed
+expect "q" :hidden
+shot html_05_forms_attrs
 # typing opens the on-screen keyboard over the lower half: last on this page
 expect @who ""
 > ui type who Anatoly
 wait 100
+expect "q" :visible
 expect $name "Anatoly"
 expect @who "Anatoly"
 shot html_05_forms_keyboard

@@ -213,6 +213,25 @@ static const char* APP_FORMS = R"HTML(
 </page></ui></app>
 )HTML";
 
+// Form attributes: <option selected/disabled>, maxlength, readonly, step, fieldset disabled
+static const char* APP_FORM_ATTRS = R"HTML(
+<app><ui default="/m"><page id="m">
+  <form>
+    <select id="lang"><option value="en">English</option><option value="ru" selected>Russian</option></select>
+    <select id="first"><option disabled>None</option><option>One</option><option>Two</option></select>
+    <select id="loose"><option>X<option>Y</select>
+    <input type="text" id="code" maxlength="4">
+    <textarea id="memo" maxlength="20" readonly>fixed</textarea>
+    <input type="range" id="steps" min="0" max="10" step="5" value="3">
+    <input type="text" id="off" disabled>
+    <fieldset disabled id="fs"><legend>Off</legend>
+      <input type="checkbox" id="fcb"> <input type="text" id="ftx"> <input type="range" id="frg">
+    </fieldset>
+    <label for="fcb" id="lfor">Agree</label>
+  </form>
+</page></ui></app>
+)HTML";
+
 static const char* APP_HIDDEN = R"HTML(
 <app><ui default="/m"><page id="m">
   <main id="mn">
@@ -434,6 +453,21 @@ int main() {
     expectTrue("input without type= stays TelaOS input", byId("tela") && byId("tela")->type == "TextArea");
     expectTrue("checked before type=: still a checked checkbox", byId("cb3") && byId("cb3")->checked);
     expectTrue("disabled before id=: the id is kept", byId("off") != nullptr);
+
+    printf("\nForm attributes:\n");
+    render(APP_FORM_ATTRS);
+    expectTrue("<option selected> is chosen at the start", byId("lang") && byId("lang")->curValue == 1);
+    expectTrue("<option disabled> is skipped at the start", byId("first") && byId("first")->curValue == 1);
+    expectTrue("</option> may be left out", byId("loose") && byId("loose")->text == "X\nY");
+    expectTrue("<input maxlength>", byId("code") && byId("code")->maxLength == 4);
+    expectTrue("<textarea maxlength readonly>: limit and text", byId("memo") && byId("memo")->maxLength == 20 &&
+               byId("memo")->text == "fixed");
+    expectTrue("<input type=range step>: 3 snaps to 5", byId("steps") && byId("steps")->curValue == 5);
+    expectTrue("<input disabled> (text)", byId("off") && byId("off")->disabled);
+    expectTrue("<fieldset disabled>: every control inside is off",
+               byId("fcb") && byId("fcb")->disabled && byId("ftx") && byId("ftx")->disabled &&
+               byId("frg") && byId("frg")->disabled);
+    expectTrue("<label for> is still a label", byId("lfor") && textOf(byId("lfor")) == "Agree");
 
     printf("\nHidden and fallback content:\n");
     render(APP_HIDDEN);
