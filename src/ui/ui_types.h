@@ -141,10 +141,6 @@ struct Element {
     bool is_canvas   = false;
     bool is_dropdown = false;
     P::Array<P::String> dropdownValues;   // value[i] ↔ lv_dropdown index i
-    P::Array<bool> dropdownDisabled;      // <option disabled>: cannot be chosen
-    uint16_t dropdownChosen = 0;          // the last option that could be chosen
-    int32_t sliderStep = 0;               // <input type="range" step>: values min + k·step
-    int32_t sliderMin = 0;
     int zIndex = 0;
     uint32_t last_update = 0;
     

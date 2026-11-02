@@ -24,6 +24,7 @@
 #include "core/state_store.h"
 #include "utils/string_utils.h"
 #include "utils/log_config.h"
+#include <algorithm>
 #include <string>
 #include <cctype>
 
@@ -112,6 +113,24 @@ static bool flagAttr(const char* astart, const char* aend, const char* name) {
     if (!a.has(name)) return false;
     const P::String v = a.get(name);
     return v.empty() || v == "true" || v == "1" || v == name;
+}
+
+// State only a few widgets have, kept beside them rather than in every Element
+struct SliderStep {      // <input type="range" step>: values min + k·step
+    int32_t min = 0;
+    int32_t step = 0;
+};
+struct DropdownChoice {  // <select> with <option disabled>
+    P::Array<bool> disabled;
+    uint16_t chosen = 0;  // the last option that could be chosen
+};
+static P::Map<const lv_obj_t*, SliderStep> s_sliderSteps;
+static P::Map<const lv_obj_t*, DropdownChoice> s_dropdownChoices;
+
+static void forget_widget_state(lv_event_t* e) {
+    const auto* obj = static_cast<const lv_obj_t*>(lv_event_get_user_data(e));
+    s_sliderSteps.erase(obj);
+    s_dropdownChoices.erase(obj);
 }
 
 static void ensureId(CommonAttrs& attrs, const char* prefix, bool hasDynamicContent = false) {
@@ -239,10 +258,11 @@ static void slider_event_handler(lv_event_t *e) {
     
     lv_obj_t *slider = g_core.app().elements[idx]->obj();
     int value = lv_slider_get_value(slider);
-    const auto& el = *g_core.app().elements[idx];
-    if (const int snapped = snapToStep(value, el.sliderMin, el.sliderStep); snapped != value) {
-        lv_slider_set_value(slider, snapped, LV_ANIM_OFF);  // step="5": the thumb stops on 0, 5, 10…
-        value = snapped;
+    if (const auto st = s_sliderSteps.find(slider); st != s_sliderSteps.end()) {
+        if (const int snapped = snapToStep(value, st->second.min, st->second.step); snapped != value) {
+            lv_slider_set_value(slider, snapped, LV_ANIM_OFF);  // step="5": the thumb stops on 0, 5, 10…
+            value = snapped;
+        }
     }
     char val_str[SMALL_BUF_LEN];
     snprintf(val_str, sizeof(val_str), "%d", value);
@@ -1105,9 +1125,9 @@ void create_slider(const char *astart, const char *aend, lv_obj_t *parent) {
     applyStaticDisabled(sld.obj, attrs);
     sld.zIndex      = attrs.zIndex;
     int idx = g_core.app().addElement(sld);
-    if (idx >= 0 && idx < (int)g_core.app().elements.size()) {
-        g_core.app().elements[idx]->sliderStep = step;
-        g_core.app().elements[idx]->sliderMin = min_val;
+    if (step > 1) {
+        s_sliderSteps[slider] = SliderStep{min_val, step};
+        lv_obj_add_event_cb(slider, forget_widget_state, LV_EVENT_DELETE, slider);
     }
     
     widget.on(LV_EVENT_VALUE_CHANGED, slider_event_handler, idx);
@@ -1626,14 +1646,15 @@ static void dropdown_event_handler(lv_event_t *e) {
     lv_obj_t *dd = g_core.app().elements[idx]->obj();
     uint16_t sel = lv_dropdown_get_selected(dd);
 
-    auto& el = *g_core.app().elements[idx];
-    if (sel < el.dropdownDisabled.size() && el.dropdownDisabled[sel]) {
-        lv_dropdown_set_selected(dd, el.dropdownChosen);  // <option disabled>: cannot be chosen
-        return;
+    if (const auto ch = s_dropdownChoices.find(dd); ch != s_dropdownChoices.end()) {
+        if (sel < ch->second.disabled.size() && ch->second.disabled[sel]) {
+            lv_dropdown_set_selected(dd, ch->second.chosen);  // <option disabled>: cannot be chosen
+            return;
+        }
+        ch->second.chosen = sel;
     }
-    el.dropdownChosen = sel;
 
-    const auto& values = el.dropdownValues;
+    const auto& values = g_core.app().elements[idx]->dropdownValues;
     if (sel >= values.size()) return;
 
     const char* val = values[sel].c_str();
@@ -1756,10 +1777,8 @@ void create_select(const char *astart, const char *aend, const char *content, lv
     int elemIdx = g_core.app().addElement(sd);
 
     if (elemIdx >= 0 && elemIdx < (int)g_core.app().elements.size()) {
-        g_core.app().elements[elemIdx]->is_dropdown      = true;
-        g_core.app().elements[elemIdx]->dropdownValues   = std::move(opts.values);
-        g_core.app().elements[elemIdx]->dropdownDisabled = std::move(opts.disabled);
-        g_core.app().elements[elemIdx]->dropdownChosen   = static_cast<uint16_t>(initIdx);
+        g_core.app().elements[elemIdx]->is_dropdown    = true;
+        g_core.app().elements[elemIdx]->dropdownValues = std::move(opts.values);
 
         if (attrs.hasDynamicVisible && !attrs.visible.empty()) {
             P::String vb  = extractBindVar(attrs.visible.c_str());
@@ -1770,6 +1789,10 @@ void create_select(const char *astart, const char *aend, const char *content, lv
         }
     }
 
+    if (std::find(opts.disabled.begin(), opts.disabled.end(), true) != opts.disabled.end()) {
+        s_dropdownChoices[dd] = DropdownChoice{std::move(opts.disabled), static_cast<uint16_t>(initIdx)};
+        lv_obj_add_event_cb(dd, forget_widget_state, LV_EVENT_DELETE, dd);
+    }
     Widget{dd}.on(LV_EVENT_VALUE_CHANGED, dropdown_event_handler, elemIdx);
 
     LOG_I(Log::UI, "create_select: id=%s bind=%s options=%d init=%d",
