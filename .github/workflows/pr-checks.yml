@@ -36,6 +36,8 @@ jobs:
         run: python3 ci/build.py "$GITHUB_WORKSPACE" --mock
       - name: Tests
         run: python3 ci/test.py "$GITHUB_WORKSPACE"
+      - name: Simulator tools tests
+        run: python3 -m unittest discover -s sim/tools -p 'test_*.py'
 
   screens:
     name: Simulator screens
