@@ -17,6 +17,7 @@ inline void _unique_id(lv_obj_t*, const char*) {}
 #include <functional>
 #include <vector>
 #include <string>
+#include <string_view>
 #include <cstdlib>
 #include "utils/font.h"
 #include "utils/psram_alloc.h"
@@ -172,7 +173,10 @@ struct Widget {
     void applyStyle(const P::String& classNames);
 
     /// Apply all matching CSS rules (tag, #id, .class cascade)
-    void applyCss(const char* tag, const char* id, const char* classNames);
+    // Style sheet rules for an element: its tag, id, class, raw attributes (for [attr] selectors)
+    // and its style=""; descendant and child rules see the walkers' UI::CssScope
+    void applyCss(const char* tag, const char* id, const char* classNames, std::string_view attrs = {},
+                  std::string_view inlineStyle = {});
 };
 
 // ============ Callback storage ============

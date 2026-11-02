@@ -1573,9 +1573,13 @@ void create_tabs(const char* astart, const char* aend, const char* content, lv_o
         lv_obj_set_style_pad_all(tab_page, 0, 0);
         lv_obj_set_style_border_width(tab_page, 0, 0);
         
-        // Parse widgets inside this tab
+        // Parse widgets inside this tab: for CSS they are inside <tabs> and this <tab>
         int tab_content_len = tab_close - ta;
-        parse_children(ta, tab_content_len, tab_page);
+        {
+            UI::CssScope inTabs("tabs", std::string_view(astart, static_cast<size_t>(aend - astart)));
+            UI::CssScope inTab("tab", std::string_view(tab_astart, static_cast<size_t>(tab_aend - tab_astart)));
+            parse_children(ta, tab_content_len, tab_page);
+        }
         
         LOG_I(Log::UI, "tab: '%s' (%d bytes content)", title.c_str(), tab_content_len);
         
@@ -1720,7 +1724,7 @@ void build_div(const UI::StartTag& tag, const P::String& content, lv_obj_t* host
     if (!growAttr.empty())
         lv_obj_set_flex_grow(container, atoi(growAttr.c_str()));
 
-    Widget{container}.applyCss("div", idAttr.c_str(), classAttr.c_str());
+    Widget{container}.applyCss("div", idAttr.c_str(), classAttr.c_str(), a.text());
 
     bool hasDynVisible = !visAttr.empty() && visAttr.find('{') != P::String::npos;
     bool hasDynDisabled = !disAttr.empty() && disAttr.find('{') != P::String::npos;
@@ -1743,6 +1747,7 @@ void build_div(const UI::StartTag& tag, const P::String& content, lv_obj_t* host
              flexAttr.empty() ? "-" : flexAttr.c_str());
 
     if (!content.empty()) {
+        UI::CssScope inside("div", a.text());  // .card label {} sees this div
         // Direct text (<div>Hello</div>) used to be dropped; render it as HTML flow
         if (HtmlFlow::hasFlowContent(content.c_str(), content.length())) {
             if (flexAttr.empty()) HtmlFlow::makeFlow(container);
@@ -1859,7 +1864,7 @@ void build_table_part(const UI::StartTag& tag, const P::String& content, lv_obj_
     // Apply CSS (may override w, h, bgcolor)
     auto idAttr = a.get("id");
     auto classAttr = a.get("class");
-    Widget{container}.applyCss(tag.name.c_str(), idAttr.c_str(), classAttr.c_str());
+    Widget{container}.applyCss(tag.name.c_str(), idAttr.c_str(), classAttr.c_str(), a.text());
 
     // visible binding
     auto visAttr = a.get("visible");
@@ -1894,6 +1899,7 @@ void build_table_part(const UI::StartTag& tag, const P::String& content, lv_obj_
 
     // Recursive parse children; direct cell text (<td>Moscow</td>) renders as HTML flow
     if (!content.empty()) {
+        UI::CssScope inside(tag.name, a.text());  // table td {}, tr > td {}
         if (tag.id == TagId::Td &&
             HtmlFlow::hasFlowContent(content.c_str(), content.length())) {
             HtmlFlow::makeFlow(container);
@@ -2024,7 +2030,7 @@ int ui_html_render_internal(const char *html) {
     }
     
     // Collect page content for later parsing (static to save stack)
-    struct PageContent { const char *start; int len; lv_obj_t *parent; };
+    struct PageContent { const char *start; int len; lv_obj_t *parent; std::string_view attrs; };
     static PageContent contents[MAX_PAGE_CONTENTS];
     int content_count = 0;
     
@@ -2126,6 +2132,7 @@ int ui_html_render_internal(const char *html) {
             contents[content_count].start = page_content_start;
             contents[content_count].len = pclose - page_content_start;
             contents[content_count].parent = tile;
+            contents[content_count].attrs = std::string_view(pastart, static_cast<size_t>(paend - pastart));
             content_count++;
             
             char _buf[64]; snprintf(_buf, sizeof(_buf), "%s/%s", g_core.app().group(gi).id.c_str(), page_id.c_str());
@@ -2217,6 +2224,7 @@ int ui_html_render_internal(const char *html) {
         contents[content_count].start = content_start;
         contents[content_count].len = pclose - content_start;
         contents[content_count].parent = scr;
+        contents[content_count].attrs = std::string_view(astart, static_cast<size_t>(aend - astart));
         content_count++;
 
         g_core.app().addPage(id.c_str(), scr);
@@ -2227,6 +2235,7 @@ int ui_html_render_internal(const char *html) {
     // Pass 3: Parse children for all pages
     for (int i = 0; i < content_count; i++) {
         LOG_I(Log::UI, "  page[%d]: len=%d parent=%p", i, contents[i].len, contents[i].parent);
+        UI::CssScope page("page", contents[i].attrs);  // #settings button {} sees its page
         parse_children(contents[i].start, contents[i].len, contents[i].parent);
     }
     

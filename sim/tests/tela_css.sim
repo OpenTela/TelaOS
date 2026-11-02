@@ -1,0 +1,24 @@
+# tela_css.sim — CSS selectors and cascade on the real TelaOS engine (docs/CSS.md).
+# Fixture: sim/tests/fixtures/apps/css_tags (flashed with --extra-data sim/tests/fixtures).
+# Colors are seen on the screenshots, the checks below are about what the rules show, hide and size.
+
+wait 300
+> app launch css_tags
+wait 800
+
+expect "Selectors" :visible
+expect @links "nav a: yellow More"
+expect @direct contains ".menu > li: green"
+expect @nested contains "ul li li: orange"
+expect @inCard ".card label: violet"
+expect @gone :hidden
+expect "display: none" :hidden
+shot css_01_selectors
+
+tap "More"
+wait 200
+expect @big2 ".big, not on #main: small"
+shot css_02_other_page
+tap "Back"
+wait 200
+expect "Selectors" :visible
