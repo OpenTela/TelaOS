@@ -12,6 +12,7 @@
 #include "ui/html_parser.h"
 #include "ui/css_parser.h"
 #include "ui/ui_html_flow.h"
+#include "ui/ui_tag_reader.h"
 #include "utils/string_utils.h"
 #include "ui/xml_utils.h"
 #include "utils/font.h"
@@ -1584,456 +1585,416 @@ void create_tabs(const char* astart, const char* aend, const char* content, lv_o
     LOG_I(Log::UI, "tabs: id=%s barh=%d", id.empty() ? "?" : id.c_str(), barh);
 }
 
-// Parse children of a page (labels, buttons, etc.)
-void parse_children(const char *html, int len, lv_obj_t *parent) {
-    // Pre-expand @for directives and template invocations
-    P::String expanded;
-    const char *p = html;
-    const char *end = html + len;
-    
-    // Quick check: does content need expansion?
-    bool needsExpand = false;
-    for (const char *scan = html; scan < html + len; scan++) {
-        if (*scan == '@' || (*scan == '<' && scan + 1 < html + len && isupper((unsigned char)scan[1]))) {
-            needsExpand = true;
-            break;
-        }
-    }
-    
-    if (needsExpand) {
-        expanded = preprocess_html(html, len);
-        p = expanded.c_str();
-        end = p + expanded.length();
-        LOG_D(Log::UI, "preprocess: %d -> %d bytes", len, (int)expanded.size());
-    }
-    // The markup actually scanned: `html`, or its expanded copy (another allocation —
-    // never compare pointers into one with the other)
-    const char *const begin = p;
+// ============ PAGE WALKER ============
 
-    // HTML here (text, <p>, <ul>...): the container flows like a browser page, and its
-    // TelaOS widgets without x/y/align take their place in that flow (see ui_html_flow.h)
-    const bool flowHere = HtmlFlow::hasHtml(p, end - p);
-    
-    char tag[TAG_BUF_LEN];
-    
-    while (p < end) {
-        // Direct text and inline HTML (<b>, <a>, <br>...) form one line box, as in a browser
-        if (flowHere) {
-            const char *run = HtmlFlow::inlineRun(p, end, parent);
-            if (run != p) {
-                p = run;
-                continue;
-            }
-        }
-        while (p < end && *p != '<') p++;
-        if (p >= end) break;
-        p++;
-        
-        // <!-- comment --> may contain '>'
-        if (end - p >= 3 && strncmp(p, "!--", 3) == 0) {
-            const char *c = strstr(p + 3, "-->");
-            p = (c && c < end) ? c + 3 : end;
-            continue;
-        }
-        if (*p == '/' || *p == '!') {
-            while (p < end && *p != '>') p++;
-            if (p < end) p++;
-            continue;
-        }
-        
-        // Read tag
-        int ti = 0;
-        while (p < end && !isspace((unsigned char)*p) && *p != '>' && *p != '/' && ti < TAG_BUF_LEN - 1) {
-            tag[ti++] = tolower((unsigned char)*p++);
-        }
-        tag[ti] = '\0';
-        if (!tag[0]) continue;
-        
-        LOG_I(Log::UI, "parse_tag: [%s]", tag);
-        
-        // Skip nested pages and tab tags (tabs are handled inside create_tabs)
-        if (strcmp(tag, Layout::Page) == 0 || strcmp(tag, Element::Tab) == 0) {
-            while (p < end && *p != '>') p++;
-            if (p < end) p++;
-            continue;
-        }
-        
-        const char *astart = p;
-        while (p < end && *p != '>') p++;
-        if (p >= end) break;
-        const char *aend = p;
-        bool self_close = (p > begin && *(p-1) == '/');
-        p++;
-        
-        P::String content;
-        // HTML void elements (<br>, <hr>, <img>, <input type=...>) have no end tag
-        // (TelaOS <input> without type= keeps its own rule)
-        const bool htmlVoid = HtmlFlow::isVoid(tag) &&
-                              (strcmp(tag, Element::Input) != 0 || HtmlFlow::isHtmlInput(astart, aend));
-        if (!self_close && !htmlVoid) {
-            const char *cstart = p;
-            const char *cend = nullptr;
-            // Div and HTML containers are nestable — use depth-aware close
-            if (strcmp(tag, Element::Div) == 0 || HtmlFlow::isNestable(tag)) {
-                cend = findTagClose(p, tag);
-            } else {
-                char closing[PATTERN_BUF_LEN];
-                snprintf(closing, sizeof(closing), "</%s>", tag);
-                cend = strstr(p, closing);
-            }
-            // <td>, <tr>, <li>, <p> may omit their end tag: such an element ends at the next
-            // sibling that implies it (<td>1<td>2), not at a later </td> of another cell
-            const char *implied = HtmlFlow::hasOptionalEnd(tag) ? HtmlFlow::impliedEnd(tag, p, end) : nullptr;
-            if (implied && (!cend || cend >= end || implied < cend)) {
-                content.assign(cstart, implied - cstart);
-                p = implied;
-            } else if (cend && cend < end) {
-                content.assign(cstart, cend - cstart);
-                p = cend + tagCloseLen(tag);
-            }
-        }
-        
-        lv_obj_t *const host = (flowHere && !HtmlFlow::isPositioned(tag, astart, aend))
-                                   ? HtmlFlow::flowBox(parent)
-                                   : parent;
-        
-        if (strcmp(tag, Element::Label) == 0) {
-            create_label(astart, aend, content.c_str(), host);
-        } else if (strcmp(tag, Element::Button) == 0) {
-            create_button(astart, aend, content.c_str(), host);
-        } else if (strcmp(tag, Element::Switch) == 0) {
-            create_switch(astart, aend, host);
-        } else if (strcmp(tag, Element::Slider) == 0) {
-            create_slider(astart, aend, host);
-        } else if (strcmp(tag, Element::Input) == 0) {
-            // <input type="checkbox|radio|range|submit|..."> follows HTML; without type= it is TelaOS input
-            if (HtmlFlow::isHtmlInput(astart, aend)) {
-                HtmlFlow::create(tag, astart, aend, content.c_str(), host);
-            } else {
-                create_input(astart, aend, content.c_str(), host);
-            }
-        } else if (strcmp(tag, Element::Canvas) == 0) {
-            create_canvas(astart, aend, host);
-        } else if (strcmp(tag, Element::Image) == 0) {
-            create_image(astart, aend, host);
-        } else if (strcmp(tag, Element::Markdown) == 0) {
-            create_markdown(astart, aend, content.c_str(), host);
-        } else if (strcmp(tag, Element::Qr) == 0) {
-            create_qr(astart, aend, content.c_str(), host);
-        } else if (strcmp(tag, Element::Tabs) == 0) {
-            create_tabs(astart, aend, content.c_str(), host);
-        } else if (strcmp(tag, Element::Select) == 0) {
-            create_select(astart, aend, content.c_str(), host);
-        } else if (strcmp(tag, Element::List) == 0) {
-            create_list(astart, aend, content.c_str(), host);
-        } else if (strcmp(tag, Element::Div) == 0) {
-            // --- Div container (general-purpose, supports flex) ---
-            lv_obj_t *container = lv_obj_create(host);
-            lv_obj_remove_style_all(container);
-            lv_obj_clear_flag(container, LV_OBJ_FLAG_SCROLLABLE);
-            
-            auto wAttr = getAttr(astart, aend, "w");
-            auto hAttr = getAttr(astart, aend, "h");
-            auto xAttr = getAttr(astart, aend, "x");
-            auto yAttr = getAttr(astart, aend, "y");
-            auto bgAttr = getAttr(astart, aend, "bgcolor");
-            auto flexAttr = getAttr(astart, aend, "flex");
-            auto gapAttr = getAttr(astart, aend, "gap");
-            auto justifyAttr = getAttr(astart, aend, "justify");
-            auto alignAttr = getAttr(astart, aend, "align");
-            auto radiusAttr = getAttr(astart, aend, "radius");
-            auto paddingAttr = getAttr(astart, aend, "padding");
-            auto overflowAttr = getAttr(astart, aend, "overflow");
-            auto growAttr = getAttr(astart, aend, "grow");
-            auto idAttr = getAttr(astart, aend, "id");
-            auto classAttr = getAttr(astart, aend, "class");
-            auto visAttr = getAttr(astart, aend, "visible");
-            auto disAttr = getAttr(astart, aend, "disabled");
-            
-            lv_obj_set_width(container, LV_SIZE_CONTENT);
-            lv_obj_set_height(container, LV_SIZE_CONTENT);
-            if (host != parent) lv_obj_set_width(container, lv_pct(100));  // in HTML flow: a block
-            if (!wAttr.empty()) lv_obj_set_width(container, parse_size(wAttr.c_str()));
-            if (!hAttr.empty()) lv_obj_set_height(container, parse_size(hAttr.c_str()));
-            
-            if (!xAttr.empty() || !yAttr.empty()) {
-                int32_t xv = xAttr.empty() ? 0 : parse_coord_w(xAttr.c_str(), host);
-                int32_t yv = yAttr.empty() ? 0 : parse_coord_h(yAttr.c_str(), host);
-                lv_obj_set_pos(container, xv, yv);
-            }
-            
-            // Background (with dynamic binding support)
-            bool hasDynBg = !bgAttr.empty() && bgAttr.find('{') != P::String::npos;
-            if (!bgAttr.empty()) {
-                if (hasDynBg) {
-                    P::String varName = extractBindVar(bgAttr.c_str());
-                    P::String initVal = g_core.store().getString(varName);
-                    if (!initVal.empty()) {
-                        uint32_t bgc = parse_color(initVal.c_str());
-                        lv_obj_set_style_bg_color(container, lv_color_hex(bgc), LV_PART_MAIN);
-                        lv_obj_set_style_bg_opa(container, LV_OPA_COVER, LV_PART_MAIN);
-                    }
-                } else {
-                    uint32_t bgc = parse_color(bgAttr.c_str());
-                    lv_obj_set_style_bg_color(container, lv_color_hex(bgc), LV_PART_MAIN);
-                    lv_obj_set_style_bg_opa(container, LV_OPA_COVER, LV_PART_MAIN);
-                }
-            }
-            
-            if (!radiusAttr.empty())
-                lv_obj_set_style_radius(container, atoi(radiusAttr.c_str()), LV_PART_MAIN);
-            if (!paddingAttr.empty())
-                lv_obj_set_style_pad_all(container, parse_size(paddingAttr.c_str()), LV_PART_MAIN);
-            if (overflowAttr == "scroll")
-                lv_obj_add_flag(container, LV_OBJ_FLAG_SCROLLABLE);
-            
-            // Flex layout
-            bool stretchChildren = false;
-            bool stretchIsWidth  = false;  // true=stretch child width (row), false=stretch height (column)
-            if (!flexAttr.empty()) {
-                lv_flex_flow_t flow = LV_FLEX_FLOW_ROW;
-                if (flexAttr == "column")              flow = LV_FLEX_FLOW_COLUMN;
-                else if (flexAttr == "row-wrap")       flow = LV_FLEX_FLOW_ROW_WRAP;
-                else if (flexAttr == "column-wrap")    flow = LV_FLEX_FLOW_COLUMN_WRAP;
-                else if (flexAttr == "row-reverse")    flow = LV_FLEX_FLOW_ROW_REVERSE;
-                else if (flexAttr == "column-reverse") flow = LV_FLEX_FLOW_COLUMN_REVERSE;
-                lv_obj_set_flex_flow(container, flow);
-                // Cross axis = perpendicular to flow. So for row-flow flex,
-                // children get stretched in HEIGHT; for column-flow, in WIDTH.
-                const bool isColumnFlow =
-                    (flow == LV_FLEX_FLOW_COLUMN) ||
-                    (flow == LV_FLEX_FLOW_COLUMN_WRAP) ||
-                    (flow == LV_FLEX_FLOW_COLUMN_REVERSE);
-                stretchIsWidth = isColumnFlow;  // column flow -> stretch width; row flow -> stretch height
-                (void)stretchIsWidth;
-                
-                if (!gapAttr.empty()) {
-                    int32_t gap = parse_size(gapAttr.c_str());
-                    lv_obj_set_style_pad_row(container, gap, LV_PART_MAIN);
-                    lv_obj_set_style_pad_column(container, gap, LV_PART_MAIN);
-                }
-                
-                lv_flex_align_t mainAlign = LV_FLEX_ALIGN_START;
-                lv_flex_align_t crossAlign = LV_FLEX_ALIGN_START;
-                if (!justifyAttr.empty()) {
-                    if (justifyAttr == "center")       mainAlign = LV_FLEX_ALIGN_CENTER;
-                    else if (justifyAttr == "end")     mainAlign = LV_FLEX_ALIGN_END;
-                    else if (justifyAttr == "between") mainAlign = LV_FLEX_ALIGN_SPACE_BETWEEN;
-                    else if (justifyAttr == "around")  mainAlign = LV_FLEX_ALIGN_SPACE_AROUND;
-                    else if (justifyAttr == "evenly")  mainAlign = LV_FLEX_ALIGN_SPACE_EVENLY;
-                }
-                if (!alignAttr.empty()) {
-                    if (alignAttr == "center")       crossAlign = LV_FLEX_ALIGN_CENTER;
-                    else if (alignAttr == "end")      crossAlign = LV_FLEX_ALIGN_END;
-                    else if (alignAttr == "stretch") {
-                        // LVGL's lv_flex_align_t has no STRETCH (verified against
-                        // lvgl/lvgl src/layouts/flex/lv_flex.h — only START/END/
-                        // CENTER/SPACE_*). To make align="stretch" actually do
-                        // something useful, we keep cross=START and stretch each
-                        // child to 100% on the cross axis after they are built.
-                        crossAlign = LV_FLEX_ALIGN_START;
-                        stretchChildren = true;
-                    }
-                }
-                lv_obj_set_flex_align(container, mainAlign, crossAlign, LV_FLEX_ALIGN_START);
-            }
-            
-            if (!growAttr.empty())
-                lv_obj_set_flex_grow(container, atoi(growAttr.c_str()));
-            
-            Widget{container}.applyCss("div", idAttr.c_str(), classAttr.c_str());
-            
-            bool hasDynVisible = !visAttr.empty() && visAttr.find('{') != P::String::npos;
-            bool hasDynDisabled = !disAttr.empty() && disAttr.find('{') != P::String::npos;
-            if (!idAttr.empty() || hasDynVisible || hasDynDisabled || hasDynBg) {
-                P::String autoId = idAttr;
-                if (autoId.empty()) {
-                    static int s_divIdx = 0;
-                    char buf[32]; snprintf(buf, sizeof(buf), "_div_%d", s_divIdx++);
-                    autoId = buf;
-                }
-                ElementDesc ed = {};
-                ed.id = autoId.c_str();
-                ed.obj = container;
-                ed.visibleBind = hasDynVisible ? visAttr.c_str() : nullptr;
-                ed.disabledBind = hasDynDisabled ? disAttr.c_str() : nullptr;
-                ed.bgcolorBind = hasDynBg ? bgAttr.c_str() : nullptr;
-                g_core.app().addElement(ed);
-            }
-            
-            LOG_I(Log::UI, "<div> id=%s flex=%s", idAttr.empty() ? "-" : idAttr.c_str(),
-                     flexAttr.empty() ? "-" : flexAttr.c_str());
-            
-            if (!content.empty()) {
-                // Direct text (<div>Hello</div>) used to be dropped; render it as HTML flow
-                if (HtmlFlow::hasFlowContent(content.c_str(), content.length())) {
-                    if (flexAttr.empty()) HtmlFlow::makeFlow(container);
-                    HtmlFlow::renderContent(content.c_str(), content.length(), container);
-                } else {
-                    parse_children(content.c_str(), content.length(), container);
-                }
-            }
+namespace {
 
-            // align="stretch" emulation: LVGL flex has no STRETCH enum value,
-            // so we set each child's cross-axis size to 100% of the container.
-            if (stretchChildren) {
-                uint32_t n = lv_obj_get_child_cnt(container);
-                for (uint32_t i = 0; i < n; ++i) {
-                    lv_obj_t* ch = lv_obj_get_child(container, i);
-                    if (!ch) continue;
-                    if (stretchIsWidth)
-                        lv_obj_set_width(ch,  lv_pct(100));
-                    else
-                        lv_obj_set_height(ch, lv_pct(100));
-                }
-            }
-        } else if (strcmp(tag, Element::Table) == 0 ||
-                   strcmp(tag, Element::Tr) == 0 ||
-                   strcmp(tag, Element::Td) == 0) {
-            // --- Layout container ---
-            lv_obj_t *container = lv_obj_create(host);
-            lv_obj_remove_style_all(container);  // clean slate: no theme defaults
-            
-            // Flex direction: table=column, tr=row, td=none
-            if (strcmp(tag, Element::Table) == 0) {
-                lv_obj_set_flex_flow(container, LV_FLEX_FLOW_COLUMN);
-            } else if (strcmp(tag, Element::Tr) == 0) {
-                lv_obj_set_flex_flow(container, LV_FLEX_FLOW_ROW);
-            }
-            
-            // Read attributes first (needed for default decisions)
-            auto wAttr = getAttr(astart, aend, "w");
-            auto hAttr = getAttr(astart, aend, "h");
-            auto xAttr = getAttr(astart, aend, "x");
-            auto yAttr = getAttr(astart, aend, "y");
-            auto bgAttr = getAttr(astart, aend, "bgcolor");
-            
-            lv_obj_clear_flag(container, LV_OBJ_FLAG_SCROLLABLE);
-            
-            // Default size — HTML semantics:
-            // table without h: rows size to content
-            // table with h: rows share height via flex-grow
-            static bool s_tableHasHeight = false;
-            
-            if (strcmp(tag, Element::Table) == 0) {
-                // in HTML flow a table is a block; content-sized, its 100%-wide rows would get 0
-                lv_obj_set_width(container, host != parent ? lv_pct(100) : LV_SIZE_CONTENT);
-                lv_obj_set_height(container, LV_SIZE_CONTENT);
-                s_tableHasHeight = !hAttr.empty();
-            } else if (strcmp(tag, Element::Tr) == 0) {
-                lv_obj_set_width(container, lv_pct(100));
-                if (s_tableHasHeight && hAttr.empty()) {
-                    lv_obj_set_flex_grow(container, 1);
-                } else {
-                    lv_obj_set_height(container, LV_SIZE_CONTENT);
-                }
-            } else if (strcmp(tag, Element::Td) == 0) {
-                lv_obj_set_flex_grow(container, 1);
-                if (s_tableHasHeight && hAttr.empty()) {
-                    lv_obj_set_height(container, lv_pct(100));
-                } else {
-                    lv_obj_set_height(container, LV_SIZE_CONTENT);
-                }
-            }
-            
-            // Explicit attributes (override defaults)
-            if (!wAttr.empty()) lv_obj_set_width(container, parse_size(wAttr.c_str()));
-            if (!hAttr.empty()) lv_obj_set_height(container, parse_size(hAttr.c_str()));
-            
-            if (!xAttr.empty() || !yAttr.empty()) {
-                int32_t x = xAttr.empty() ? 0 : parse_coord_w(xAttr.c_str(), host);
-                int32_t y = yAttr.empty() ? 0 : parse_coord_h(yAttr.c_str(), host);
-                lv_obj_set_pos(container, x, y);
-            }
-            
-            if (!bgAttr.empty()) {
-                uint32_t bgc = parse_color(bgAttr.c_str());
+// @for directives and template calls (<Card .../>) are expanded before the walk
+bool needsExpansion(std::string_view html) {
+    for (size_t i = 0; i < html.size(); ++i) {
+        if (html[i] == '@') return true;
+        if (html[i] == '<' && i + 1 < html.size() && html[i + 1] >= 'A' && html[i + 1] <= 'Z') return true;
+    }
+    return false;
+}
+
+// Id for an element the author left without one, when the engine must find it later
+P::String autoId(std::string_view prefix, int n) {
+    P::String id(prefix);
+    id += P::String(std::to_string(n));
+    return id;
+}
+
+// <div>: a general container; flex= lays its children out in a row or a column
+void build_div(const UI::StartTag& tag, const P::String& content, lv_obj_t* host, lv_obj_t* parent) {
+    const UI::Attrs& a = tag.attrs;
+    lv_obj_t *container = lv_obj_create(host);
+    lv_obj_remove_style_all(container);
+    lv_obj_clear_flag(container, LV_OBJ_FLAG_SCROLLABLE);
+
+    auto wAttr = a.get("w");
+    auto hAttr = a.get("h");
+    auto xAttr = a.get("x");
+    auto yAttr = a.get("y");
+    auto bgAttr = a.get("bgcolor");
+    auto flexAttr = a.get("flex");
+    auto gapAttr = a.get("gap");
+    auto justifyAttr = a.get("justify");
+    auto alignAttr = a.get("align");
+    auto radiusAttr = a.get("radius");
+    auto paddingAttr = a.get("padding");
+    auto overflowAttr = a.get("overflow");
+    auto growAttr = a.get("grow");
+    auto idAttr = a.get("id");
+    auto classAttr = a.get("class");
+    auto visAttr = a.get("visible");
+    auto disAttr = a.get("disabled");
+
+    lv_obj_set_width(container, LV_SIZE_CONTENT);
+    lv_obj_set_height(container, LV_SIZE_CONTENT);
+    if (host != parent) lv_obj_set_width(container, lv_pct(100));  // in HTML flow: a block
+    if (!wAttr.empty()) lv_obj_set_width(container, parse_size(wAttr.c_str()));
+    if (!hAttr.empty()) lv_obj_set_height(container, parse_size(hAttr.c_str()));
+
+    if (!xAttr.empty() || !yAttr.empty()) {
+        int32_t xv = xAttr.empty() ? 0 : parse_coord_w(xAttr.c_str(), host);
+        int32_t yv = yAttr.empty() ? 0 : parse_coord_h(yAttr.c_str(), host);
+        lv_obj_set_pos(container, xv, yv);
+    }
+
+    // Background (with dynamic binding support)
+    bool hasDynBg = !bgAttr.empty() && bgAttr.find('{') != P::String::npos;
+    if (!bgAttr.empty()) {
+        if (hasDynBg) {
+            P::String varName = extractBindVar(bgAttr.c_str());
+            P::String initVal = g_core.store().getString(varName);
+            if (!initVal.empty()) {
+                uint32_t bgc = parse_color(initVal.c_str());
                 lv_obj_set_style_bg_color(container, lv_color_hex(bgc), LV_PART_MAIN);
                 lv_obj_set_style_bg_opa(container, LV_OPA_COVER, LV_PART_MAIN);
             }
-            
-            // cellspacing (HTML classic) / gap (modern) — spacing between cells
-            static int32_t s_tableCellspacing = 0;
-            auto gapAttr = getAttr(astart, aend, "cellspacing");
-            if (gapAttr.empty()) gapAttr = getAttr(astart, aend, "gap");
-            int32_t gap = gapAttr.empty() ? 0 : parse_coord_w(gapAttr.c_str());
-            
-            if (strcmp(tag, Element::Table) == 0) {
-                s_tableCellspacing = gap;  // store for child tr's
-                if (gap > 0) {
-                    lv_obj_set_style_pad_row(container, gap, LV_PART_MAIN);
-                }
-            } else if (strcmp(tag, Element::Tr) == 0) {
-                int colGap = (gap > 0) ? gap : s_tableCellspacing;
-                if (colGap > 0) {
-                    lv_obj_set_style_pad_column(container, colGap, LV_PART_MAIN);
-                }
-            } else if (gap > 0) {
-                // td with explicit gap
-                lv_obj_set_style_pad_row(container, gap, LV_PART_MAIN);
-                lv_obj_set_style_pad_column(container, gap, LV_PART_MAIN);
-            }
-            
-            // Apply CSS (may override w, h, bgcolor)
-            auto idAttr = getAttr(astart, aend, "id");
-            auto classAttr = getAttr(astart, aend, "class");
-            Widget{container}.applyCss(tag, idAttr.c_str(), classAttr.c_str());
-            
-            // visible binding
-            auto visAttr = getAttr(astart, aend, "visible");
-            auto disAttr = getAttr(astart, aend, "disabled");
-            bool hasDynVisible = !visAttr.empty() && visAttr.find('{') != P::String::npos;
-            bool hasDynDisabled = !disAttr.empty() && disAttr.find('{') != P::String::npos;
-            
-            // Register element if it has id or dynamic visible
-            if (!idAttr.empty() || hasDynVisible || hasDynDisabled) {
-                // Auto-generate id if needed
-                P::String autoId = idAttr;
-                if (autoId.empty()) {
-                    static int s_containerIdx = 0;
-                    char buf[32];
-                    snprintf(buf, sizeof(buf), "_%s_%d", tag, s_containerIdx++);
-                    autoId = buf;
-                }
-                
-                ElementDesc ed = {};
-                ed.id = autoId.c_str();
-                ed.obj = container;
-                ed.visibleBind = hasDynVisible ? visAttr.c_str() : nullptr;
-                ed.disabledBind = hasDynDisabled ? disAttr.c_str() : nullptr;
-                g_core.app().addElement(ed);
-            }
-            
-            LOG_I(Log::UI, "<%s> id=%s class=%s vis=%s", tag,
-                     idAttr.empty() ? "-" : idAttr.c_str(),
-                     classAttr.empty() ? "-" : classAttr.c_str(),
-                     visAttr.empty() ? "-" : visAttr.c_str());
-            
-            // Recursive parse children; direct cell text (<td>Moscow</td>) renders as HTML flow
-            if (!content.empty()) {
-                if (strcmp(tag, Element::Td) == 0 &&
-                    HtmlFlow::hasFlowContent(content.c_str(), content.length())) {
-                    HtmlFlow::makeFlow(container);
-                    HtmlFlow::renderContent(content.c_str(), content.length(), container);
-                } else {
-                    parse_children(content.c_str(), content.length(), container);
-                }
-            }
-        } else if (HtmlFlow::handles(tag)) {
-            // --- Standard HTML elements (p, h1, ul, img, details...) — see ui_html_flow.h ---
-            HtmlFlow::create(tag, astart, aend, content.c_str(), host);
+        } else {
+            uint32_t bgc = parse_color(bgAttr.c_str());
+            lv_obj_set_style_bg_color(container, lv_color_hex(bgc), LV_PART_MAIN);
+            lv_obj_set_style_bg_opa(container, LV_OPA_COVER, LV_PART_MAIN);
         }
-        
-        // Apply flex-grow on any non-container child widget
-        if (strcmp(tag, Element::Div) != 0 &&
-            strcmp(tag, Element::Table) != 0 &&
-            strcmp(tag, Element::Tr) != 0 &&
-            strcmp(tag, Element::Td) != 0) {
-            auto growVal = getAttr(astart, aend, "grow");
-            if (!growVal.empty()) {
-                lv_obj_t* lastChild = lv_obj_get_child(host, -1);
+    }
+
+    if (!radiusAttr.empty())
+        lv_obj_set_style_radius(container, atoi(radiusAttr.c_str()), LV_PART_MAIN);
+    if (!paddingAttr.empty())
+        lv_obj_set_style_pad_all(container, parse_size(paddingAttr.c_str()), LV_PART_MAIN);
+    if (overflowAttr == "scroll")
+        lv_obj_add_flag(container, LV_OBJ_FLAG_SCROLLABLE);
+
+    // Flex layout
+    bool stretchChildren = false;
+    bool stretchIsWidth  = false;  // true=stretch child width (row), false=stretch height (column)
+    if (!flexAttr.empty()) {
+        lv_flex_flow_t flow = LV_FLEX_FLOW_ROW;
+        if (flexAttr == "column")              flow = LV_FLEX_FLOW_COLUMN;
+        else if (flexAttr == "row-wrap")       flow = LV_FLEX_FLOW_ROW_WRAP;
+        else if (flexAttr == "column-wrap")    flow = LV_FLEX_FLOW_COLUMN_WRAP;
+        else if (flexAttr == "row-reverse")    flow = LV_FLEX_FLOW_ROW_REVERSE;
+        else if (flexAttr == "column-reverse") flow = LV_FLEX_FLOW_COLUMN_REVERSE;
+        lv_obj_set_flex_flow(container, flow);
+        // Cross axis = perpendicular to flow. So for row-flow flex,
+        // children get stretched in HEIGHT; for column-flow, in WIDTH.
+        const bool isColumnFlow =
+            (flow == LV_FLEX_FLOW_COLUMN) ||
+            (flow == LV_FLEX_FLOW_COLUMN_WRAP) ||
+            (flow == LV_FLEX_FLOW_COLUMN_REVERSE);
+        stretchIsWidth = isColumnFlow;  // column flow -> stretch width; row flow -> stretch height
+
+        if (!gapAttr.empty()) {
+            int32_t gap = parse_size(gapAttr.c_str());
+            lv_obj_set_style_pad_row(container, gap, LV_PART_MAIN);
+            lv_obj_set_style_pad_column(container, gap, LV_PART_MAIN);
+        }
+
+        lv_flex_align_t mainAlign = LV_FLEX_ALIGN_START;
+        lv_flex_align_t crossAlign = LV_FLEX_ALIGN_START;
+        if (!justifyAttr.empty()) {
+            if (justifyAttr == "center")       mainAlign = LV_FLEX_ALIGN_CENTER;
+            else if (justifyAttr == "end")     mainAlign = LV_FLEX_ALIGN_END;
+            else if (justifyAttr == "between") mainAlign = LV_FLEX_ALIGN_SPACE_BETWEEN;
+            else if (justifyAttr == "around")  mainAlign = LV_FLEX_ALIGN_SPACE_AROUND;
+            else if (justifyAttr == "evenly")  mainAlign = LV_FLEX_ALIGN_SPACE_EVENLY;
+        }
+        if (!alignAttr.empty()) {
+            if (alignAttr == "center")       crossAlign = LV_FLEX_ALIGN_CENTER;
+            else if (alignAttr == "end")      crossAlign = LV_FLEX_ALIGN_END;
+            else if (alignAttr == "stretch") {
+                // LVGL's lv_flex_align_t has no STRETCH (verified against
+                // lvgl/lvgl src/layouts/flex/lv_flex.h — only START/END/
+                // CENTER/SPACE_*). To make align="stretch" actually do
+                // something useful, we keep cross=START and stretch each
+                // child to 100% on the cross axis after they are built.
+                crossAlign = LV_FLEX_ALIGN_START;
+                stretchChildren = true;
+            }
+        }
+        lv_obj_set_flex_align(container, mainAlign, crossAlign, LV_FLEX_ALIGN_START);
+    }
+
+    if (!growAttr.empty())
+        lv_obj_set_flex_grow(container, atoi(growAttr.c_str()));
+
+    Widget{container}.applyCss("div", idAttr.c_str(), classAttr.c_str());
+
+    bool hasDynVisible = !visAttr.empty() && visAttr.find('{') != P::String::npos;
+    bool hasDynDisabled = !disAttr.empty() && disAttr.find('{') != P::String::npos;
+    if (!idAttr.empty() || hasDynVisible || hasDynDisabled || hasDynBg) {
+        P::String id = idAttr;
+        if (id.empty()) {
+            static int s_divIdx = 0;
+            id = autoId("_div_", s_divIdx++);
+        }
+        ElementDesc ed = {};
+        ed.id = id.c_str();
+        ed.obj = container;
+        ed.visibleBind = hasDynVisible ? visAttr.c_str() : nullptr;
+        ed.disabledBind = hasDynDisabled ? disAttr.c_str() : nullptr;
+        ed.bgcolorBind = hasDynBg ? bgAttr.c_str() : nullptr;
+        g_core.app().addElement(ed);
+    }
+
+    LOG_I(Log::UI, "<div> id=%s flex=%s", idAttr.empty() ? "-" : idAttr.c_str(),
+             flexAttr.empty() ? "-" : flexAttr.c_str());
+
+    if (!content.empty()) {
+        // Direct text (<div>Hello</div>) used to be dropped; render it as HTML flow
+        if (HtmlFlow::hasFlowContent(content.c_str(), content.length())) {
+            if (flexAttr.empty()) HtmlFlow::makeFlow(container);
+            HtmlFlow::renderContent(content.c_str(), content.length(), container);
+        } else {
+            parse_children(content.c_str(), content.length(), container);
+        }
+    }
+
+    // align="stretch" emulation: LVGL flex has no STRETCH enum value,
+    // so we set each child's cross-axis size to 100% of the container.
+    if (stretchChildren) {
+        uint32_t n = lv_obj_get_child_cnt(container);
+        for (uint32_t i = 0; i < n; ++i) {
+            lv_obj_t* ch = lv_obj_get_child(container, i);
+            if (!ch) continue;
+            if (stretchIsWidth)
+                lv_obj_set_width(ch,  lv_pct(100));
+            else
+                lv_obj_set_height(ch, lv_pct(100));
+        }
+    }
+}
+
+// <table>, <tr>, <td>: a table is a column of rows, a row is a row of cells
+void build_table_part(const UI::StartTag& tag, const P::String& content, lv_obj_t* host, lv_obj_t* parent) {
+    using UI::TagId;
+    const UI::Attrs& a = tag.attrs;
+    lv_obj_t *container = lv_obj_create(host);
+    lv_obj_remove_style_all(container);  // clean slate: no theme defaults
+
+    // Flex direction: table=column, tr=row, td=none
+    if (tag.id == TagId::Table) {
+        lv_obj_set_flex_flow(container, LV_FLEX_FLOW_COLUMN);
+    } else if (tag.id == TagId::Tr) {
+        lv_obj_set_flex_flow(container, LV_FLEX_FLOW_ROW);
+    }
+
+    // Read attributes first (needed for default decisions)
+    auto wAttr = a.get("w");
+    auto hAttr = a.get("h");
+    auto xAttr = a.get("x");
+    auto yAttr = a.get("y");
+    auto bgAttr = a.get("bgcolor");
+
+    lv_obj_clear_flag(container, LV_OBJ_FLAG_SCROLLABLE);
+
+    // Default size — HTML semantics:
+    // table without h: rows size to content
+    // table with h: rows share height via flex-grow
+    static bool s_tableHasHeight = false;
+
+    if (tag.id == TagId::Table) {
+        // in HTML flow a table is a block; content-sized, its 100%-wide rows would get 0
+        lv_obj_set_width(container, host != parent ? lv_pct(100) : LV_SIZE_CONTENT);
+        lv_obj_set_height(container, LV_SIZE_CONTENT);
+        s_tableHasHeight = !hAttr.empty();
+    } else if (tag.id == TagId::Tr) {
+        lv_obj_set_width(container, lv_pct(100));
+        if (s_tableHasHeight && hAttr.empty()) {
+            lv_obj_set_flex_grow(container, 1);
+        } else {
+            lv_obj_set_height(container, LV_SIZE_CONTENT);
+        }
+    } else if (tag.id == TagId::Td) {
+        lv_obj_set_flex_grow(container, 1);
+        if (s_tableHasHeight && hAttr.empty()) {
+            lv_obj_set_height(container, lv_pct(100));
+        } else {
+            lv_obj_set_height(container, LV_SIZE_CONTENT);
+        }
+    }
+
+    // Explicit attributes (override defaults)
+    if (!wAttr.empty()) lv_obj_set_width(container, parse_size(wAttr.c_str()));
+    if (!hAttr.empty()) lv_obj_set_height(container, parse_size(hAttr.c_str()));
+
+    if (!xAttr.empty() || !yAttr.empty()) {
+        int32_t x = xAttr.empty() ? 0 : parse_coord_w(xAttr.c_str(), host);
+        int32_t y = yAttr.empty() ? 0 : parse_coord_h(yAttr.c_str(), host);
+        lv_obj_set_pos(container, x, y);
+    }
+
+    if (!bgAttr.empty()) {
+        uint32_t bgc = parse_color(bgAttr.c_str());
+        lv_obj_set_style_bg_color(container, lv_color_hex(bgc), LV_PART_MAIN);
+        lv_obj_set_style_bg_opa(container, LV_OPA_COVER, LV_PART_MAIN);
+    }
+
+    // cellspacing (HTML classic) / gap (modern) — spacing between cells
+    static int32_t s_tableCellspacing = 0;
+    auto gapAttr = a.get("cellspacing");
+    if (gapAttr.empty()) gapAttr = a.get("gap");
+    int32_t gap = gapAttr.empty() ? 0 : parse_coord_w(gapAttr.c_str());
+
+    if (tag.id == TagId::Table) {
+        s_tableCellspacing = gap;  // store for child tr's
+        if (gap > 0) {
+            lv_obj_set_style_pad_row(container, gap, LV_PART_MAIN);
+        }
+    } else if (tag.id == TagId::Tr) {
+        int colGap = (gap > 0) ? gap : s_tableCellspacing;
+        if (colGap > 0) {
+            lv_obj_set_style_pad_column(container, colGap, LV_PART_MAIN);
+        }
+    } else if (gap > 0) {
+        // td with explicit gap
+        lv_obj_set_style_pad_row(container, gap, LV_PART_MAIN);
+        lv_obj_set_style_pad_column(container, gap, LV_PART_MAIN);
+    }
+
+    // Apply CSS (may override w, h, bgcolor)
+    auto idAttr = a.get("id");
+    auto classAttr = a.get("class");
+    Widget{container}.applyCss(tag.name.c_str(), idAttr.c_str(), classAttr.c_str());
+
+    // visible binding
+    auto visAttr = a.get("visible");
+    auto disAttr = a.get("disabled");
+    bool hasDynVisible = !visAttr.empty() && visAttr.find('{') != P::String::npos;
+    bool hasDynDisabled = !disAttr.empty() && disAttr.find('{') != P::String::npos;
+
+    // Register element if it has id or dynamic visible
+    if (!idAttr.empty() || hasDynVisible || hasDynDisabled) {
+        // Auto-generate id if needed
+        P::String id = idAttr;
+        if (id.empty()) {
+            static int s_containerIdx = 0;
+            P::String prefix("_");
+            prefix += tag.name;
+            prefix += '_';
+            id = autoId(prefix, s_containerIdx++);
+        }
+
+        ElementDesc ed = {};
+        ed.id = id.c_str();
+        ed.obj = container;
+        ed.visibleBind = hasDynVisible ? visAttr.c_str() : nullptr;
+        ed.disabledBind = hasDynDisabled ? disAttr.c_str() : nullptr;
+        g_core.app().addElement(ed);
+    }
+
+    LOG_I(Log::UI, "<%s> id=%s class=%s vis=%s", tag.name.c_str(),
+             idAttr.empty() ? "-" : idAttr.c_str(),
+             classAttr.empty() ? "-" : classAttr.c_str(),
+             visAttr.empty() ? "-" : visAttr.c_str());
+
+    // Recursive parse children; direct cell text (<td>Moscow</td>) renders as HTML flow
+    if (!content.empty()) {
+        if (tag.id == TagId::Td &&
+            HtmlFlow::hasFlowContent(content.c_str(), content.length())) {
+            HtmlFlow::makeFlow(container);
+            HtmlFlow::renderContent(content.c_str(), content.length(), container);
+        } else {
+            parse_children(content.c_str(), content.length(), container);
+        }
+    }
+}
+
+// One element of the page, by its tag
+void build_element(const UI::StartTag& tag, const P::String& content, lv_obj_t* host, lv_obj_t* parent) {
+    using UI::TagId;
+    const char* const a = tag.attrs.begin();
+    const char* const e = tag.attrs.end();
+    const char* const c = content.c_str();
+    switch (tag.id) {
+        case TagId::Label:    create_label(a, e, c, host); break;
+        case TagId::Button:   create_button(a, e, c, host); break;
+        case TagId::Switch:   create_switch(a, e, host); break;
+        case TagId::Slider:   create_slider(a, e, host); break;
+        case TagId::Input:
+            // <input type="checkbox|radio|range|submit|..."> follows HTML; without type= it is TelaOS input
+            if (HtmlFlow::isHtmlInput(a, e)) {
+                HtmlFlow::create(tag.name.c_str(), a, e, c, host);
+            } else {
+                create_input(a, e, c, host);
+            }
+            break;
+        case TagId::Canvas:   create_canvas(a, e, host); break;
+        case TagId::Image:    create_image(a, e, host); break;
+        case TagId::Markdown: create_markdown(a, e, c, host); break;
+        case TagId::Qr:       create_qr(a, e, c, host); break;
+        case TagId::Tabs:     create_tabs(a, e, c, host); break;
+        case TagId::Select:   create_select(a, e, c, host); break;
+        case TagId::List:     create_list(a, e, c, host); break;
+        case TagId::Div:      build_div(tag, content, host, parent); break;
+        case TagId::Table:
+        case TagId::Tr:
+        case TagId::Td:       build_table_part(tag, content, host, parent); break;
+        case TagId::Other:
+            // Standard HTML elements (p, h1, ul, img, details...) — see ui_html_flow.h
+            if (HtmlFlow::handles(tag.name.c_str())) HtmlFlow::create(tag.name.c_str(), a, e, c, host);
+            break;
+        case TagId::Page:
+        case TagId::Tab:
+            break;  // the walker passes over them
+    }
+}
+
+}  // namespace
+
+// Build the widgets of a page, or of a container's content, from its markup
+void parse_children(const char *html, int len, lv_obj_t *parent) {
+    using UI::TagId;
+    using UI::TagReader;
+    std::string_view page(html, static_cast<size_t>(len));
+    P::String expanded;
+    if (needsExpansion(page)) {
+        expanded = preprocess_html(html, len);
+        page = expanded;
+        LOG_D(Log::UI, "preprocess: %d -> %d bytes", len, (int)expanded.size());
+    }
+
+    // HTML here (text, <p>, <ul>...): the container flows like a browser page, and its
+    // TelaOS widgets without x/y/align take their place in that flow (see ui_html_flow.h)
+    const bool flowHere = HtmlFlow::hasHtml(page.data(), page.size());
+
+    TagReader reader(page);
+    UI::StartTag tag;
+    while (!reader.done()) {
+        // Direct text and inline HTML (<b>, <a>, <br>...) form one line box, as in a browser
+        if (flowHere) {
+            const std::string_view rest = reader.rest();
+            const char *run = HtmlFlow::inlineRun(rest.data(), rest.data() + rest.size(), parent);
+            if (run != rest.data()) {
+                reader.skip(static_cast<size_t>(run - rest.data()));
+                continue;
+            }
+        }
+        const TagReader::Step step = reader.next(tag);
+        if (step == TagReader::Step::End) break;
+        if (step == TagReader::Step::Skip) continue;
+
+        LOG_I(Log::UI, "parse_tag: [%s]", tag.name.c_str());
+
+        // Nested pages and tabs: the engine builds pages, <tabs> builds its tabs
+        if (tag.id == TagId::Page || tag.id == TagId::Tab) continue;
+
+        const P::String content(reader.content(tag));
+        lv_obj_t *const host =
+            (flowHere && !HtmlFlow::isPositioned(tag.name.c_str(), tag.attrs.begin(), tag.attrs.end()))
+                ? HtmlFlow::flowBox(parent)
+                : parent;
+        build_element(tag, content, host, parent);
+
+        // flex-grow on any widget that is not a layout container
+        if (!UI::isContainer(tag.id)) {
+            const P::String grow = tag.attrs.get("grow");
+            if (!grow.empty()) {
+                lv_obj_t *lastChild = lv_obj_get_child(host, -1);
                 if (lastChild) {
-                    lv_obj_set_flex_grow(lastChild, atoi(growVal.c_str()));
+                    lv_obj_set_flex_grow(lastChild, atoi(grow.c_str()));
                 }
             }
         }
