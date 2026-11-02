@@ -159,6 +159,8 @@ expect @obj "Object fallback text"
 expect @pic "[svg]"
 expect @cnv :visible
 expect @picimg :visible
+expect @cnv2 :visible
+expect "No picture" :visible
 expect "noscript is hidden" :hidden
 expect "template is hidden" :hidden
 expect "Unknown element shows its content." :visible

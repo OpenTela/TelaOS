@@ -1220,6 +1220,19 @@ void create_input(const char *astart, const char *aend, const char *content, lv_
     widget.on(LV_EVENT_DEFOCUSED, input_complete_handler, idx);
 }
 
+// The file behind an LVGL path ("C:/apps/x/pic.png") can be opened
+static bool image_exists(const char* lvglPath) {
+#if defined(LVGL_MOCK_ENABLED)
+    (void)lvglPath;
+    return true;  // the mock has no files: every picture is there
+#else
+    lv_fs_file_t f;
+    if (lv_fs_open(&f, lvglPath, LV_FS_MODE_RD) != LV_FS_RES_OK) return false;
+    lv_fs_close(&f);
+    return true;
+#endif
+}
+
 // Image element - displays PNG image with optional click handler
 void create_image(const char *astart, const char *aend, lv_obj_t *parent) {
     auto attrs = parseCommonAttrs(astart, aend);
@@ -1237,10 +1250,18 @@ void create_image(const char *astart, const char *aend, lv_obj_t *parent) {
     // Using global g_core.app().imagePaths (cleared on ui_clear)
     const char* lvglPath = g_core.app().addImagePath(imgPath);
     
-    // Create via Image widget struct
-    Image widget = { .src = lvglPath };
-    widget.create(parent);
-    auto *img = widget.handle;
+    // A picture that is not there shows its alt= text, as in a browser; the rest (place, size,
+    // onclick, visible=) is the picture's
+    lv_obj_t* img = nullptr;
+    if (const P::String alt = getAttr(astart, aend, "alt"); !alt.empty() && !image_exists(lvglPath)) {
+        Label text = {.text = alt, .color = 0xAAAAAA};
+        text.create(parent);
+        img = text.handle;
+    } else {
+        Image widget = { .src = lvglPath };
+        widget.create(parent);
+        img = widget.handle;
+    }
     
     if (align == "center") {
         lv_obj_align(img, LV_ALIGN_TOP_MID, 0, y);
@@ -1267,7 +1288,7 @@ void create_image(const char *astart, const char *aend, lv_obj_t *parent) {
         applyStaticDisabled(imd.obj, attrs);
         imd.zIndex      = attrs.zIndex;
         int idx = g_core.app().addElement(imd);
-        widget.on(LV_EVENT_CLICKED, button_click_handler, idx);
+        Widget{img}.on(LV_EVENT_CLICKED, button_click_handler, idx);
     } else if (!attrs.id.empty() || attrs.hasDynamicVisible) {
         ensureId(attrs, "_img", false);
         ElementDesc imd2;
@@ -1353,12 +1374,14 @@ void create_canvas(const char *astart, const char *aend, lv_obj_t *parent) {
     int32_t x = getAttrCoordW(astart, aend, "x", 0, parent);
     int32_t y = getAttrCoordH(astart, aend, "y", 0, parent);
     // Canvas MUST be in pixels — it allocates a pixel buffer
-    int32_t w = getAttrCoordW(astart, aend, "w", 200);
-    int32_t h = getAttrCoordH(astart, aend, "h", 200);
+    // HTML <canvas width height> or TelaOS w h
+    int32_t w = getAttrCoordW(astart, aend, getAttr(astart, aend, "w").empty() ? "width" : "w", 200);
+    int32_t h = getAttrCoordH(astart, aend, getAttr(astart, aend, "h").empty() ? "height" : "h", 200);
     
     ensureId(attrs, "_canvas", true);
     
     auto *canvas = lv_canvas_create(parent);
+    _unique_id(canvas, attrs.id.c_str());  // For testing mock
     set_pos(canvas, x, y);
     
     // Allocate buffer in PSRAM (ARGB8888 = 4 bytes per pixel)

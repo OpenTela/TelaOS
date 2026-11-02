@@ -165,6 +165,8 @@
         <object id="obj" data="movie.swf">Object fallback text</object>
         <svg id="pic" width="40" height="40"><circle r="10"/></svg>
         <canvas id="cnv" w="60" h="30"></canvas>
+        <canvas id="cnv2" width="80" height="40"></canvas>
+        <p><img id="noimg" src="nothing.png" alt="No picture"></p>
         <picture>
           <source srcset="big.png">
           <img id="picimg" src="pic.png" alt="picture">
