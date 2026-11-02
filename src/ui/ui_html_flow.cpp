@@ -1894,6 +1894,8 @@ bool isPositioned(const char* tag, const char* astart, const char* aend) {
 
 lv_obj_t* flowBox(lv_obj_t* parent) { return flowParent(parent); }
 
+bool inFlow(lv_obj_t* box) { return s_flow.count(box) != 0; }
+
 bool setText(lv_obj_t* obj, const char* text) {
     if (!obj) return false;
     const char* s = text ? text : "";
