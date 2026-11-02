@@ -32,6 +32,7 @@
            <time datetime="2026-10-30">today</time> <data value="7">seven</data></p>
         <p id="inline3"><bdi>bdi</bdi> <span style="color:#FF8A65">span</span>
            <ruby>tela<rp>(</rp><rt>TL</rt><rp>)</rp></ruby> long<wbr>word</p>
+        <p id="rtlp" dir="rtl">Right to left: <bdo dir="rtl">olleH</bdo></p>
         <p id="entities">&amp; &lt;tag&gt; &copy; &mdash; &#8364; &#x41;</p>
         <p id="lines">first line<br>second line</p>
         <pre id="code">
@@ -129,6 +130,7 @@
         <h2>Live</h2>
         <p id="plainLive">Count is {count}</p>
         <p id="richLive">Count is <b>{count}</b> now</p>
+        <p id="liveWords">Count is {count}: <a href="#endmark">end</a> <a href="/home">home</a></p>
         <details id="faq">
           <summary>What is TelaOS?</summary>
           <p>An evolutionary OS for watches.</p>

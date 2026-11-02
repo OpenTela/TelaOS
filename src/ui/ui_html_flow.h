@@ -54,6 +54,8 @@ void reset();
 // Content of a TelaOS container (div, td) holding direct text or inline HTML tags:
 // before this layer such text was silently dropped.
 bool hasFlowContent(const char* html, size_t len);
+// dir="rtl" / "ltr" on an element (HTML or a TelaOS container): see docs/HTML_TAGS.md
+void applyDir(lv_obj_t* obj, const char* dir);
 // Make a TelaOS container stack its children like an HTML block (div without flex=)
 void makeFlow(lv_obj_t* container);
 void renderContent(const char* html, size_t len, lv_obj_t* container);
