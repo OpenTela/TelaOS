@@ -1,4 +1,4 @@
-# DOM v0.4
+# DOM v0.5
 
 DOM в TelaOS: элементы приложения для его скрипта на Lua — так, как браузер даёт их JavaScript.
 Браузер без JS — всё остальное должно быть: HTML (`docs/HTML_TAGS.md`), CSS (`docs/CSS.md`)
@@ -6,6 +6,9 @@ DOM в TelaOS: элементы приложения для его скрипт�
 
 ## Changelog
 
+- **v0.5**: События: `addEventListener`, `removeEventListener`, `preventDefault`, `stopPropagation`.
+  `click`, `input`, `change` идут вверх по предкам, `focus` и `blur` — нет. `preventDefault()`
+  отменяет то, что TelaOS делает сама: переход по ссылке, `<details>`, закрытие `<dialog>`.
 - **v0.4**: `el.style` — свойства `style=""` по одному: `el.style.color`, `el.style.backgroundColor`,
   `cssText`, `setProperty`, `removeProperty`. Смена применяет CSS заново. `style=""` разметки
   теперь берут и виджеты TelaOS (`<label>`, `<button>`, `<div>`…), не только элементы HTML.
@@ -48,7 +51,7 @@ if title:hasAttribute("hidden") then title:removeAttribute("hidden") end
 - Новое приложение — новое дерево: элемент прежнего ничего не находит (`textContent` пуст,
   `getAttribute` — `nil`).
 
-## Работает: 12 из 20
+## Работает: 16 из 20
 
 Знаки: ✅ работает, — нет.
 
@@ -96,10 +99,10 @@ if title:hasAttribute("hidden") then title:removeAttribute("hidden") end
 
 | | Что | Как |
 |---|-----|-----|
-| — | `addEventListener()` | |
-| — | `removeEventListener()` | |
-| — | `preventDefault()` | |
-| — | `stopPropagation()` | |
+| ✅ | `addEventListener(type, fn)` | `click`, `input`, `change`, `focus`, `blur` |
+| ✅ | `removeEventListener(type, fn)` | та же функция, что добавлена |
+| ✅ | `preventDefault()` | ссылка не переходит, `<details>` не открывается… (ниже) |
+| ✅ | `stopPropagation()` | к предкам событие не идёт |
 
 ### Дерево (4)
 
@@ -168,6 +171,40 @@ title.style.display = ""      -- снять: снова как по CSS
 - Значение из нескольких объявлений (`"red; width: 0"`) и имя с пробелом браузер оставляет без
   внимания — TelaOS тоже.
 
+## События
+
+```lua
+local card = document.getElementById("card")
+card:addEventListener("click", function(e)
+  print(e.type, e.target.id, e.currentTarget.id)  -- click ok card
+end)
+document.getElementById("more"):addEventListener("click", function(e)
+  e:preventDefault()  -- ссылка не переходит
+end)
+```
+
+- `el:addEventListener(type, fn)` — `fn(e)` на событие элемента. Типы:
+  - `click` — касание;
+  - `input` — значение меняется: у поля — при каждой букве, у ползунка — пока его тянут, у флажка
+    и списка — сразу;
+  - `change` — значение готово: ползунок отпустили, у поля нажали OK, флажок и список — сразу;
+  - `focus`, `blur` — поле получило фокус и потеряло его.
+
+  Другой тип — ошибка.
+- Одна функция на один тип добавляется один раз, как в браузере. `removeEventListener(type, fn)`
+  снимает её — нужна та же функция, а не такая же.
+- `click`, `input`, `change` идут вверх, как в браузере: от элемента, где случились, по его предкам.
+  Так у карточки срабатывает касание её кнопки. `e.target` — где случилось, `e.currentTarget` —
+  чей слушатель работает сейчас. `focus` и `blur` вверх не идут.
+- `e:stopPropagation()` — к предкам событие не идёт; остальные слушатели этого же элемента его
+  получат.
+- `e:preventDefault()` — TelaOS не делает того, что сделала бы сама: ссылка не переходит
+  (`<a href>` и `href=` у кнопки), `<details>` не открывается и не закрывается, кнопка `<dialog>`
+  его не закрывает, `<label>` не передаёт касание своему полю. `e.defaultPrevented` — отменено ли.
+- Слушатели работают раньше `onclick=` разметки. Ошибка в одном не мешает следующему: она в логе.
+- Элемент со слушателем `click` принимает касания, даже `<div>` и `<label>`.
+- `e` живёт, пока работают слушатели: сохранённый на потом, он пустой.
+
 ## Поиск по селекторам
 
 ```lua
@@ -224,6 +261,11 @@ local open = document.getElementById("todo"):querySelector("li:not(.done)")
 - `el.style` хранит значение, как записано: браузер запишет `#F00` как `rgb(255, 0, 0)`, а TelaOS
   — как есть. Значение, которое CSS не читает, экран не меняет, но в `style=""` остаётся.
 - `el.style` — только `style=""`; итога CSS (`getComputedStyle`) нет.
+- Строчный элемент в тексте (`<a>` в абзаце) событий не получает: своего объекта у него нет.
+  Слушателя дайте абзацу.
+- У флажка и переключателя `preventDefault()` в `click` отметку не отменяет: LVGL ставит её раньше.
+- У `document` слушателей нет: дайте их странице (`<page id="main">`), до неё события доходят.
+  Третьего аргумента (`capture`, `once`) тоже нет.
 
 ## Тесты
 
@@ -235,7 +277,12 @@ local open = document.getElementById("todo"):querySelector("li:not(.done)")
   поиск в элементе, состояния, что поменял скрипт, ошибки, элементы прежнего приложения.
 - `ci/tests/lua/test_lua_style.cpp` — `el.style`: свойства, `cssText`, каскад, `--x`, что
   остаётся без внимания; `style=""` у `<label>` и `<div>` TelaOS.
+- `ci/tests/lua/test_lua_events.cpp` — события: вверх по предкам, `stopPropagation`,
+  `preventDefault` у `href=`, по одному, снятие, типы и их события LVGL, ошибка в слушателе.
+  Мок LVGL вызывает колбэки объекта, как LVGL: сначала с `LV_EVENT_PREPROCESS`.
 - Робот `sim/tests/tela_dom.sim` на `sim/tests/fixtures/apps/dom_tags` — то же на настоящем LVGL:
   абзац из спанов, `{count}` после записи, блок, из которого ушла строка с `{count}`; страница
   classes — классы прячут и показывают то, что внутри, соседа и первый пункт; страница query —
-  `:checked` находит флажок, отмеченный касанием; страница style — `style=""` у надписи и `el.style`.
+  `:checked` находит флажок, отмеченный касанием; страница style — `style=""` у надписи и `el.style`;
+  страница events — касание идёт к карточке, `stopPropagation` держит его у кнопки, ссылка с
+  `preventDefault` не переходит.

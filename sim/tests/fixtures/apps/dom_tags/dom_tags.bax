@@ -2,7 +2,8 @@
   <!--
     Test fixture for the DOM in TelaOS (docs/DOM.md): document.getElementById, textContent,
     getAttribute, setAttribute, removeAttribute (page "main"); classList (page "classes");
-    querySelector and querySelectorAll (page "query"); el.style and style="" (page "style").
+    querySelector and querySelectorAll (page "query"); el.style and style="" (page "style");
+    addEventListener (page "events").
     Flashed by the simulator with --extra-data; driven by tests/tela_dom.sim. The script runs
     when the app starts: a line "read: ..." shows what it read, the others show what it wrote.
   -->
@@ -13,6 +14,7 @@
     .lead + p { display: none; }
     .short li:first-child { display: none; }
     .off { display: none; }
+    #evCard { display: flex; gap: 8px; }
   </style>
   <ui default="/main">
     <page id="main">
@@ -68,6 +70,15 @@
       <label id="vanish">el.style.display: none hides it</label>
       <button id="restyle" onclick="restyle">Restyle</button>
       <p id="readStyle">-</p>
+      <p id="toEvents"><a href="/events">addEventListener</a></p>
+      <a href="/main">Back</a>
+    </page>
+
+    <page id="events">
+      <h2>Events</h2>
+      <div id="evCard"><button id="evBtn">Tap me</button><button id="evStop">Stop here</button></div>
+      <p id="evLinkP"><a href="/main">this link stays</a></p>
+      <p id="readEvents">-</p>
       <a href="/main">Back</a>
     </page>
   </ui>
@@ -124,5 +135,20 @@ function restyle()
   v.display = on and "none" or ""
   el("readStyle").textContent = "read: [" .. el("styled"):getAttribute("style") .. "] " .. el("painted").style.color
 end
+
+-- addEventListener: a tap goes up to the card, stopPropagation keeps one at its button,
+-- preventDefault keeps the link from going
+local function showEvent(s) el("readEvents").textContent = "read: " .. s end
+el("evCard"):addEventListener("click", function(e)
+  showEvent(e.type .. " " .. e.target.id .. " > " .. e.currentTarget.id)
+end)
+el("evStop"):addEventListener("click", function(e)
+  e:stopPropagation()
+  showEvent("stopped")
+end)
+el("evLinkP"):addEventListener("click", function(e)
+  e:preventDefault()
+  showEvent("stayed")
+end)
   </script>
 </app>
