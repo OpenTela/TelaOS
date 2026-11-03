@@ -7,6 +7,7 @@
 #include "ui/ui_html.h"
 #include <cstring>
 #include "console/console.h"
+#include "utils/log_config.h"
 #include "core/state_store.h"
 
 #define TEST(name) printf("  %-50s ", name); total++;
@@ -137,7 +138,50 @@ int main() {
         if (!r.success) PASS();
         else FAIL("should fail");
     }
-    
+
+    // === log ===
+    printf("\nlog (levels):\n");
+
+    TEST("log warn → every category warn") {
+        auto r = Console::exec("log warn");
+        if (r.success && Log::get(Log::UI) == Log::Warn && Log::get(Log::LUA) == Log::Warn &&
+            Log::get(Log::BLE) == Log::Warn) PASS();
+        else FAIL("");
+    }
+
+    TEST("log ui debug → UI debug, the rest as they were") {
+        auto r = Console::exec("log ui debug");
+        if (r.success && Log::get(Log::UI) == Log::Debug && Log::get(Log::LUA) == Log::Warn &&
+            Log::get(Log::APP) == Log::Warn) PASS();
+        else FAIL("");
+    }
+
+    TEST("log lua v → LUA verbose (short level name)") {
+        auto r = Console::exec("log lua v");
+        if (r.success && Log::get(Log::LUA) == Log::Verbose && Log::get(Log::UI) == Log::Debug) PASS();
+        else FAIL("");
+    }
+
+    TEST("log app → APP info") {
+        auto r = Console::exec("log app");
+        if (r.success && Log::get(Log::APP) == Log::Info && Log::get(Log::STATE) == Log::Warn) PASS();
+        else FAIL("");
+    }
+
+    TEST("log ui loud → error (unknown level), UI kept") {
+        auto r = Console::exec("log ui loud");
+        if (!r.success && Log::get(Log::UI) == Log::Debug) PASS();
+        else FAIL("should fail");
+    }
+
+    TEST("log nosuch → error (unknown category)") {
+        auto r = Console::exec("log nosuch");
+        if (!r.success) PASS();
+        else FAIL("should fail");
+    }
+
+    Console::exec("log info");
+
     // === Summary ===
     printf("\n");
     if (passed == total) {
