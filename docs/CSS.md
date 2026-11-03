@@ -1,10 +1,12 @@
-# CSS v0.5
+# CSS v0.6
 
 CSS в TelaOS: что из CSS имеет смысл на экране часов, что уже работает и во что оно превращается
 в LVGL. Браузер без JS — всё остальное должно быть: HTML (`docs/HTML_TAGS.md`) и CSS.
 
 ## Changelog
 
+- **v0.6**: Текст. `text-decoration` у блоков и виджетов, `letter-spacing`, `line-height`,
+  `white-space: nowrap`, `text-overflow: ellipsis`.
 - **v0.5**: Раскладка. `display: flex`, `flex-direction`, `flex-wrap`, `flex-flow`, `justify-content`,
   `align-items`, `align-content`, `flex`, `flex-grow`; `position: relative`, `absolute`, `fixed`
   с `left`/`top`/`right`/`bottom`; `visibility: hidden`.
@@ -35,7 +37,7 @@ CSS в TelaOS: что из CSS имеет смысл на экране часо�
 - Движок: `src/ui/css_parser.cpp`. Предки элемента для селекторов — `UI::CssScope`: страница,
   `<div>`, таблицы, вкладки, `<label>` и `<button>` с HTML внутри и элементы HTML, пока строится их содержимое.
 
-## Работает: 41 из 65
+## Работает: 45 из 65
 
 Знаки: ✅ работает, ½ частично (не считается), — нет.
 
@@ -118,13 +120,13 @@ CSS в TelaOS: что из CSS имеет смысл на экране часо�
 | ✅ | `color` | |
 | ✅ | `font-size` | ближайший из шрифтов прошивки: 16, 32, 48, 72 |
 | ✅ | `text-align` | |
-| ½ | `text-decoration` | у строчных элементов (`a`, `span`); у блоков — нет |
+| ✅ | `text-decoration` | `underline`, `line-through`, `none`, и у блоков, и у строчных элементов; цвет и стиль линии — нет |
 | — | `font-weight`, `font-style` | в прошивке нет жирного и курсива |
-| — | `line-height` | `text_line_space` |
-| — | `letter-spacing` | `text_letter_space` |
+| ✅ | `line-height` | `text_line_space` — высота строки минус высота шрифта: `1.5`, `150%`, `24px` |
+| ✅ | `letter-spacing` | `text_letter_space` |
 | — | `text-transform` | |
-| — | `white-space` | |
-| — | `text-overflow: ellipsis` | `LV_LABEL_LONG_DOT` |
+| ½ | `white-space` | `nowrap`; `pre` — нет |
+| ✅ | `text-overflow: ellipsis` | с `white-space: nowrap`, как в CSS: `LV_LABEL_LONG_DOT`, одна строка |
 | — | `vertical-align` | |
 | — | `word-break`, `overflow-wrap` | |
 
@@ -186,6 +188,11 @@ CSS в TelaOS: что из CSS имеет смысл на экране часо�
 - Элементы flex-контейнера — его блоки и виджеты. Строчный текст внутри (`<nav><a>…</a> <a>…</a></nav>`)
   остаётся одной строкой, а не отдельными элементами.
 - `align-items: stretch` — по умолчанию в CSS — в LVGL нет: элементы остаются своего размера.
+- `line-height`, `letter-spacing` и `text-decoration` LVGL передаёт детям готовым числом: `line-height: 1.5`
+  у блока даёт детям с другим шрифтом тот же отступ между строками в пикселях.
+- `white-space: nowrap` и `text-overflow` действуют на одну надпись: у абзаца со ссылками или
+  `sup`/`sub` (он строится по словам) их нет.
+- `text-transform` нет: значение `{var}` меняется после построения, и преобразованный текст его бы терял.
 
 ## Тесты
 
@@ -194,6 +201,7 @@ CSS в TelaOS: что из CSS имеет смысл на экране часо�
 - `ci/tests/ui/test_css_values.cpp` — значения: цвета, длины, 1–4 значения, `var()`, значения, которые не читаются.
 - `ci/tests/ui/test_css_box.cpp` — блок: `margin`, `border`, `outline`, `box-shadow`, градиенты, `overflow`.
 - `ci/tests/ui/test_css_layout.cpp` — раскладка: flex, `position`, `visibility`.
+- `ci/tests/ui/test_css_text.cpp` — текст: `text-decoration`, `letter-spacing`, `line-height`, одна строка.
 - Симулятор (`docs/SIMULATOR.md`): приложение-образец `sim/tests/fixtures/apps/css_tags`,
   сценарий `sim/tests/tela_css.sim`. Цвет каждой строки на снимке говорит, сработало ли её правило;
-  страница `values` — значения, `box` — блок, `layout` — раскладка.
+  страница `values` — значения, `box` — блок, `layout` — раскладка, `text` — текст.

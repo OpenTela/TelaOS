@@ -52,6 +52,12 @@ struct Widget {
     bool ignoreLayout = false;
     bool floating = false;
     bool clickable = false;
+
+    // Text (CSS text-decoration, letter-spacing, line-height, white-space, text-overflow)
+    int textDecor = -1;      // lv_text_decor_t; -1: not set
+    int letterSpace = 0;
+    int lineSpace = 0;
+    int longMode = -1;       // lv_label_long_mode_t; -1: not set
     int padAll = -1;         // padding (from lv_obj_set_style_pad_all)
     int padLeft = 0;
     int padRight = 0;

@@ -133,7 +133,12 @@ typedef enum { LV_GRAD_DIR_NONE, LV_GRAD_DIR_VER, LV_GRAD_DIR_HOR } lv_grad_dir_
 
 #define LV_INDEV_TYPE_POINTER 1
 #define LV_DISPLAY_RENDER_MODE_PARTIAL 1
-#define LV_LABEL_LONG_DOT ((lv_label_long_mode_t)3)
+#define LV_LABEL_LONG_DOT ((lv_label_long_mode_t)4)
+
+typedef uint8_t lv_text_decor_t;
+#define LV_TEXT_DECOR_NONE          0x00
+#define LV_TEXT_DECOR_UNDERLINE     0x01
+#define LV_TEXT_DECOR_STRIKETHROUGH 0x02
 
 inline int lv_pct(int x) { return 10000 + x; }
 inline int lv_pct_to_px(int v, int base) {
@@ -748,6 +753,9 @@ inline lv_flex_align_t lv_obj_get_style_flex_track_place(lv_obj_t* obj, int) { r
 inline int lv_obj_get_style_width(lv_obj_t* obj, int) { return MOCK_GET(w, 0); }
 inline int lv_obj_get_style_height(lv_obj_t* obj, int) { return MOCK_GET(h, 0); }
 inline void lv_obj_set_style_translate_x(lv_obj_t* obj, int v, int) { MOCK_SET(translateX, v); }
+inline void lv_obj_set_style_text_decor(lv_obj_t* obj, lv_text_decor_t v, int) { MOCK_SET(textDecor, static_cast<int>(v)); }
+inline void lv_obj_set_style_text_letter_space(lv_obj_t* obj, int v, int) { MOCK_SET(letterSpace, v); }
+inline void lv_obj_set_style_text_line_space(lv_obj_t* obj, int v, int) { MOCK_SET(lineSpace, v); }
 
 // The text color an object has: its own or its parent's
 inline lv_color_t lv_obj_get_style_text_color(lv_obj_t* obj, int) {
@@ -793,7 +801,7 @@ inline const lv_font_t* lv_obj_get_style_text_font(lv_obj_t*, int) { return null
 
 // Label
 inline void lv_label_set_text_fmt(lv_obj_t*, const char*, ...) {}
-inline void lv_label_set_long_mode(lv_obj_t*, lv_label_long_mode_t) {}
+inline void lv_label_set_long_mode(lv_obj_t* obj, lv_label_long_mode_t m) { MOCK_SET(longMode, static_cast<int>(m)); }
 inline const char* lv_label_get_text(lv_obj_t* obj) {
 #ifdef LVGL_MOCK_ENABLED
     if (obj && obj->mock_widget) return obj->mock_widget->text.c_str();
