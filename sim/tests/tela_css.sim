@@ -78,3 +78,14 @@ shot css_07_states
 tap "Back"
 wait 200
 expect "Selectors" :visible
+
+tap "Structure"
+wait 200
+expect @narrow "@media (max-width: 500px): green"
+expect @bigscreen :hidden
+expect @lastli contains "li:last-child: yellow"
+expect @nextp "h3 + p: blue"
+shot css_08_structure
+tap "Back"
+wait 200
+expect "Selectors" :visible

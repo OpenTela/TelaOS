@@ -1,10 +1,13 @@
-# CSS v0.7
+# CSS v0.8
 
 CSS в TelaOS: что из CSS имеет смысл на экране часов, что уже работает и во что оно превращается
 в LVGL. Браузер без JS — всё остальное должно быть: HTML (`docs/HTML_TAGS.md`) и CSS.
 
 ## Changelog
 
+- **v0.8**: Структура и экран. `@media` — по экрану платы; место среди соседей: `:first-child`,
+  `:last-child`, `:only-child`, `:nth-child()`, `:nth-last-child()` и их формы `-of-type`;
+  соседи `h2 + p` и `h2 ~ p`.
 - **v0.7**: Живое. `:active`, `:focus`, `:checked`, `:disabled`, `:hover` — стили состояний LVGL;
   `transform` (`translate`, `scale`, `rotate`); `transition` — переходы стилей LVGL. Блоки и строки
   HTML больше не обрезают то, что выступает (обводку, тень, `transform`), а `overflow: visible`
@@ -42,7 +45,7 @@ CSS в TelaOS: что из CSS имеет смысл на экране часо�
 - Движок: `src/ui/css_parser.cpp`. Предки элемента для селекторов — `UI::CssScope`: страница,
   `<div>`, таблицы, вкладки, `<label>` и `<button>` с HTML внутри и элементы HTML, пока строится их содержимое.
 
-## Работает: 48 из 65
+## Работает: 51 из 65
 
 Знаки: ✅ работает, ½ частично (не считается), — нет.
 
@@ -62,8 +65,8 @@ CSS в TelaOS: что из CSS имеет смысл на экране часо�
 | ✅ | `!important` | лист `!important` бьёт `style=""`, `style="… !important"` — всё |
 | ✅ | `style=""` после листов | |
 | ✅ | наследование цвета и шрифта | LVGL наследует `text_color`, `text_font` |
-| — | соседи: `a + b`, `a ~ b` | |
-| — | `:first-child`, `:last-child`, `:nth-child()` | |
+| ✅ | соседи: `a + b`, `a ~ b` | соседи читаются из текста страницы; текст и комментарии между ними не считаются |
+| ✅ | `:first-child`, `:last-child`, `:nth-child()` | и `:only-child`, `:nth-last-child()`, формы `-of-type`; `odd`, `even`, `2n+1`, `-n+3`; считаются все элементы, как в браузере |
 | ✅ | `:active`, `:hover`, `:focus`, `:checked`, `:disabled` | стили состояний LVGL `PRESSED`, `FOCUSED`, `CHECKED`, `DISABLED`: LVGL сам переключает их; `:hover` — нажатие, наведения у сенсорного экрана нет; `:focus-visible` — как `:focus` |
 | — | `:not()`, `:is()`, `::before`, `::after`, `::placeholder` | |
 
@@ -147,7 +150,7 @@ CSS в TelaOS: что из CSS имеет смысл на экране часо�
 
 | | Что | Как |
 |---|-----|-----|
-| — | `@media` | пропускается целиком |
+| ✅ | `@media` | экран платы (`SCREEN_WIDTH` × `SCREEN_HEIGHT`): `width`, `height`, `orientation`, `aspect-ratio`, `resolution` (130dpi); `hover: none`, `pointer: coarse`, `prefers-color-scheme: dark`; `min-`/`max-` и диапазоны (`400px <= width < 800px`); `not`, `and`, `or`, списки; `screen` и `all` — да, `print` — нет |
 | — | `@import` | пропускается |
 | — | `@font-face` | только шрифты прошивки |
 
@@ -200,7 +203,8 @@ CSS в TelaOS: что из CSS имеет смысл на экране часо�
 - `text-transform` нет: значение `{var}` меняется после построения, и преобразованный текст его бы терял.
 - В состоянии (`:active` и другие) меняется вид: цвет, фон, прозрачность, радиус, рамка, обводка, тень,
   `transform`, оформление текста. Размеры, отступы и раскладка остаются у элемента без состояния.
-- Состояние предка (`.menu:active a`) — нет: в LVGL стиль состояния есть только у самого виджета.
+- Состояние предка или соседа (`.menu:active a`, `input:checked + label`) — нет: в LVGL стиль
+  состояния есть только у самого виджета.
 - Когда состояний несколько сразу (флажок отмечен и нажат), LVGL берёт стиль старшего:
   `:disabled`, затем `:active`, `:focus`, `:checked` — а не правило, что ниже в листе.
   `.x:checked:active` задаёт вид для обоих сразу.
@@ -208,6 +212,11 @@ CSS в TelaOS: что из CSS имеет смысл на экране часо�
   на 24px, дальше обрезается. `<div>` TelaOS обрезает по своему краю, пока ему не сказать
   `overflow: visible`.
 - `transition` берётся у элемента без состояния: `transition` внутри `:active { }` не действует.
+- `@media` читается один раз, когда читается лист: экран часов не меняется. Признак, которого
+  движок не знает, не выполняется, и `not` перед ним тоже — как в браузере.
+- Место среди соседей и сами соседи читаются из текста страницы: класс соседа — каким он написан
+  (`class="{var}"` не подставляется). Поля HTML (`<input type="text">`, `"range"`, `"submit"`,
+  `<textarea>`) строятся виджетами TelaOS из своего текста: своего места среди соседей у них нет.
 - `transform` в LVGL — всегда сдвиг, масштаб, поворот, в каком бы порядке ни шли функции.
   `transform` без `translate()` сохраняет сдвиг от `position: relative`, с ним — заменяет.
 
@@ -220,6 +229,8 @@ CSS в TelaOS: что из CSS имеет смысл на экране часо�
 - `ci/tests/ui/test_css_layout.cpp` — раскладка: flex, `position`, `visibility`.
 - `ci/tests/ui/test_css_text.cpp` — текст: `text-decoration`, `letter-spacing`, `line-height`, одна строка.
 - `ci/tests/ui/test_css_states.cpp` — состояния, `transform`, `transition`, что выступает за блок.
+- `ci/tests/ui/test_css_structure.cpp` — `@media`, место среди соседей, соседи.
 - Симулятор (`docs/SIMULATOR.md`): приложение-образец `sim/tests/fixtures/apps/css_tags`,
   сценарий `sim/tests/tela_css.sim`. Цвет каждой строки на снимке говорит, сработало ли её правило;
-  страница `values` — значения, `box` — блок, `layout` — раскладка, `text` — текст, `states` — состояния.
+  страница `values` — значения, `box` — блок, `layout` — раскладка, `text` — текст, `states` — состояния,
+  `structure` — структура и экран.

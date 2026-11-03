@@ -1576,8 +1576,10 @@ void create_tabs(const char* astart, const char* aend, const char* content, lv_o
         // Parse widgets inside this tab: for CSS they are inside <tabs> and this <tab>
         int tab_content_len = tab_close - ta;
         {
-            UI::CssScope inTabs("tabs", std::string_view(astart, static_cast<size_t>(aend - astart)));
-            UI::CssScope inTab("tab", std::string_view(tab_astart, static_cast<size_t>(tab_aend - tab_astart)));
+            UI::CssScope inTabs("tabs", std::string_view(astart, static_cast<size_t>(aend - astart)),
+                                std::string_view(content, static_cast<size_t>(end - content)));
+            UI::CssScope inTab("tab", std::string_view(tab_astart, static_cast<size_t>(tab_aend - tab_astart)),
+                               std::string_view(ta, static_cast<size_t>(tab_content_len)));
             parse_children(ta, tab_content_len, tab_page);
         }
         
@@ -1748,7 +1750,7 @@ void build_div(const UI::StartTag& tag, const P::String& content, lv_obj_t* host
              flexAttr.empty() ? "-" : flexAttr.c_str());
 
     if (!content.empty()) {
-        UI::CssScope inside("div", a.text());  // .card label {} sees this div
+        UI::CssScope inside("div", a.text(), std::string_view(content.c_str(), content.length()));  // .card label {}
         // Direct text (<div>Hello</div>) used to be dropped; render it as HTML flow
         if (HtmlFlow::hasFlowContent(content.c_str(), content.length())) {
             if (flexAttr.empty()) HtmlFlow::makeFlow(container);
@@ -1902,7 +1904,7 @@ void build_table_part(const UI::StartTag& tag, const P::String& content, lv_obj_
 
     // Recursive parse children; direct cell text (<td>Moscow</td>) renders as HTML flow
     if (!content.empty()) {
-        UI::CssScope inside(tag.name, a.text());  // table td {}, tr > td {}
+        UI::CssScope inside(tag.name, a.text(), std::string_view(content.c_str(), content.length()));  // tr > td {}
         if (tag.id == TagId::Td &&
             HtmlFlow::hasFlowContent(content.c_str(), content.length())) {
             HtmlFlow::makeFlow(container);
@@ -1966,6 +1968,7 @@ void parse_children(const char *html, int len, lv_obj_t *parent) {
         page = expanded;
         LOG_D(Log::UI, "preprocess: %d -> %d bytes", len, (int)expanded.size());
     }
+    UI::CssScopeText readFrom(std::string_view(html, static_cast<size_t>(len)), page);  // li:first-child in the copy
 
     // HTML here (text, <p>, <ul>...): the container flows like a browser page, and its
     // TelaOS widgets without x/y/align take their place in that flow (see ui_html_flow.h)
@@ -2240,7 +2243,8 @@ int ui_html_render_internal(const char *html) {
     // Pass 3: Parse children for all pages
     for (int i = 0; i < content_count; i++) {
         LOG_I(Log::UI, "  page[%d]: len=%d parent=%p", i, contents[i].len, contents[i].parent);
-        UI::CssScope page("page", contents[i].attrs);  // #settings button {} sees its page
+        UI::CssScope page("page", contents[i].attrs,  // #settings button {} sees its page
+                          std::string_view(contents[i].start, static_cast<size_t>(contents[i].len)));
         parse_children(contents[i].start, contents[i].len, contents[i].parent);
     }
     
