@@ -236,6 +236,31 @@ P::Array<std::string_view> cssParts(std::string_view value) {
     return parts;
 }
 
+P::Array<std::string_view> cssList(std::string_view value) {
+    P::Array<std::string_view> items;
+    size_t start = 0;
+    int depth = 0;
+    char quote = 0;
+    for (size_t i = 0; i <= value.size(); ++i) {
+        const char c = i < value.size() ? value[i] : ',';
+        if (quote) {
+            if (c == quote) quote = 0;
+            if (i < value.size()) continue;
+        }
+        if (c == '"' || c == '\'') {
+            quote = c;
+        } else if (c == '(') {
+            ++depth;
+        } else if (c == ')') {
+            if (depth > 0) --depth;
+        } else if (c == ',' && (depth == 0 || i == value.size())) {
+            items.push_back(trimmed(value.substr(start, i - start)));
+            start = i + 1;
+        }
+    }
+    return items;
+}
+
 bool cssLength(std::string_view text, float em, int32_t& px) {
     text = trimmed(text);
     size_t i = 0;

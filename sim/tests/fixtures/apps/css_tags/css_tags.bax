@@ -1,6 +1,7 @@
 <app os="1.0" title="CSS" version="0.1" category="test">
   <!--
-    Test fixture for CSS in TelaOS (docs/CSS.md): selectors and cascade; values (page "values").
+    Test fixture for CSS in TelaOS (docs/CSS.md): selectors and cascade; values (page "values");
+    the box (page "box").
     Flashed by the simulator with --extra-data; driven by tests/tela_css.sim.
     Each line says which rule colors it; a line in white did not get its rule.
   -->
@@ -29,6 +30,12 @@
     .wide { width: 50vw; background: #333333; }
     .gap { gap: 8px 24px; }
     .dot { width: 2.5rem; height: 2.5rem; background: #E57373; border-radius: 50%; }
+    .framed { border: 2px solid #4FC3F7; padding: 4px 8px; margin: 6px 0; }
+    .under { border-bottom: 3px solid #FFD54F; }
+    .ring { outline: 2px solid #81C784; outline-offset: 3px; margin: 8px; }
+    .lifted { background: #333333; box-shadow: 0 6px 12px 2px rgba(79, 195, 247, 0.7); padding: 4px; margin: 4px 0 16px; }
+    .sky { background: linear-gradient(to right, #4FC3F7, #283593); height: 32px; }
+    .clip { overflow: hidden; height: 24px; background: #333333; }
   </style>
   <ui default="/main">
 
@@ -48,7 +55,7 @@
       <p class="note" id="note">p.note beats .note: green</p>
       <p class="must" id="strong">!important beats #id: blue</p>
       <p class="gone" id="gone">display: none</p>
-      <p><a href="/values">Values</a></p>
+      <p><a href="/values">Values</a> <a href="/box">Box</a></p>
     </page>
 
     <page id="values">
@@ -62,6 +69,17 @@
       <div class="wide" id="wide"><label>width: 50vw</label></div>
       <div flex="row" class="gap" id="gap"><label>gap</label><label>8px</label><label>24px</label></div>
       <div class="dot" id="dot"></div>
+      <p><a href="/main">Back</a></p>
+    </page>
+
+    <page id="box">
+      <h2>Box</h2>
+      <p class="framed" id="framed">border: 2px solid blue</p>
+      <p class="under" id="under">border-bottom: yellow line</p>
+      <p class="ring" id="ring">outline with offset: green</p>
+      <p class="lifted" id="lifted">box-shadow: lifted</p>
+      <div class="sky" id="sky"><label>linear-gradient: to right</label></div>
+      <div class="clip" id="clip" flex="column"><label>overflow: hidden, first line</label><label>second line, cut off</label></div>
       <p><a href="/main">Back</a></p>
     </page>
 

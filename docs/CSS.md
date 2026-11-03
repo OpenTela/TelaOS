@@ -1,10 +1,14 @@
-# CSS v0.3
+# CSS v0.4
 
 CSS в TelaOS: что из CSS имеет смысл на экране часов, что уже работает и во что оно превращается
 в LVGL. Браузер без JS — всё остальное должно быть: HTML (`docs/HTML_TAGS.md`) и CSS.
 
 ## Changelog
 
+- **v0.4**: Блок. `margin` (1–4 значения, отрицательные), `border` и стороны (`border-bottom`,
+  `border-width`…), `outline` и `outline-offset`, `box-shadow`, `overflow` (`hidden`, `auto`, `scroll`,
+  `visible`, по осям), `linear-gradient()` вдоль осей. `border: none` убирает и рамку, которую
+  элемент рисует сам (`<fieldset>`).
 - **v0.3**: Значения. Длины в `em`, `rem`, `vw`, `vh`; цвета `rgb()`, `rgba()`, `hsl()`, `hsla()`,
   `#RGBA`, `#RRGGBBAA` с прозрачностью; `transparent`; 1–4 значения в `padding`, два в `gap`,
   `row-gap`, `column-gap`; `border-radius: 50%` — круг; переменные `--x`, `var(--x, запасное)`, `:root`.
@@ -28,7 +32,7 @@ CSS в TelaOS: что из CSS имеет смысл на экране часо�
 - Движок: `src/ui/css_parser.cpp`. Предки элемента для селекторов — `UI::CssScope`: страница,
   `<div>`, таблицы, вкладки, `<label>` и `<button>` с HTML внутри и элементы HTML, пока строится их содержимое.
 
-## Работает: 30 из 65
+## Работает: 35 из 65
 
 Знаки: ✅ работает, ½ частично (не считается), — нет.
 
@@ -72,15 +76,15 @@ CSS в TelaOS: что из CSS имеет смысл на экране часо�
 |---|-----|-----|
 | ✅ | `width`, `height`, `min-*`, `max-*` | |
 | ✅ | `padding`, `padding-*` | 1–4 значения |
-| — | `margin`, `margin-*` | `margin_*` в LVGL 9 |
-| — | `border`, `border-*` | `border_width`, `border_color`, `border_side` |
+| ✅ | `margin`, `margin-*` | `margin_*`: 1–4 значения, отрицательные тоже; `auto` — 0 |
+| ✅ | `border`, `border-*` | `border_width`, `border_color`, `border_side`: стороны — любые, толщина и цвет — одни на всю рамку |
 | ✅ | `border-radius` | `50%` — круг; углы не различаются: в LVGL один радиус, берётся первое значение |
-| — | `outline` | `outline_*` |
-| — | `box-shadow` | `shadow_*` |
+| ✅ | `outline` | `outline_*`, `outline-offset` — `outline_pad` |
+| ✅ | `box-shadow` | `shadow_*`: одна тень — первая без `inset` |
 | ✅ | `background`, `background-color` | цветом; из `background: url(x.png) #222` — цвет, `none` — без фона |
-| — | `linear-gradient()` | `bg_grad` |
+| ½ | `linear-gradient()` | `bg_grad`: вдоль осей (`to right`, `90deg`), два цвета — первый и последний; под углом — нет |
 | ✅ | `opacity` | |
-| — | `overflow` | прокрутка и обрезка |
+| ✅ | `overflow`, `overflow-x`, `overflow-y` | `hidden` — обрезка без прокрутки, `auto`/`scroll` — прокрутка, `visible` — видно за краем |
 
 ### Отображение и положение (7)
 
@@ -169,12 +173,18 @@ CSS в TelaOS: что из CSS имеет смысл на экране часо�
   умолчанию (`h1` — 48px); `font-size` самого блока из CSS тут не учитывается.
 - `border-radius` в процентах — только круг (50% и больше): размер элемента в это время ещё не известен.
 - `<th>` строится как `<td>`: правила `th` к нему не применяются.
+- `margin` действует там, где раскладывает LVGL: в потоке HTML и во flex. У TelaOS-виджета
+  с `x`/`y` его нет. `margin: 0 auto` не центрирует.
+- У рамки одна толщина и один цвет: если стороны заданы разными, берутся у стороны, заданной
+  последней. `dashed`, `dotted`, `double` и другие стили рисуются сплошной линией.
+- `box-shadow: inset` не рисуется: LVGL рисует тень только снаружи.
 
 ## Тесты
 
 - `ci/tests/ui/test_css.cpp` — простые селекторы и прежний каскад (CI, mock LVGL).
 - `ci/tests/ui/test_css_selectors.cpp` — селекторы и каскад.
 - `ci/tests/ui/test_css_values.cpp` — значения: цвета, длины, 1–4 значения, `var()`, значения, которые не читаются.
+- `ci/tests/ui/test_css_box.cpp` — блок: `margin`, `border`, `outline`, `box-shadow`, градиенты, `overflow`.
 - Симулятор (`docs/SIMULATOR.md`): приложение-образец `sim/tests/fixtures/apps/css_tags`,
   сценарий `sim/tests/tela_css.sim`. Цвет каждой строки на снимке говорит, сработало ли её правило;
-  страница `values` — значения.
+  страница `values` — значения, `box` — блок.
