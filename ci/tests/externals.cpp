@@ -12,11 +12,11 @@ TwoWire Wire;
 TwoWire Wire1;
 EspClass ESP;
 
-// LVGL fonts
-extern "C" const lv_font_t Ubuntu_16px = {16};
-extern "C" const lv_font_t Ubuntu_32px = {32};
-extern "C" const lv_font_t Ubuntu_48px = {48};
-extern "C" const lv_font_t Ubuntu_72px = {72};
+// LVGL fonts (not const, as in src/font/*.c)
+extern "C" lv_font_t Ubuntu_16px = {16};
+extern "C" lv_font_t Ubuntu_32px = {32};
+extern "C" lv_font_t Ubuntu_48px = {48};
+extern "C" lv_font_t Ubuntu_72px = {72};
 
 const lv_font_t lv_font_montserrat_14 = {14};
 const lv_font_t lv_font_montserrat_16 = {16};
