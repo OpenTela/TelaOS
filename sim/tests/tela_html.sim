@@ -24,6 +24,7 @@ expect "Heading 3" :visible
 expect @inline1 "b strong i em u ins s del mark small H2O x2"
 expect @inline2 "code Ctrl samp x “quote” cite dfn HTML today seven"
 expect @inline3 "bdi span tela(TL) longword"
+expect @rtlp "Right to left: Hello"
 expect @entities "& <tag> © — € A"
 expect @lines contains "first line"
 expect @lines contains "second line"
@@ -134,6 +135,7 @@ tap "Live"
 wait 200
 expect @plainLive "Count is 2"
 expect @richLive "Count is 2 now"
+expect @liveWords "Count is 2: end home"
 expect "An evolutionary OS for watches." :hidden
 tap "What is TelaOS?"
 expect "An evolutionary OS for watches." :visible

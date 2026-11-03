@@ -44,6 +44,8 @@ bool hasHtml(const char* html, size_t len);
 bool isPositioned(const char* tag, const char* astart, const char* aend);
 // The flow box of a container: the container itself if it is one, else its implicit root
 lv_obj_t* flowBox(lv_obj_t* parent);
+// A flow box: a block of an HTML page, its children stack top to bottom
+bool inFlow(lv_obj_t* box);
 
 // <label for="id">: a tap on `label` works the control with that id, as in a browser
 void labelFor(lv_obj_t* label, const char* id);
@@ -69,6 +71,8 @@ void reset();
 // Content of a TelaOS container (div, td) holding direct text or inline HTML tags:
 // before this layer such text was silently dropped.
 bool hasFlowContent(const char* html, size_t len);
+// dir="rtl" / "ltr" on an element (HTML or a TelaOS container): see docs/HTML_TAGS.md
+void applyDir(lv_obj_t* obj, const char* dir);
 // Make a TelaOS container stack its children like an HTML block (div without flex=)
 void makeFlow(lv_obj_t* container);
 void renderContent(const char* html, size_t len, lv_obj_t* container);

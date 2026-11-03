@@ -151,6 +151,27 @@ typedef enum {
     LV_TEXT_ALIGN_RIGHT
 } lv_text_align_t;
 
+// Direction: base_dir is inherited, as in LVGL
+typedef enum { LV_BASE_DIR_LTR = 0x00, LV_BASE_DIR_RTL = 0x01, LV_BASE_DIR_AUTO = 0x02 } lv_base_dir_t;
+#ifdef LVGL_MOCK_ENABLED
+inline void lv_obj_set_style_base_dir(lv_obj_t* obj, lv_base_dir_t dir, int) {
+    if (obj && obj->mock_widget) obj->mock_widget->baseDir = static_cast<int>(dir);
+}
+inline lv_base_dir_t lv_obj_get_style_base_dir(lv_obj_t* obj, int) {
+    for (const LvglMock::Widget* w = obj ? obj->mock_widget : nullptr; w; w = w->parent) {
+        if (w->baseDir >= 0) return static_cast<lv_base_dir_t>(w->baseDir);
+    }
+    return LV_BASE_DIR_LTR;
+}
+inline void lv_obj_set_style_translate_y(lv_obj_t* obj, int y, int) {
+    if (obj && obj->mock_widget) obj->mock_widget->translateY = y;
+}
+#else
+inline void lv_obj_set_style_base_dir(lv_obj_t*, lv_base_dir_t, int) {}
+inline lv_base_dir_t lv_obj_get_style_base_dir(lv_obj_t*, int) { return LV_BASE_DIR_LTR; }
+inline void lv_obj_set_style_translate_y(lv_obj_t*, int, int) {}
+#endif
+
 typedef enum {
     LV_EVENT_PRESSED = 1,
     LV_EVENT_CLICKED,

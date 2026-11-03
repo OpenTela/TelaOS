@@ -233,12 +233,24 @@ std::string stateOf(lv_obj_t* o) {
 }
 
 // Visible text of a container (HTML innerText, roughly): labels and spangroups in tree order,
-// hidden subtrees skipped, pieces joined by one space
+// hidden subtrees skipped, pieces joined by one space. The words of an HTML line (a row-wrap
+// line box, ui_html_flow.cpp) touch: each keeps its own space, H<sub>2</sub>O reads "H2O".
 void collectText(lv_obj_t* o, std::string& out) {
     if (lv_obj_has_flag(o, LV_OBJ_FLAG_HIDDEN)) return;
+    const bool line = lv_obj_get_style_flex_flow(o, LV_PART_MAIN) == LV_FLEX_FLOW_ROW_WRAP;
+    const uint32_t n = lv_obj_get_child_count(o);
     std::string piece;
-    if (lv_obj_check_type(o, &lv_label_class)) piece = lv_label_get_text(o);
-    else if (isSpangroup(o)) piece = spanText(o);
+    if (lv_obj_check_type(o, &lv_label_class)) {
+        piece = lv_label_get_text(o);
+    } else if (isSpangroup(o)) {
+        piece = spanText(o);
+    } else if (line) {
+        for (uint32_t i = 0; i < n; ++i) {
+            std::string part;
+            collectText(lv_obj_get_child(o, i), part);
+            piece += part;
+        }
+    }
     if (!piece.empty()) {
         if (!out.empty() && !std::isspace(static_cast<unsigned char>(out.back())) &&
             !std::isspace(static_cast<unsigned char>(piece.front()))) {
@@ -246,7 +258,7 @@ void collectText(lv_obj_t* o, std::string& out) {
         }
         out += piece;
     }
-    const uint32_t n = lv_obj_get_child_count(o);
+    if (line) return;  // its children are in the piece
     for (uint32_t i = 0; i < n; ++i) collectText(lv_obj_get_child(o, i), out);
 }
 

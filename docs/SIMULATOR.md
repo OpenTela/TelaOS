@@ -1,4 +1,4 @@
-# Simulator v0.5
+# Simulator v0.6
 
 Настоящая прошивка TelaOS на ПК: тот же `src/`, LVGL 9.2 из `lib/lvgl`, `include/lv_conf.h`,
 шрифты, Lua, `data/`. Окно, где мышь — палец; робот, который тапает и проверяет; скриншоты
@@ -6,6 +6,8 @@
 
 ## Changelog
 
+- **v0.6**: Видимый текст контейнера: слова одной строки HTML идут слитно, как на экране
+  (`H<sub>2</sub>O` — «H2O», а не «H 2 O»).
 - **v0.5**: Случайные страницы: `sim/tools/gen_pages.py` пишет приложения со случайной разметкой,
   `sim/tools/sim_pages.py` рисует их базой и PR-ом; в отчёте PR — что изменилось и какие страницы
   нестабильны.
@@ -81,7 +83,7 @@ shot tela_03_result
 | `tap`, `longpress <T> [ms]`, `drag <T1> <T2> [ms]`, `press`, `move`, `release` | палец |
 | `scroll @id` | прокрутить к элементу |
 | `text @id <value>` | вписать текст в поле |
-| `expect @id <value>`, `expect @id contains <v>` | значение виджета; числа — диапазоном `20..30` |
+| `expect @id <value>`, `expect @id contains <v>` | значение виджета; числа — диапазоном `20..30`. У контейнера — видимый текст: надписи по порядку через пробел, слова одной строки HTML — слитно |
 | `expect <@id или "текст"> :visible` / `:hidden` | виден ли на экране |
 | `expect $var <value>` | переменная состояния приложения |
 | `expect mem.<число> <value>` | память часов: `dram_` или `psram_` + `free`, `min_free`, `largest`, `total`, `blocks`, `failed` |
