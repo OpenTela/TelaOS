@@ -18,3 +18,6 @@
 
 // System icons directory
 #define SYS_ICONS           "/system/resources/icons/"
+
+// Fonts kept as files: the icon font of each size and its names (UI::Font::loadFiles)
+#define SYS_FONTS           "/system/fonts/"

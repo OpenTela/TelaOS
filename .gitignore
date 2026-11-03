@@ -25,6 +25,8 @@ cmake-build-*/
 *.obj
 *.elf
 *.bin
+# …but the icon fonts are data, made by scripts/make_fonts.py
+!data/system/fonts/*.bin
 *.hex
 *.map
 *.lst

@@ -279,6 +279,9 @@ void Manager::init() {
     LOG_I(Log::APP, "=== Evolution OS ===");
     
     mountLittleFS();
+    display_lock();
+    UI::Font::loadFiles();  // the icon fonts: before the first screen draws text
+    display_unlock();
 
     if (Device::inst().mountSdCard()) { LOG_I(Log::SD, "SD card ready"); }
     else { LOG_I(Log::SD, "no SD card"); }

@@ -57,6 +57,26 @@ shot html_02_langs
 > ui nav home
 wait 200
 
+# ---- icons: Google's markup, the name becomes the icon of that name (data/system/fonts/) ---
+# What the robot reads is the icon's code in the font, as Icons.txt has it: home e9b2,
+# settings e8b8, favorite e87e, search ef7a, battery_full e1a5, sunny e81a, rainy f176, add e145.
+# Text signs (✓ ← ⚙) stay as they are: the icon font draws them. Reached by the console too.
+> ui nav icons
+wait 200
+expect @iconsTitle "Icons"
+expect @byName "   "
+expect @inText "Battery  80%"
+expect @signsText "✓ done · ← → ↑ ↓ · ★★★☆ ♥♡ ⚙ ☀ ☁ ❄ ▶ ⏸"
+expect @unknown "no_such_icon"
+expect @liveIcon "Sky: "
+expect @skyBtn ""
+tap @skyBtn
+expect $sky "rainy"
+expect @liveIcon "Sky: "
+shot html_02_icons
+> ui nav home
+wait 200
+
 # ---- lists: markers, numbering, omitted end tags --------------------------------------
 tap "Lists"
 wait 200
