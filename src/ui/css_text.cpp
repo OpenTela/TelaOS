@@ -86,25 +86,26 @@ bool lineHeightValue(std::string_view v, float fontPx, int32_t& px) {
 
 }  // namespace
 
-void applyCssText(lv_obj_t* o, const P::Array<CssDecl>& decls, float em) {
+void applyCssText(lv_obj_t* o, const P::Array<CssDecl>& decls, float em, uint16_t state) {
     if (!o) return;
+    const lv_style_selector_t sel = LV_PART_MAIN | state;
     bool nowrap = false, ellipsis = false, width = false;
     for (const CssDecl& d : decls) {
         const std::string_view name = d.name, value = d.value;
         if (name == "text-decoration" || name == "text-decoration-line") {
             lv_text_decor_t decor = LV_TEXT_DECOR_NONE;
-            if (decorValue(value, decor)) lv_obj_set_style_text_decor(o, decor, 0);
+            if (decorValue(value, decor)) lv_obj_set_style_text_decor(o, decor, sel);
         } else if (name == "letter-spacing") {
             const std::string_view v = trimmed(value);
             int32_t px = 0;
-            if (equalsNoCase(v, "normal")) lv_obj_set_style_text_letter_space(o, 0, 0);
-            else if (cssLength(v, em, px)) lv_obj_set_style_text_letter_space(o, px, 0);
+            if (equalsNoCase(v, "normal")) lv_obj_set_style_text_letter_space(o, 0, sel);
+            else if (cssLength(v, em, px)) lv_obj_set_style_text_letter_space(o, px, sel);
         } else if (name == "line-height") {
             int32_t px = 0;
             if (lineHeightValue(value, em, px)) {
                 // LVGL adds this much between lines; normal is the font's own line
                 const int32_t font = lv_font_get_line_height(UI::Font::get(static_cast<int>(em)));
-                lv_obj_set_style_text_line_space(o, px == 0 ? 0 : px - font, 0);
+                lv_obj_set_style_text_line_space(o, px == 0 ? 0 : px - font, sel);
             }
         } else if (name == "white-space") {
             nowrap = equalsNoCase(trimmed(value), "nowrap");
@@ -114,7 +115,7 @@ void applyCssText(lv_obj_t* o, const P::Array<CssDecl>& decls, float em) {
             width = true;
         }
     }
-    if (!nowrap || !lv_obj_check_type(o, &lv_label_class)) return;
+    if (state != 0 || !nowrap || !lv_obj_check_type(o, &lv_label_class)) return;
     if (!width && !ellipsis) {  // as wide as its text; the parent cuts what does not fit
         lv_obj_set_width(o, LV_SIZE_CONTENT);
         return;

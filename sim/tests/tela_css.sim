@@ -66,3 +66,15 @@ shot css_06_text
 tap "Back"
 wait 200
 expect "Selectors" :visible
+
+tap "States"
+wait 200
+expect @tick off
+tap @tick
+wait 400
+expect @tick on
+expect @tilted "transform: rotate(-6deg)"
+shot css_07_states
+tap "Back"
+wait 200
+expect "Selectors" :visible

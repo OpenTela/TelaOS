@@ -58,6 +58,33 @@ struct Widget {
     int letterSpace = 0;
     int lineSpace = 0;
     int longMode = -1;       // lv_label_long_mode_t; -1: not set
+
+    // Transform (CSS transform): 256 is a scale of 1, the rotation is in 0.1 degrees
+    int scaleX = 256, scaleY = 256, rotation = 0, pivotX = 0, pivotY = 0;
+
+    // A style for a state (:active is LV_STATE_PRESSED...) only shows in that state: kept apart,
+    // the fields above are the element as it is
+    struct StateStyle {
+        std::string prop;
+        int selector;
+        long long value;
+    };
+    std::vector<StateStyle> stateStyles;
+    const StateStyle* stateStyle(const std::string& prop, int selector) const {
+        for (auto it = stateStyles.rbegin(); it != stateStyles.rend(); ++it) {
+            if (it->prop == prop && it->selector == selector) return &*it;
+        }
+        return nullptr;
+    }
+
+    // lv_obj_set_style_transition: for which selector, how long, after what, how many properties
+    struct Transition {
+        int selector;
+        int time;
+        int delay;
+        int props;
+    };
+    std::vector<Transition> transitions;
     int padAll = -1;         // padding (from lv_obj_set_style_pad_all)
     int padLeft = 0;
     int padRight = 0;

@@ -78,11 +78,20 @@ struct CommonAttrs {
     P::String cssClass;
     P::String visible;      // "{varname}" for visibility binding
     P::String disabled;     // "{varname}" for disabled binding (or "true"/"1" static)
+    bool disabledNow = false;  // disabled from the start: bare (HTML), "true" or "1"
     int zIndex = 0;
     bool hasDynamicClass = false;
     bool hasDynamicVisible = false;
     bool hasDynamicDisabled = false;
 };
+
+// A boolean attribute: present without a value (HTML: <input readonly>) or "true"/"1" (TelaOS)
+static bool flagAttr(const char* astart, const char* aend, const char* name) {
+    const UI::Attrs a(std::string_view(astart, static_cast<size_t>(aend - astart)));
+    if (!a.has(name)) return false;
+    const P::String v = a.get(name);
+    return v.empty() || v == "true" || v == "1" || v == name;
+}
 
 static CommonAttrs parseCommonAttrs(const char *astart, const char *aend) {
     CommonAttrs attrs;
@@ -93,26 +102,16 @@ static CommonAttrs parseCommonAttrs(const char *astart, const char *aend) {
     attrs.hasDynamicClass = contains(attrs.cssClass, '{');
     attrs.hasDynamicVisible = contains(attrs.visible, '{');
     attrs.hasDynamicDisabled = contains(attrs.disabled, '{');
+    attrs.disabledNow = !attrs.hasDynamicDisabled && flagAttr(astart, aend, "disabled");
     attrs.zIndex = getAttrInt(astart, aend, "z-index");
     return attrs;
 }
 
 // Auto-generate id if needed for dynamic bindings
-// Static disabled="true" / disabled="1" (no binding): grey the widget out at
+// Static disabled, disabled="true" / disabled="1" (no binding): grey the widget out at
 // creation time. Dynamic "{var}" initial state is handled in addElement().
 static void applyStaticDisabled(lv_obj_t* obj, const CommonAttrs& attrs) {
-    if (!attrs.hasDynamicDisabled &&
-        (attrs.disabled == "true" || attrs.disabled == "1")) {
-        lv_obj_add_state(obj, LV_STATE_DISABLED);
-    }
-}
-
-// A boolean attribute: present without a value (HTML: <input readonly>) or "true"/"1" (TelaOS)
-static bool flagAttr(const char* astart, const char* aend, const char* name) {
-    const UI::Attrs a(std::string_view(astart, static_cast<size_t>(aend - astart)));
-    if (!a.has(name)) return false;
-    const P::String v = a.get(name);
-    return v.empty() || v == "true" || v == "1" || v == name;
+    if (attrs.disabledNow) lv_obj_add_state(obj, LV_STATE_DISABLED);
 }
 
 // State only a few widgets have, kept beside them rather than in every Element
@@ -1063,8 +1062,8 @@ void create_button(const char *astart, const char *aend, const char *content, lv
             lv_obj_remove_state(storeObj, LV_STATE_DISABLED);
             if (disabled) lv_obj_add_state(btn, LV_STATE_DISABLED);
         }
-        applyStaticDisabled(btn, attrs);
     }
+    applyStaticDisabled(btn, attrs);  // a button without an id is not an element, but is disabled too
     
     if (!href.empty() || !onclick.empty()) {
         widget.on(LV_EVENT_CLICKED, button_click_handler, idx);

@@ -228,6 +228,8 @@ static const char* APP_FORM_ATTRS = R"HTML(
       <input type="checkbox" id="fcb"> <input type="text" id="ftx"> <input type="range" id="frg">
     </fieldset>
     <label for="fcb" id="lfor">Agree</label>
+    <button id="bdis" disabled>Stop</button>
+    <input type="submit" value="Sent" disabled>
   </form>
 </page></ui></app>
 )HTML";
@@ -483,6 +485,9 @@ int main() {
                byId("fcb") && byId("fcb")->disabled && byId("ftx") && byId("ftx")->disabled &&
                byId("frg") && byId("frg")->disabled);
     expectTrue("<label for> is still a label", byId("lfor") && textOf(byId("lfor")) == "Agree");
+    expectTrue("<button disabled>: the bare HTML attribute", byId("bdis") && byId("bdis")->disabled);
+    expectTrue("<input type=submit disabled> without an id",
+               byText("Sent") && byText("Sent")->parent && byText("Sent")->parent->disabled);
 
     printf("\nHidden and fallback content:\n");
     render(APP_HIDDEN);
