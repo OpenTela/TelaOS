@@ -2,7 +2,8 @@
   <!--
     Test fixture for the DOM in TelaOS (docs/DOM.md): document.getElementById, textContent,
     getAttribute, setAttribute, removeAttribute (page "main"); classList (page "classes");
-    querySelector and querySelectorAll (page "query").
+    querySelector and querySelectorAll (page "query"); el.style and style="" (page "style");
+    addEventListener (page "events"); createElement, appendChild, removeChild (page "tree").
     Flashed by the simulator with --extra-data; driven by tests/tela_dom.sim. The script runs
     when the app starts: a line "read: ..." shows what it read, the others show what it wrote.
   -->
@@ -13,6 +14,8 @@
     .lead + p { display: none; }
     .short li:first-child { display: none; }
     .off { display: none; }
+    #evCard { display: flex; gap: 8px; }
+    #todo li:last-child { color: #81C784; }
   </style>
   <ui default="/main">
     <page id="main">
@@ -57,6 +60,36 @@
       <ul id="qlist"><li id="qi1">the first</li><li id="qi2">the second</li><li id="qi3">the third</li></ul>
       <button id="find" onclick="findChecked">Find</button>
       <p id="readQuery">-</p>
+      <p id="toStyle"><a href="/style">el.style</a></p>
+      <a href="/main">Back</a>
+    </page>
+
+    <page id="style">
+      <h2>Style</h2>
+      <label id="painted" style="color: #FF8A65">style="": orange</label>
+      <p id="styled">el.style.color: this line</p>
+      <label id="vanish">el.style.display: none hides it</label>
+      <button id="restyle" onclick="restyle">Restyle</button>
+      <p id="readStyle">-</p>
+      <p id="toEvents"><a href="/events">addEventListener</a></p>
+      <a href="/main">Back</a>
+    </page>
+
+    <page id="events">
+      <h2>Events</h2>
+      <div id="evCard"><button id="evBtn">Tap me</button><button id="evStop">Stop here</button></div>
+      <p id="evLinkP"><a href="/main">this link stays</a></p>
+      <p id="readEvents">-</p>
+      <p id="toTree"><a href="/tree">createElement</a></p>
+      <a href="/main">Back</a>
+    </page>
+
+    <page id="tree">
+      <h2>Tree</h2>
+      <ul id="todo"><li id="t1">the first</li></ul>
+      <button id="addItem">Add</button>
+      <button id="cycleItem">First to last</button>
+      <p id="readTree">-</p>
       <a href="/main">Back</a>
     </page>
   </ui>
@@ -104,5 +137,50 @@ function findChecked()
   local shown = document.getElementById("qlist"):querySelector("li:not(.off)")
   el("readQuery").textContent = "read: " .. table.concat(ids, " ") .. " / " .. shown.id
 end
+
+-- el.style: a color and display: none; the next tap takes both off
+function restyle()
+  local s, v = el("styled").style, el("vanish").style
+  local on = v.display ~= "none"
+  s.color = on and "#4FC3F7" or ""
+  v.display = on and "none" or ""
+  el("readStyle").textContent = "read: [" .. el("styled"):getAttribute("style") .. "] " .. el("painted").style.color
+end
+
+-- addEventListener: a tap goes up to the card, stopPropagation keeps one at its button,
+-- preventDefault keeps the link from going
+local function showEvent(s) el("readEvents").textContent = "read: " .. s end
+el("evCard"):addEventListener("click", function(e)
+  showEvent(e.type .. " " .. e.target.id .. " > " .. e.currentTarget.id)
+end)
+el("evStop"):addEventListener("click", function(e)
+  e:stopPropagation()
+  showEvent("stopped")
+end)
+el("evLinkP"):addEventListener("click", function(e)
+  e:preventDefault()
+  showEvent("stayed")
+end)
+
+-- createElement and appendChild add a row; removeChild takes the first out, appendChild puts it last
+local function rows()
+  local ids = {}
+  for _, li in ipairs(el("todo"):querySelectorAll("li")) do ids[#ids + 1] = li.id end
+  el("readTree").textContent = "read: " .. table.concat(ids, " ")
+end
+local added = 0
+el("addItem"):addEventListener("click", function()
+  added = added + 1
+  local li = document:createElement("li")
+  li.id = "n" .. added
+  li.textContent = "new " .. added
+  el("todo"):appendChild(li)
+  rows()
+end)
+el("cycleItem"):addEventListener("click", function()
+  local first = el("todo"):removeChild(el("todo"):querySelector("li"))
+  el("todo"):appendChild(first)
+  rows()
+end)
   </script>
 </app>

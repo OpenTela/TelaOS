@@ -226,6 +226,10 @@ public:
     // decoded. false if there is no such attribute; a valueless one (checked) gives "".
     static bool findAttr(std::string_view attrs, std::string_view name, std::string_view& value);
 
+    // The declarations of a style="" (or of a rule's block), in order: names in lower case (a
+    // custom property --x keeps its case), values trimmed, !important apart
+    static P::Array<CssDecl> declarations(std::string_view block);
+
 private:
     P::Array<CssDetail::Rule> m_rules;
     uint32_t m_nextOrder = 0;

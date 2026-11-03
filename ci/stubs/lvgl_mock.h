@@ -133,6 +133,13 @@ struct Widget {
     std::string onenter;
     std::string onblur;
     std::string href;
+    // The callbacks lv_obj_add_event_cb added, for lv_obj_send_event (cb is an lv_event_cb_t)
+    struct EventCb {
+        void* cb;
+        int filter;
+        void* userData;
+    };
+    std::vector<EventCb> events;
     
     std::vector<Widget*> children;
     Widget* parent = nullptr;

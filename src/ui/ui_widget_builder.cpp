@@ -210,8 +210,8 @@ static void button_click_handler(lv_event_t *e) {
             g_onclick_handler(g_core.app().elements[idx]->onclick.c_str());
         }
         
-        // Then handle href (navigation)
-        if (!g_core.app().elements[idx]->href.empty()) {
+        // Then handle href (navigation), unless a listener called preventDefault() (docs/DOM.md)
+        if (!g_core.app().elements[idx]->href.empty() && !UI::Dom::defaultPrevented(e)) {
             navigate(g_core.app().elements[idx]->href.c_str());
         }
     }

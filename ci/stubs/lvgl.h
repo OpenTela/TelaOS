@@ -49,6 +49,8 @@ typedef struct _lv_event_t {
     void* target;
     void* user_data;
     int code;
+    void* current_target = nullptr;
+    void* param = nullptr;
 } lv_event_t;
 typedef struct _lv_timer_t {} lv_timer_t;
 typedef struct _lv_anim_t {} lv_anim_t;
@@ -233,7 +235,8 @@ typedef enum {
     LV_EVENT_CANCEL,
     LV_EVENT_DELETE,
     LV_EVENT_REFR_EXT_DRAW_SIZE,
-    LV_EVENT_ALL = 0xFF
+    LV_EVENT_ALL = 0xFF,
+    LV_EVENT_PREPROCESS = 0x8000,  // a flag: the callback runs before the others
 } lv_event_code_t;
 
 typedef enum {
@@ -380,9 +383,31 @@ inline lv_obj_t* lv_screen_active() { return nullptr; }
 inline void lv_scr_load(lv_obj_t*) {}
 inline void lv_scr_load_anim(lv_obj_t*, int, int, int, bool) {}
 
-inline void lv_obj_del(lv_obj_t* obj) { delete obj; }
-inline void lv_obj_delete(lv_obj_t* obj) { delete obj; }
-inline void lv_obj_delete_async(lv_obj_t* obj) { delete obj; }
+// A deleted object's widget leaves its parent, as the object leaves the screen
+inline void mockDetach(lv_obj_t* obj) {
+#ifdef LVGL_MOCK_ENABLED
+    if (!obj || !obj->mock_widget || !obj->mock_widget->parent) return;
+    auto& ch = obj->mock_widget->parent->children;
+    ch.erase(std::remove(ch.begin(), ch.end(), obj->mock_widget), ch.end());
+#else
+    (void)obj;
+#endif
+}
+// The object moves to the end of another parent's children, as in LVGL
+inline void lv_obj_set_parent(lv_obj_t* obj, lv_obj_t* parent) {
+    if (!obj || !parent || obj->parent == parent) return;
+    mockDetach(obj);
+    obj->parent = parent;
+#ifdef LVGL_MOCK_ENABLED
+    if (obj->mock_widget && parent->mock_widget) {
+        obj->mock_widget->parent = parent->mock_widget;
+        parent->mock_widget->children.push_back(obj->mock_widget);
+    }
+#endif
+}
+inline void lv_obj_del(lv_obj_t* obj) { mockDetach(obj); delete obj; }
+inline void lv_obj_delete(lv_obj_t* obj) { mockDetach(obj); delete obj; }
+inline void lv_obj_delete_async(lv_obj_t* obj) { mockDetach(obj); delete obj; }
 inline lv_obj_t* lv_layer_top() { return nullptr; }
 inline void lv_obj_clean(lv_obj_t* obj) {
     if (obj && obj->mock_widget) obj->mock_widget->children.clear();
@@ -711,9 +736,20 @@ inline void lv_obj_set_grid_dsc_array(lv_obj_t*, const int*, const int*) {}
 inline void lv_obj_set_grid_cell(lv_obj_t*, lv_grid_align_t, int, int, lv_grid_align_t, int, int) {}
 
 inline void* lv_event_get_user_data(lv_event_t* e) { return e ? e->user_data : nullptr; }
-inline lv_obj_t* lv_event_get_target(lv_event_t*) { return nullptr; }
-inline lv_event_code_t lv_event_get_code(lv_event_t*) { return LV_EVENT_CLICKED; }
-inline void lv_obj_add_event_cb(lv_obj_t*, lv_event_cb_t, int, void*) {}
+inline lv_obj_t* lv_event_get_target(lv_event_t* e) { return e ? static_cast<lv_obj_t*>(e->target) : nullptr; }
+inline void* lv_event_get_current_target(lv_event_t* e) { return e ? e->current_target : nullptr; }
+inline void* lv_event_get_param(lv_event_t* e) { return e ? e->param : nullptr; }
+inline lv_event_code_t lv_event_get_code(lv_event_t* e) {
+    return e ? static_cast<lv_event_code_t>(e->code) : LV_EVENT_CLICKED;
+}
+// The mock keeps the callbacks, and lv_obj_send_event calls them (lvgl_mock.h: Widget::events)
+inline void lv_obj_add_event_cb(lv_obj_t* obj, lv_event_cb_t cb, int filter, void* user_data) {
+#ifdef LVGL_MOCK_ENABLED
+    if (obj && obj->mock_widget && cb) obj->mock_widget->events.push_back({reinterpret_cast<void*>(cb), filter, user_data});
+#else
+    (void)obj; (void)cb; (void)filter; (void)user_data;
+#endif
+}
 inline bool lv_obj_remove_event_cb(lv_obj_t*, lv_event_cb_t) { return false; }
 inline void lv_event_set_ext_draw_size(lv_event_t*, int32_t) {}
 inline void lv_obj_refresh_ext_draw_size(lv_obj_t*) {}
@@ -737,7 +773,28 @@ inline bool lv_obj_check_type(lv_obj_t*, const lv_obj_class_t*) { return false; 
 #endif
 inline lv_group_t* lv_group_get_default() { return nullptr; }
 inline lv_obj_t* lv_group_get_focused(lv_group_t*) { return nullptr; }
-inline void lv_obj_send_event(lv_obj_t*, uint32_t, void*) {}
+// As LVGL 9 sends an event to an object: its LV_EVENT_PREPROCESS callbacks, then the others, in
+// the order they were added. The mock has no class handlers and does not bubble to the parent
+inline void lv_obj_send_event(lv_obj_t* obj, uint32_t code, void* param) {
+#ifdef LVGL_MOCK_ENABLED
+    if (!obj || !obj->mock_widget) return;
+    lv_event_t e{obj, nullptr, static_cast<int>(code)};
+    e.current_target = obj;
+    e.param = param;
+    const auto callbacks = obj->mock_widget->events;  // one may add others
+    for (const bool pre : {true, false}) {
+        for (const auto& c : callbacks) {
+            if (((c.filter & LV_EVENT_PREPROCESS) != 0) != pre) continue;
+            const int filter = c.filter & ~LV_EVENT_PREPROCESS;
+            if (filter != LV_EVENT_ALL && filter != static_cast<int>(code)) continue;
+            e.user_data = c.userData;
+            reinterpret_cast<lv_event_cb_t>(c.cb)(&e);
+        }
+    }
+#else
+    (void)obj; (void)code; (void)param;
+#endif
+}
 inline void lv_obj_remove_style_all(lv_obj_t*) {}
 
 

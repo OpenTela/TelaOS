@@ -7,8 +7,8 @@
  * (UI::CssScope), and it gets its object when it is styled (Widget::applyCss). It keeps its
  * attributes as they are written: reading one decodes it, writing one also does on the screen
  * what the attribute does in the markup (hidden, disabled, checked, value...). When a class, an id
- * or another attribute a selector looks at changes, CSS is applied again (classList). Scripts find
- * elements by the selectors of CSS (querySelector).
+ * or another attribute a selector looks at changes, CSS is applied again (classList, el.style).
+ * Scripts find elements by the selectors of CSS (querySelector).
  *
  * An element is a handle. A new build (the next app) makes new handles: the old ones find nothing.
  */
@@ -35,10 +35,9 @@ void clear();  // the app is gone: its elements too
 bool enter(std::string_view tag, std::string_view attrs);  // an element's content starts (false: not recorded)
 void leave();                                              // ...and ends (after an enter that was)
 // An element got its object. The same attributes (the same place in the text) tell that it is
-// the element just entered or left, not a new one. styled: CSS is applied to it now (with its
-// style="" if inlineStyle), and keep() takes what it changed. false: not recorded
-bool element(lv_obj_t* obj, std::string_view tag, std::string_view attrs, bool styled = false,
-             bool inlineStyle = false);
+// the element just entered or left, not a new one. styled: CSS is applied to it now, its
+// style="" too, and keep() takes what it changed. false: not recorded
+bool element(lv_obj_t* obj, std::string_view tag, std::string_view attrs, bool styled = false);
 // What CSS changed on the element just styled: put back when its rules change
 void keep(CssUndo&& undo);
 
@@ -83,6 +82,62 @@ bool addClasses(Node n, const P::Array<std::string_view>& names);
 bool removeClasses(Node n, const P::Array<std::string_view>& names);
 bool toggleClass(Node n, std::string_view name, int force, bool& now);  // force: -1 either way, 0 off, 1 on
 P::String className(Node n);
+
+// el.style: the declarations of style="", by their CSS names (background-color, --accent). A
+// change rewrites style="" as a browser writes it ("color: red;") and applies CSS again
+bool styleProperty(Node n, std::string_view name, P::String& value, bool& important);  // false: none
+// value "": taken off. Left alone, as a browser leaves it: a name with a space or a ':', a value
+// that is not one declaration ("red; width: 0")
+void setStyleProperty(Node n, std::string_view name, std::string_view value, bool important = false);
+P::String cssText(Node n);
+void setCssText(Node n, std::string_view text);
+
+// ---- The tree: createElement, appendChild, insertBefore, removeChild ----
+
+// An element out of the document. It takes attributes, text and elements; put into the document,
+// it is built as the markup would be. 0: not a name a tag can have
+Node createElement(std::string_view tag);
+
+enum class TreeChange : uint8_t {
+    Done,
+    NotAChild,  // ref (or the child to remove) is not a child of the parent
+    Loop,       // the child is the parent or above it
+    NotABox,    // the parent shows text (<p>, <label>, <button>): TelaOS puts elements into boxes
+    Page,       // a page stays where it is
+};
+
+// child into parent, before ref (0: the last). An element in the document moves with its objects
+// as they are; one taken out comes back so; one made by createElement is built here
+TreeChange insertBefore(Node parent, Node child, Node ref);
+// child out of the document: its objects wait, hidden, as they are
+TreeChange removeChild(Node parent, Node child);
+Node parentOf(Node n);  // 0: a page, or the top of what is out of the document
+// No script holds n any more: if it is out of the document, its objects go
+void release(Node n);
+
+// ---- Events (addEventListener) ----
+
+// An event on its way up the elements, as a listener sees it
+struct Event {
+    std::string_view type;          // "click"
+    Node target = 0;                // where it happened
+    Node currentTarget = 0;         // whose listeners run now
+    bool defaultPrevented = false;  // preventDefault(): what TelaOS does after it is not done
+    bool stopped = false;           // stopPropagation(): the elements above do not get it
+};
+
+// The script engine runs the listeners e.currentTarget has for e.type
+using Dispatch = void (*)(Event& e);
+void setDispatch(Dispatch d);
+
+// n is to have listeners for `type`: its object, and those of the elements in it for an event
+// that goes up (click), pass it on. false: TelaOS has no such event (click, input, change,
+// focus, blur)
+bool listen(Node n, std::string_view type);
+
+// What TelaOS does by itself on an LVGL event (it follows a link, opens <details>): not if a
+// listener of that event called preventDefault()
+bool defaultPrevented(lv_event_t* e);
 
 // The elements selectors match, read as CSS reads them (a state, :checked, is the one the widget
 // is in now), in the page order: in the whole app (inside 0) or in `inside`, whose ancestors

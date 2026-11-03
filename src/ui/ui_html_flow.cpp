@@ -696,7 +696,7 @@ void onActionClick(lv_event_t* e) {
         if (g_onclick_handler) g_onclick_handler(a->onclick.c_str());
         return;
     }
-    if (a->href.empty()) return;
+    if (a->href.empty() || UI::Dom::defaultPrevented(e)) return;  // a listener kept the link from going
     if (a->href[0] == '#') {  // in-page anchor: scroll to the element with that id
         if (lv_obj_t* target = g_core.get(a->href.c_str() + 1)) lv_obj_scroll_to_view_recursive(target, LV_ANIM_ON);
         return;
@@ -1580,6 +1580,7 @@ std::unordered_map<lv_obj_t*, P::String> s_labelFor;        // label -> id of it
 std::unordered_map<lv_obj_t*, lv_obj_t*> s_labelControl;    // label -> the control inside it
 
 void onLabelClick(lv_event_t* e) {
+    if (UI::Dom::defaultPrevented(e)) return;  // a listener keeps the tap from its box
     lv_obj_t* label = static_cast<lv_obj_t*>(lv_event_get_user_data(e));
     const auto it = s_labelFor.find(label);
     if (it != s_labelFor.end()) {
@@ -1758,6 +1759,7 @@ struct Fold {
 };
 
 void onFoldClick(lv_event_t* e) {
+    if (UI::Dom::defaultPrevented(e)) return;  // a listener keeps <details> as it is
     auto* f = static_cast<Fold*>(lv_event_get_user_data(e));
     const bool open = lv_obj_has_flag(f->body, LV_OBJ_FLAG_HIDDEN);
     if (open) lv_obj_clear_flag(f->body, LV_OBJ_FLAG_HIDDEN);
@@ -1830,7 +1832,10 @@ void detailsElement(const TagRef& t, lv_obj_t* box, const Ctx& ctx) {
     lv_obj_add_event_cb(head, onFoldDelete, LV_EVENT_DELETE, fold);
 }
 
-void onDialogClose(lv_event_t* e) { lv_obj_add_flag(static_cast<lv_obj_t*>(lv_event_get_user_data(e)), LV_OBJ_FLAG_HIDDEN); }
+void onDialogClose(lv_event_t* e) {
+    if (UI::Dom::defaultPrevented(e)) return;  // a listener keeps the dialog open
+    lv_obj_add_flag(static_cast<lv_obj_t*>(lv_event_get_user_data(e)), LV_OBJ_FLAG_HIDDEN);
+}
 
 void closeButtons(lv_obj_t* o, lv_obj_t* back) {  // <form method="dialog">: any button closes
 #if !defined(LVGL_MOCK_ENABLED)
@@ -2186,6 +2191,11 @@ bool setText(lv_obj_t* obj, const char* text) {
         return true;
     }
     return false;
+}
+
+lv_obj_t* contentOf(lv_obj_t* obj) {
+    const auto c = s_contentOf.find(obj);
+    return c != s_contentOf.end() ? c->second : obj;
 }
 
 P::String getText(lv_obj_t* obj) {
