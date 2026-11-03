@@ -1011,6 +1011,8 @@ bool Css::findAttr(std::string_view attrs, std::string_view name, std::string_vi
     return found;
 }
 
+P::Array<CssDecl> Css::declarations(std::string_view block) { return parseDecls(block); }
+
 CssScope::CssScope(std::string_view tag, std::string_view attrs, std::string_view content) {
     CssElement el;
     el.tag = tag;

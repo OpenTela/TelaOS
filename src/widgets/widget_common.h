@@ -174,7 +174,8 @@ struct Widget {
 
     /// Apply all matching CSS rules (tag, #id, .class cascade)
     // Style sheet rules for an element: its tag, id, class, raw attributes (for [attr] selectors)
-    // and its style=""; descendant and child rules see the walkers' UI::CssScope
+    // and its style="" (read from attrs when not given); descendant and child rules see the
+    // walkers' UI::CssScope
     void applyCss(const char* tag, const char* id, const char* classNames, std::string_view attrs = {},
                   std::string_view inlineStyle = {});
 };

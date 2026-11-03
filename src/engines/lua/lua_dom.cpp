@@ -3,7 +3,8 @@
  *
  * An element is a userdata holding its handle (UI::Dom::Node). The same element is the same Lua
  * value each time it is found, as in a browser: a weak table keeps the userdata of each handle.
- * el.classList is another userdata with the same handle: el.classList:add("on").
+ * el.classList is another userdata with the same handle: el.classList:add("on"); el.style too:
+ * el.style.color = "red".
  */
 #include "engines/lua/lua_dom.h"
 #include "ui/dom.h"
@@ -15,6 +16,7 @@ namespace {
 
 constexpr const char* kElement = "TelaElement";
 constexpr const char* kClassList = "TelaClassList";
+constexpr const char* kStyle = "TelaStyle";
 constexpr const char* kKnown = "TelaOS.elements";  // handle → its userdata, weak
 
 struct Ref {
@@ -180,6 +182,111 @@ const luaL_Reg kClassMethods[] = {
     {nullptr, nullptr},
 };
 
+// ---- style ----
+
+UI::Dom::Node styleOf(lua_State* L) { return static_cast<Ref*>(luaL_checkudata(L, 1, kStyle))->node; }
+
+void pushStyle(lua_State* L, UI::Dom::Node n) {
+    auto* ref = static_cast<Ref*>(lua_newuserdatauv(L, sizeof(Ref), 0));
+    ref->node = n;
+    luaL_setmetatable(L, kStyle);
+}
+
+// A name as a script writes it, as CSS writes it: backgroundColor is background-color, cssFloat
+// is float; background-color stays
+P::String cssName(std::string_view key) {
+    if (key == "cssFloat") return "float";
+    P::String out;
+    for (char c : key) {
+        if (c >= 'A' && c <= 'Z') {
+            out += '-';
+            out += static_cast<char>(c - 'A' + 'a');
+        } else {
+            out += c;
+        }
+    }
+    return out;
+}
+
+P::String propertyValue(UI::Dom::Node n, std::string_view name, bool* important = nullptr) {
+    P::String value;
+    bool imp = false;
+    UI::Dom::styleProperty(n, name, value, imp);
+    if (important) *important = imp;
+    return value;
+}
+
+// setProperty(name, value[, "important"]); another priority leaves it alone, as in a browser
+int styleSetProperty(lua_State* L) {
+    const UI::Dom::Node n = styleOf(L);
+    const std::string_view priority = lua_isnoneornil(L, 4) ? std::string_view() : arg(L, 4);
+    if (!priority.empty() && priority != "important") return 0;
+    UI::Dom::setStyleProperty(n, arg(L, 2), text(L, 3), !priority.empty());
+    return 0;
+}
+
+int styleGetPropertyValue(lua_State* L) {
+    pushString(L, propertyValue(styleOf(L), arg(L, 2)));
+    return 1;
+}
+
+int styleGetPropertyPriority(lua_State* L) {
+    bool important = false;
+    propertyValue(styleOf(L), arg(L, 2), &important);
+    lua_pushstring(L, important ? "important" : "");
+    return 1;
+}
+
+// It gives back the value it had
+int styleRemoveProperty(lua_State* L) {
+    const UI::Dom::Node n = styleOf(L);
+    const std::string_view name = arg(L, 2);
+    pushString(L, propertyValue(n, name));
+    UI::Dom::setStyleProperty(n, name, {});
+    return 1;
+}
+
+// el.style.color, el.style.backgroundColor, el.style["background-color"]: "" if style="" has none
+int styleIndex(lua_State* L) {
+    const UI::Dom::Node n = styleOf(L);
+    if (lua_type(L, 2) != LUA_TSTRING) {
+        lua_pushnil(L);
+        return 1;
+    }
+    const std::string_view key = arg(L, 2);
+    if (key == "cssText") {
+        pushString(L, UI::Dom::cssText(n));
+        return 1;
+    }
+    lua_pushvalue(L, 2);
+    if (lua_rawget(L, lua_upvalueindex(1)) != LUA_TNIL) return 1;  // a method
+    lua_pop(L, 1);
+    pushString(L, propertyValue(n, cssName(key)));
+    return 1;
+}
+
+// el.style.color = "red"; "" or nil takes it off
+int styleNewindex(lua_State* L) {
+    const UI::Dom::Node n = styleOf(L);
+    const std::string_view key = arg(L, 2);
+    if (key == "cssText") UI::Dom::setCssText(n, text(L, 3));
+    else UI::Dom::setStyleProperty(n, cssName(key), text(L, 3));
+    return 0;
+}
+
+int styleString(lua_State* L) {
+    pushString(L, UI::Dom::cssText(styleOf(L)));
+    return 1;
+}
+
+const luaL_Reg kStyleMethods[] = {
+    {"setProperty", styleSetProperty},
+    {"getPropertyValue", styleGetPropertyValue},
+    {"getPropertyPriority", styleGetPropertyPriority},
+    {"removeProperty", styleRemoveProperty},
+    {nullptr, nullptr},
+};
+
 const luaL_Reg kMethods[] = {
     {"getAttribute", getAttribute},
     {"setAttribute", setAttribute},
@@ -190,7 +297,8 @@ const luaL_Reg kMethods[] = {
     {nullptr, nullptr},
 };
 
-// el.textContent, el.id, el.tagName, el.className, el.classList, el:method(); anything else is nil
+// el.textContent, el.id, el.tagName, el.className, el.classList, el.style, el:method(); anything
+// else is nil
 int index(lua_State* L) {
     const UI::Dom::Node n = self(L);
     if (lua_type(L, 2) != LUA_TSTRING) {
@@ -210,6 +318,8 @@ int index(lua_State* L) {
         pushString(L, UI::Dom::className(n));
     } else if (key == "classList") {
         pushList(L, n);
+    } else if (key == "style") {
+        pushStyle(L, n);
     } else {
         lua_pushvalue(L, 2);
         lua_rawget(L, lua_upvalueindex(1));  // the methods
@@ -226,6 +336,8 @@ int newindex(lua_State* L) {
         UI::Dom::setAttribute(n, "id", text(L, 3));
     } else if (key == "className") {
         UI::Dom::setAttribute(n, "class", text(L, 3));
+    } else if (key == "style") {  // el.style = "color: red", as el.style.cssText
+        UI::Dom::setCssText(n, text(L, 3));
     } else {
         return luaL_error(L, "an element has no '%s' to set", lua_tostring(L, 2));
     }
@@ -266,6 +378,16 @@ void registerAll(lua_State* L) {
     luaL_newlib(L, kClassMethods);
     lua_setfield(L, -2, "__index");
     lua_pushcfunction(L, classString);
+    lua_setfield(L, -2, "__tostring");
+    lua_pop(L, 1);
+
+    luaL_newmetatable(L, kStyle);
+    luaL_newlib(L, kStyleMethods);
+    lua_pushcclosure(L, styleIndex, 1);
+    lua_setfield(L, -2, "__index");
+    lua_pushcfunction(L, styleNewindex);
+    lua_setfield(L, -2, "__newindex");
+    lua_pushcfunction(L, styleString);
     lua_setfield(L, -2, "__tostring");
     lua_pop(L, 1);
 
