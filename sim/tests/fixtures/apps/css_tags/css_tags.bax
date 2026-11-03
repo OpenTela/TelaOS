@@ -1,0 +1,49 @@
+<app os="1.0" title="CSS" version="0.1" category="test">
+  <!--
+    Test fixture for CSS in TelaOS (docs/CSS.md): selectors and cascade.
+    Flashed by the simulator with --extra-data; driven by tests/tela_css.sim.
+    Each line says which rule colors it; a line in white did not get its rule.
+  -->
+  <style>
+    h1, h2 { color: #4FC3F7; }
+    nav a { color: #FFD54F; }
+    .menu > li { color: #81C784; }
+    ul li li { color: #FF8A65; }
+    .card label { color: #CE93D8; }
+    a:hover, .ok { color: #E57373; }
+    [data-tone="warn"] { color: #FFD54F; }
+    a[href^="http"] { color: #AAAAAA; }
+    #main .big { font-size: 32px; }
+    p.note { color: #81C784; }
+    .note { color: #E57373; }
+    .must { color: #4FC3F7 !important; }
+    #strong { color: #E57373; }
+    .gone { display: none; }
+  </style>
+  <ui default="/main">
+
+    <page id="main">
+      <h1>Selectors</h1>
+      <h2>h1, h2: one rule</h2>
+      <nav id="links"><p><a href="/more">nav a: yellow</a> <a href="/more">More</a></p></nav>
+      <ul class="menu">
+        <li id="direct">.menu &gt; li: green
+          <ul><li id="nested">ul li li: orange</ul>
+      </ul>
+      <div class="card"><label id="inCard">.card label: violet</label></div>
+      <p class="ok" id="ok">a:hover, .ok: red</p>
+      <p data-tone="warn" id="warn">[data-tone=warn]: yellow</p>
+      <p id="ext"><a href="https://example.com">a[href^=http]: grey</a></p>
+      <p class="big" id="big">#main .big</p>
+      <p class="note" id="note">p.note beats .note: green</p>
+      <p class="must" id="strong">!important beats #id: blue</p>
+      <p class="gone" id="gone">display: none</p>
+    </page>
+
+    <page id="more">
+      <p class="big" id="big2">.big, not on #main: small</p>
+      <p><a href="/main">Back</a></p>
+    </page>
+
+  </ui>
+</app>
