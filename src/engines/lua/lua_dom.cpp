@@ -4,12 +4,16 @@
  * An element is a userdata holding its handle (UI::Dom::Node). The same element is the same Lua
  * value each time it is found, as in a browser: a weak table keeps the userdata of each handle.
  * el.classList is another userdata with the same handle: el.classList:add("on"); el.style too:
- * el.style.color = "red".
+ * el.style.color = "red". The listeners of el:addEventListener() are kept in a registry table, by
+ * handle and type; an event is a userdata that lives while its listeners run.
  */
 #include "engines/lua/lua_dom.h"
 #include "ui/dom.h"
+#include "utils/log_config.h"
 
 #include <string_view>
+
+static const char* TAG = "LuaDom";
 
 namespace LuaDom {
 namespace {
@@ -17,7 +21,11 @@ namespace {
 constexpr const char* kElement = "TelaElement";
 constexpr const char* kClassList = "TelaClassList";
 constexpr const char* kStyle = "TelaStyle";
-constexpr const char* kKnown = "TelaOS.elements";  // handle → its userdata, weak
+constexpr const char* kEvent = "TelaEvent";
+constexpr const char* kKnown = "TelaOS.elements";       // handle → its userdata, weak
+constexpr const char* kListeners = "TelaOS.listeners";  // handle → {type → {listener...}}
+
+lua_State* s_L = nullptr;  // the state the listeners are in
 
 struct Ref {
     UI::Dom::Node node;
@@ -122,6 +130,150 @@ int docQuerySelector(lua_State* L) { return findFirst(L, 0, lua_istable(L, 1) ? 
 int docQuerySelectorAll(lua_State* L) { return findAll(L, 0, lua_istable(L, 1) ? 2 : 1); }
 int querySelector(lua_State* L) { return findFirst(L, self(L), 2); }
 int querySelectorAll(lua_State* L) { return findAll(L, self(L), 2); }
+
+// ---- Events ----
+
+// The listeners n has for type, on the stack; with make, made if there are none. false: none
+bool pushListeners(lua_State* L, UI::Dom::Node n, std::string_view type, bool make) {
+    lua_getfield(L, LUA_REGISTRYINDEX, kListeners);
+    if (lua_rawgeti(L, -1, static_cast<lua_Integer>(n)) != LUA_TTABLE) {
+        lua_pop(L, 1);
+        if (!make) {
+            lua_pop(L, 1);
+            return false;
+        }
+        lua_newtable(L);
+        lua_pushvalue(L, -1);
+        lua_rawseti(L, -3, static_cast<lua_Integer>(n));
+    }
+    lua_pushlstring(L, type.data(), type.size());
+    if (lua_rawget(L, -2) != LUA_TTABLE) {
+        lua_pop(L, 1);
+        if (!make) {
+            lua_pop(L, 2);
+            return false;
+        }
+        lua_newtable(L);
+        lua_pushlstring(L, type.data(), type.size());
+        lua_pushvalue(L, -2);
+        lua_rawset(L, -4);
+    }
+    lua_replace(L, -3);  // the list, where the registry table was
+    lua_pop(L, 1);
+    return true;
+}
+
+// Where fn (at index f) is in the list on top; 0: not there
+lua_Integer find(lua_State* L, int f) {
+    const lua_Integer len = static_cast<lua_Integer>(lua_rawlen(L, -1));
+    for (lua_Integer k = 1; k <= len; ++k) {
+        lua_rawgeti(L, -1, k);
+        const bool same = lua_rawequal(L, -1, f);
+        lua_pop(L, 1);
+        if (same) return k;
+    }
+    return 0;
+}
+
+// el:addEventListener(type, fn): once each, as in a browser
+int addEventListener(lua_State* L) {
+    const UI::Dom::Node n = self(L);
+    const std::string_view type = arg(L, 2);
+    luaL_checktype(L, 3, LUA_TFUNCTION);
+    if (!UI::Dom::listen(n, type)) {
+        return luaL_error(L, "addEventListener: TelaOS has no '%s' event", lua_tostring(L, 2));
+    }
+    pushListeners(L, n, type, true);
+    if (!find(L, 3)) {
+        lua_pushvalue(L, 3);
+        lua_rawseti(L, -2, static_cast<lua_Integer>(lua_rawlen(L, -2)) + 1);
+    }
+    return 0;
+}
+
+int removeEventListener(lua_State* L) {
+    const UI::Dom::Node n = self(L);
+    const std::string_view type = arg(L, 2);
+    luaL_checktype(L, 3, LUA_TFUNCTION);
+    if (!pushListeners(L, n, type, false)) return 0;
+    const lua_Integer at = find(L, 3);
+    if (!at) return 0;
+    const lua_Integer len = static_cast<lua_Integer>(lua_rawlen(L, -1));
+    for (lua_Integer k = at; k < len; ++k) {  // the ones after it move up
+        lua_rawgeti(L, -1, k + 1);
+        lua_rawseti(L, -2, k);
+    }
+    lua_pushnil(L);
+    lua_rawseti(L, -2, len);
+    return 0;
+}
+
+// An event: e.type, e.target, e.currentTarget, e.defaultPrevented, e:preventDefault(),
+// e:stopPropagation(). Kept after its listeners ran, it has none of them
+struct EventRef {
+    UI::Dom::Event* ev;
+};
+
+UI::Dom::Event* eventOf(lua_State* L) { return static_cast<EventRef*>(luaL_checkudata(L, 1, kEvent))->ev; }
+
+int preventDefault(lua_State* L) {
+    if (UI::Dom::Event* ev = eventOf(L)) ev->defaultPrevented = true;
+    return 0;
+}
+
+int stopPropagation(lua_State* L) {
+    if (UI::Dom::Event* ev = eventOf(L)) ev->stopped = true;
+    return 0;
+}
+
+int eventIndex(lua_State* L) {
+    UI::Dom::Event* ev = eventOf(L);
+    const std::string_view key = lua_type(L, 2) == LUA_TSTRING ? arg(L, 2) : std::string_view();
+    if (key == "preventDefault") {
+        lua_pushcfunction(L, preventDefault);
+    } else if (key == "stopPropagation") {
+        lua_pushcfunction(L, stopPropagation);
+    } else if (!ev) {
+        lua_pushnil(L);
+    } else if (key == "type") {
+        lua_pushlstring(L, ev->type.data(), ev->type.size());
+    } else if (key == "target") {
+        push(L, ev->target);
+    } else if (key == "currentTarget") {
+        push(L, ev->currentTarget);
+    } else if (key == "defaultPrevented") {
+        lua_pushboolean(L, ev->defaultPrevented);
+    } else {
+        lua_pushnil(L);
+    }
+    return 1;
+}
+
+// UI::Dom: the listeners of ev.currentTarget, called in the order they were added. A list copied
+// first: a listener may take itself off. One that fails is logged, the next still runs
+void dispatch(UI::Dom::Event& ev) {
+    lua_State* L = s_L;
+    if (!L || !pushListeners(L, ev.currentTarget, ev.type, false)) return;
+    const lua_Integer len = static_cast<lua_Integer>(lua_rawlen(L, -1));
+    lua_createtable(L, static_cast<int>(len), 0);
+    for (lua_Integer k = 1; k <= len; ++k) {
+        lua_rawgeti(L, -2, k);
+        lua_rawseti(L, -2, k);
+    }
+    auto* ref = static_cast<EventRef*>(lua_newuserdatauv(L, sizeof(EventRef), 0));
+    ref->ev = &ev;
+    luaL_setmetatable(L, kEvent);
+    for (lua_Integer k = 1; k <= len; ++k) {
+        lua_rawgeti(L, -2, k);
+        lua_pushvalue(L, -2);
+        if (lua_pcall(L, 1, 0, 0) != LUA_OK) {
+            LOG_E(Log::LUA, "%.*s listener: %s", static_cast<int>(ev.type.size()), ev.type.data(), lua_tostring(L, -1));
+            lua_pop(L, 1);
+        }
+    }
+    ref->ev = nullptr;
+    lua_pop(L, 3);
+}
 
 // ---- classList ----
 
@@ -294,6 +446,8 @@ const luaL_Reg kMethods[] = {
     {"hasAttribute", hasAttribute},
     {"querySelector", querySelector},
     {"querySelectorAll", querySelectorAll},
+    {"addEventListener", addEventListener},
+    {"removeEventListener", removeEventListener},
     {nullptr, nullptr},
 };
 
@@ -364,6 +518,16 @@ void registerAll(lua_State* L) {
     lua_setmetatable(L, -2);
     lua_setfield(L, LUA_REGISTRYINDEX, kKnown);
 
+    lua_newtable(L);
+    lua_setfield(L, LUA_REGISTRYINDEX, kListeners);
+    s_L = L;
+    UI::Dom::setDispatch(dispatch);
+
+    luaL_newmetatable(L, kEvent);
+    lua_pushcfunction(L, eventIndex);
+    lua_setfield(L, -2, "__index");
+    lua_pop(L, 1);
+
     luaL_newmetatable(L, kElement);
     luaL_newlib(L, kMethods);
     lua_pushcclosure(L, index, 1);
@@ -399,6 +563,12 @@ void registerAll(lua_State* L) {
     lua_pushcfunction(L, docQuerySelectorAll);
     lua_setfield(L, -2, "querySelectorAll");
     lua_setglobal(L, "document");
+}
+
+void shutdown(lua_State* L) {
+    if (s_L != L) return;
+    s_L = nullptr;
+    UI::Dom::setDispatch(nullptr);
 }
 
 }  // namespace LuaDom

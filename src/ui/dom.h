@@ -92,6 +92,30 @@ void setStyleProperty(Node n, std::string_view name, std::string_view value, boo
 P::String cssText(Node n);
 void setCssText(Node n, std::string_view text);
 
+// ---- Events (addEventListener) ----
+
+// An event on its way up the elements, as a listener sees it
+struct Event {
+    std::string_view type;          // "click"
+    Node target = 0;                // where it happened
+    Node currentTarget = 0;         // whose listeners run now
+    bool defaultPrevented = false;  // preventDefault(): what TelaOS does after it is not done
+    bool stopped = false;           // stopPropagation(): the elements above do not get it
+};
+
+// The script engine runs the listeners e.currentTarget has for e.type
+using Dispatch = void (*)(Event& e);
+void setDispatch(Dispatch d);
+
+// n is to have listeners for `type`: its object, and those of the elements in it for an event
+// that goes up (click), pass it on. false: TelaOS has no such event (click, input, change,
+// focus, blur)
+bool listen(Node n, std::string_view type);
+
+// What TelaOS does by itself on an LVGL event (it follows a link, opens <details>): not if a
+// listener of that event called preventDefault()
+bool defaultPrevented(lv_event_t* e);
+
 // The elements selectors match, read as CSS reads them (a state, :checked, is the one the widget
 // is in now), in the page order: in the whole app (inside 0) or in `inside`, whose ancestors
 // count (.menu a). false: the selectors do not read

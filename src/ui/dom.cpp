@@ -11,6 +11,11 @@
  * CSS is applied again from the tree: its ancestors are opened as CSS scopes, outermost first,
  * with their children given for places among siblings. What the old rules set goes back first
  * (CssUndo). querySelector walks the tree in the page order with the scopes open the same way.
+ *
+ * Events: an element with listeners has LVGL callbacks on its object, and on those of the
+ * elements in it for an event that goes up. The first runs before TelaOS's own callbacks
+ * (LV_EVENT_PREPROCESS) and takes the event up the tree to the script; what TelaOS does next asks
+ * defaultPrevented(), the last tells that the event is over on that object.
  */
 #include "ui/dom.h"
 
@@ -48,6 +53,7 @@ struct Entry {
     P::Ptr<CssUndo> undo;  // what its CSS changed, if anything
     uint32_t parent = 0, first = 0, last = 0, next = 0;
     uint8_t flags = 0;
+    uint8_t events = 0;  // the event types its object passes on to listeners (kClick...)
 };
 
 struct Tree {
@@ -509,6 +515,117 @@ P::String styleText(const P::Array<CssDecl>& decls) {
     return out;
 }
 
+// ---- Events ----
+
+enum : uint8_t { kClick = 1, kInput = 2, kChange = 4, kFocus = 8, kBlur = 16 };
+
+struct EventType {
+    std::string_view name;
+    uint8_t bit;
+    bool bubbles;  // it goes up to the elements above the target, as in a browser
+};
+
+constexpr EventType kEventTypes[] = {
+    {"click", kClick, true}, {"input", kInput, true}, {"change", kChange, true},
+    {"focus", kFocus, false}, {"blur", kBlur, false},
+};
+
+const EventType* eventType(std::string_view name) {
+    for (const EventType& t : kEventTypes) {
+        if (t.name == name) return &t;
+    }
+    return nullptr;
+}
+
+const EventType* eventType(uint8_t bit) {
+    for (const EventType& t : kEventTypes) {
+        if (t.bit == bit) return &t;
+    }
+    return nullptr;
+}
+
+// The LVGL event that is `bit` on obj. change is when the value is done, as in a browser: a
+// slider let go, a text field's OK; a box or a list changes at once
+lv_event_code_t codeOf(uint8_t bit, lv_obj_t* obj) {
+    switch (bit) {
+        case kClick: return LV_EVENT_CLICKED;
+        case kInput: return LV_EVENT_VALUE_CHANGED;
+        case kChange:
+            if (lv_obj_check_type(obj, &lv_slider_class)) return LV_EVENT_RELEASED;
+            if (lv_obj_check_type(obj, &lv_textarea_class)) return LV_EVENT_READY;
+            return LV_EVENT_VALUE_CHANGED;
+        case kFocus: return LV_EVENT_FOCUSED;
+        default: return LV_EVENT_DEFOCUSED;
+    }
+}
+
+Dispatch s_dispatch = nullptr;
+
+// The LVGL event a listener prevented: what TelaOS does next on it asks defaultPrevented(), on the
+// object it happened on and on those it goes up to (LV_OBJ_FLAG_EVENT_BUBBLE). The next event that
+// comes to listeners forgets it
+struct Prevented {
+    lv_event_t* e = nullptr;
+    lv_obj_t* target = nullptr;
+    lv_event_code_t code{};
+};
+Prevented s_prevented;
+lv_event_t* s_open = nullptr;  // the event the callbacks of an object are called for now
+
+// The element obj is, or the nearest one above it: a button's text is the button
+uint32_t elementOf(lv_obj_t* obj) {
+    for (lv_obj_t* o = obj; o; o = lv_obj_get_parent(o)) {
+        for (uint32_t i = static_cast<uint32_t>(nodes().size()); i > 0; --i) {  // the innermost with it
+            if (node(i).obj == o && !(node(i).flags & kGone)) return i;
+        }
+    }
+    return 0;
+}
+
+// Before what TelaOS does on the object: the event goes to the listeners of its element and up
+void onEvent(lv_event_t* e) {
+    const auto bit = static_cast<uint8_t>(reinterpret_cast<uintptr_t>(lv_event_get_user_data(e)));
+    const EventType* type = eventType(bit);
+    lv_obj_t* const here = static_cast<lv_obj_t*>(lv_event_get_current_target(e));
+    lv_obj_t* const target = static_cast<lv_obj_t*>(lv_event_get_target(e));
+    const uint32_t t = elementOf(target);
+    if (!type || !s_dispatch || !t || node(t).obj != here) return;  // once: where it happened
+    if (s_open != e) {  // the first callback of this event: the one before is over
+        s_open = e;
+        s_prevented = {};
+    }
+    Event ev;
+    ev.type = type->name;
+    ev.target = handle(t);
+    const uint32_t build = s_build;
+    for (uint32_t p = t; p; p = type->bubbles ? node(p).parent : 0) {
+        ev.currentTarget = handle(p);
+        s_dispatch(ev);
+        if (ev.stopped || s_build != build) break;  // stopPropagation(), or the app is gone
+    }
+    if (ev.defaultPrevented && s_build == build) s_prevented = {e, target, lv_event_get_code(e)};
+}
+
+// After TelaOS's own callbacks on the object: the next event is another one
+void afterEvent(lv_event_t* e) {
+    if (s_open == e) s_open = nullptr;
+}
+
+// The callbacks that pass `type` on, on i's object and, with inside, on those of the elements in
+// i: an event that goes up comes to i from them
+void passOn(uint32_t i, const EventType& type, bool inside) {
+    Entry& e = node(i);
+    if (e.obj && !(e.events & type.bit)) {
+        e.events |= type.bit;
+        const lv_event_code_t code = codeOf(type.bit, e.obj);
+        void* const bit = reinterpret_cast<void*>(static_cast<uintptr_t>(type.bit));
+        lv_obj_add_event_cb(e.obj, onEvent, static_cast<lv_event_code_t>(code | LV_EVENT_PREPROCESS), bit);
+        lv_obj_add_event_cb(e.obj, afterEvent, code, bit);
+    }
+    if (!inside) return;
+    for (uint32_t c = e.first; c; c = node(c).next) passOn(c, type, true);
+}
+
 // ---- Selectors ----
 
 // The states a selector names (:active, :focus, :checked, :disabled) that obj is in now
@@ -834,6 +951,25 @@ P::String cssText(Node n) {
 }
 
 void setCssText(Node n, std::string_view text) { setAttribute(n, "style", styleText(Css::declarations(text))); }
+
+void setDispatch(Dispatch d) { s_dispatch = d; }
+
+bool listen(Node n, std::string_view type) {
+    const EventType* t = eventType(type);
+    if (!t) return false;
+    const uint32_t i = indexOf(n);
+    if (!i) return true;  // an element of an app gone: nothing comes to it
+    if (t->bit == kClick && node(i).obj) {
+        lv_obj_add_flag(node(i).obj, LV_OBJ_FLAG_CLICKABLE);  // any element takes a tap
+    }
+    passOn(i, *t, t->bubbles);
+    return true;
+}
+
+bool defaultPrevented(lv_event_t* e) {
+    return e && s_prevented.e == e && s_prevented.code == lv_event_get_code(e) &&
+           s_prevented.target == static_cast<lv_obj_t*>(lv_event_get_target(e));
+}
 
 bool querySelector(Node inside, std::string_view selectors, Node& found) {
     P::Array<Node> one;

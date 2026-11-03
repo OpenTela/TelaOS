@@ -240,6 +240,7 @@ void LuaEngine::shutdown() {
     LOG_I(Log::LUA, "shutdown()");
     
     if (m_lua) {
+        LuaDom::shutdown(m_lua);  // no event goes to a listener in a closed state
         lua_close(m_lua);
         m_lua = nullptr;
     }
