@@ -1721,6 +1721,7 @@ void build_div(const UI::StartTag& tag, const P::String& content, lv_obj_t* host
         lv_obj_set_flex_grow(container, atoi(growAttr.c_str()));
 
     Widget{container}.applyCss("div", idAttr.c_str(), classAttr.c_str());
+    HtmlFlow::applyDir(container, a.get("dir").c_str());
 
     bool hasDynVisible = !visAttr.empty() && visAttr.find('{') != P::String::npos;
     bool hasDynDisabled = !disAttr.empty() && disAttr.find('{') != P::String::npos;
@@ -1860,6 +1861,8 @@ void build_table_part(const UI::StartTag& tag, const P::String& content, lv_obj_
     auto idAttr = a.get("id");
     auto classAttr = a.get("class");
     Widget{container}.applyCss(tag.name.c_str(), idAttr.c_str(), classAttr.c_str());
+    // <table dir="rtl">: columns from the right (rows are flex rows, which follow base_dir)
+    HtmlFlow::applyDir(container, a.get("dir").c_str());
 
     // visible binding
     auto visAttr = a.get("visible");

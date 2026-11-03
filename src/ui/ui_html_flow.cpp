@@ -70,7 +70,7 @@ enum class Kind : uint8_t { Inline, Block, Text, List, Item, Hidden, Fallback, S
 
 enum Look : uint8_t {
     L_PLAIN, L_STRONG, L_EM, L_CODE, L_LINK, L_MARK, L_DIM, L_UNDER, L_STRIKE, L_QUOTE, L_BIG, L_FONT,
-    L_RT, L_SKIP
+    L_RT, L_SKIP, L_SUB, L_SUP
 };
 
 struct TagInfo {
@@ -91,8 +91,8 @@ const TagInfo kTags[] = {
     {"rb", Kind::Inline, L_PLAIN},      {"rp", Kind::Inline, L_SKIP},      {"rt", Kind::Inline, L_RT},
     {"rtc", Kind::Inline, L_RT},        {"ruby", Kind::Inline, L_PLAIN},   {"s", Kind::Inline, L_STRIKE},
     {"samp", Kind::Inline, L_CODE},     {"small", Kind::Inline, L_DIM},    {"span", Kind::Inline, L_PLAIN},
-    {"strike", Kind::Inline, L_STRIKE}, {"strong", Kind::Inline, L_STRONG}, {"sub", Kind::Inline, L_DIM},
-    {"sup", Kind::Inline, L_DIM},       {"time", Kind::Inline, L_PLAIN},   {"tt", Kind::Inline, L_CODE},
+    {"strike", Kind::Inline, L_STRIKE}, {"strong", Kind::Inline, L_STRONG}, {"sub", Kind::Inline, L_SUB},
+    {"sup", Kind::Inline, L_SUP},       {"time", Kind::Inline, L_PLAIN},   {"tt", Kind::Inline, L_CODE},
     {"u", Kind::Inline, L_UNDER},       {"var", Kind::Inline, L_EM},
     // Shadow DOM placeholders and dropped elements: in a page, browsers just show their content
     {"content", Kind::Inline, L_PLAIN}, {"menuitem", Kind::Inline, L_PLAIN}, {"shadow", Kind::Inline, L_PLAIN},
@@ -452,12 +452,14 @@ struct Style {  // inline run style
     uint32_t color = kInherit;
     int font = 0;
     uint8_t decor = 0;
+    int8_t shift = 0;  // sup: -1 (raised), sub: +1 (lowered)
     P::String href;
     P::String onclick;
     bool same(const Style& o) const {
-        return color == o.color && font == o.font && decor == o.decor && href == o.href && onclick == o.onclick;
+        return color == o.color && font == o.font && decor == o.decor && shift == o.shift && href == o.href &&
+               onclick == o.onclick;
     }
-    bool plain() const { return color == kInherit && !font && !decor && href.empty() && onclick.empty(); }
+    bool plain() const { return color == kInherit && !font && !decor && !shift && href.empty() && onclick.empty(); }
     bool link() const { return !href.empty() || !onclick.empty(); }
 };
 
@@ -500,6 +502,8 @@ Style derive(const Style& base, const TagRef& t, uint8_t look) {
     switch (look) {
         case L_STRONG: s.color = kAccent; break;
         case L_EM: case L_DIM: case L_RT: s.color = kDim; break;
+        case L_SUB: s.color = kDim, s.shift = 1; break;
+        case L_SUP: s.color = kDim, s.shift = -1; break;
         case L_CODE: s.color = kCode; break;
         case L_MARK: s.color = kMark; break;
         case L_UNDER: s.decor |= kUnderline; break;
@@ -680,7 +684,14 @@ void makeClickable(lv_obj_t* o, const P::String& href, const P::String& onclick)
     lv_obj_add_event_cb(o, onActionDelete, LV_EVENT_DELETE, a);
 }
 
-// ============ Global attributes: id, class, style, hidden, visible, onclick ============
+// ============ Global attributes: id, class, style, dir, hidden, visible, onclick ============
+
+// The direction an element gets: its own dir= or the one it inherits from its parent
+bool rtlIn(const TagRef& t, lv_obj_t* parent) {
+    const P::String d = lower(attr(t, "dir"));
+    if (d == "rtl" || d == "ltr") return d == "rtl";
+    return lv_obj_get_style_base_dir(parent, LV_PART_MAIN) == LV_BASE_DIR_RTL;
+}
 
 void inlineCss(lv_obj_t* o, const char* tag, const P::String& decls) {
     UI::Css css;
@@ -703,6 +714,7 @@ P::String applyGlobal(const TagRef& t, lv_obj_t* o, const char* tplText = nullpt
     P::String vis = attr(t, "visible");
     Widget{o}.applyCss(t.name, id.c_str(), cls.c_str());
     if (!style.empty()) inlineCss(o, t.name, style);
+    applyDir(o, attr(t, "dir").c_str());
     if (has(t, "hidden")) lv_obj_add_flag(o, LV_OBJ_FLAG_HIDDEN);
     if (!is(t.name, "a")) makeClickable(o, "", attr(t, "onclick"));
 
@@ -776,13 +788,16 @@ public:
             out += *p++;
             lastSpace_ = ctx_.pre ? (out.back() == '\n') : false;
         }
-        if (out.empty()) return;
-        if (!items_.empty() && items_.back().type == Item::TEXT && items_.back().st.same(st)) {
-            items_.back().text += out;
-        } else {
-            items_.push_back(Item{Item::TEXT, out, st, {}});
-        }
+        push(out, st);
     }
+
+    // Text as it is shown, entities decoded and spaces collapsed (<bdo> puts its reversed text here)
+    void shown(const P::String& out, const Style& st) {
+        push(out, st);
+        if (!out.empty() && !ctx_.pre) lastSpace_ = out.back() == ' ';
+    }
+    // A segment read on behalf of `o` (<bdo>): spaces collapse across the boundary as in `o`
+    void continueAfter(const Seg& o) { lastSpace_ = o.lastSpace_; }
 
     void lineBreak() {
         trimTail();
@@ -798,6 +813,14 @@ public:
     void flush();
 
 private:
+    void push(const P::String& out, const Style& st) {
+        if (out.empty()) return;
+        if (!items_.empty() && items_.back().type == Item::TEXT && items_.back().st.same(st)) {
+            items_.back().text += out;
+        } else {
+            items_.push_back(Item{Item::TEXT, out, st, {}});
+        }
+    }
     void trimTail() {
         while (!items_.empty() && items_.back().type == Item::TEXT) {
             P::String& s = items_.back().text;
@@ -842,17 +865,19 @@ void Seg::flush() {
         lastSpace_ = true;
         return;
     }
-    bool atoms = false, formatted = false;
+    bool atoms = false, formatted = false, shifted = false;
     int links = 0;
     const Style* lastLink = nullptr;
     for (const auto& it : items_) {
         if (it.type == Item::ATOM) atoms = true;
         if (it.type != Item::TEXT) continue;
         if (!it.st.plain()) formatted = true;
+        if (it.st.shift) shifted = true;
         if (it.st.link() && !(lastLink && lastLink->same(it.st))) ++links;
         lastLink = it.st.link() ? &it.st : nullptr;
     }
-    if (atoms || links >= 2) asWords();
+    // spans cannot move off the line: raised and lowered text (sup, sub) goes word by word too
+    if (atoms || links >= 2 || shifted) asWords();
     else if (!formatted) asLabel();
     else asSpans();
     items_.clear();
@@ -941,7 +966,28 @@ void Seg::asSpans() {
 #endif
 }
 
-// Text with widgets or several links: a row that wraps word by word, like an HTML line box
+// End of the word of `text` that starts at i: past its space. A {var} stays in one word: the
+// word keeps its template and stays live, whatever the value holds.
+size_t wordEnd(const P::String& text, size_t i) {
+    while (i < text.size()) {
+        const char c = text[i++];
+        if (c == ' ') return i;  // keep the space
+        if (c == '{') {
+            const size_t close = text.find_first_of("} ", i);
+            if (close != P::String::npos && text[close] == '}') i = close + 1;
+        }
+    }
+    return text.size();
+}
+
+// An RTL line keeps its (left-to-right) words in their order and sits at the right
+void alignWordsRow(lv_obj_t* row) {
+    if (lv_obj_get_style_base_dir(row, LV_PART_MAIN) != LV_BASE_DIR_RTL) return;
+    lv_obj_set_style_base_dir(row, LV_BASE_DIR_LTR, LV_PART_MAIN);
+    lv_obj_set_flex_align(row, LV_FLEX_ALIGN_END, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_START);
+}
+
+// Text with widgets, several links or sup/sub: a row that wraps word by word, like an HTML line box
 void Seg::asWords() {
     lv_obj_t* row = plainObj(box_);
     lv_obj_set_width(row, lv_pct(100));
@@ -950,6 +996,8 @@ void Seg::asWords() {
     lv_obj_set_flex_align(row, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_START);
     lv_obj_set_style_pad_row(row, 4, LV_PART_MAIN);
     decorate(row);
+    alignWordsRow(row);
+    int raise = 0, drop = 0;  // how far sup and sub leave the line: the row makes room for them
     for (const auto& it : items_) {
         if (it.type == Item::ATOM) {
             renderAtom(it.atom, row);
@@ -960,15 +1008,14 @@ void Seg::asWords() {
             lv_obj_set_size(br, lv_pct(100), 0);
             continue;
         }
-        P::String text = strchr(it.text.c_str(), '{') ? render_template(it.text.c_str()) : it.text;
-        size_t i = 0;
-        while (i < text.size()) {
-            size_t sp = text.find(' ', i);
-            size_t endw = (sp == P::String::npos) ? text.size() : sp + 1;  // keep the space
-            P::String word = text.substr(i, endw - i);
+        const P::String& text = it.text;
+        for (size_t i = 0; i < text.size();) {
+            const size_t endw = wordEnd(text, i);
+            const P::String word = text.substr(i, endw - i);
             i = endw;
+            const bool live = word.find('{') != P::String::npos;
             lv_obj_t* w = lv_label_create(row);  // a lone " " too: the gap between two links
-            lv_label_set_text(w, word.c_str());
+            lv_label_set_text(w, live ? render_template(word.c_str()).c_str() : word.c_str());
             if (it.st.color != kInherit) lv_obj_set_style_text_color(w, lv_color_hex(it.st.color), LV_PART_MAIN);
             if (it.st.font) lv_obj_set_style_text_font(w, Font::get(it.st.font), LV_PART_MAIN);
 #if !defined(LVGL_MOCK_ENABLED)
@@ -978,9 +1025,24 @@ void Seg::asWords() {
                     ((it.st.decor & kStrike) ? LV_TEXT_DECOR_STRIKETHROUGH : 0)), LV_PART_MAIN);
             }
 #endif
+            if (it.st.shift) {  // sup: a third of the line up, sub: a fifth down
+                const int line = lv_font_get_line_height(lv_obj_get_style_text_font(w, LV_PART_MAIN));
+                const int dy = it.st.shift < 0 ? -line / 3 : line / 5;
+                lv_obj_set_style_translate_y(w, dy, LV_PART_MAIN);
+                if (dy < 0 && -dy > raise) raise = -dy;
+                if (dy > 0 && dy > drop) drop = dy;
+            }
             makeClickable(w, it.st.href, it.st.onclick);
+            if (live) {  // {var}: the TelaOS binding mechanism keeps the word up to date
+                TagRef none;
+                snprintf(none.name, sizeof(none.name), "#text");
+                none.astart = none.aend = "";
+                applyGlobal(none, w, word.c_str());
+            }
         }
     }
+    if (raise) lv_obj_set_style_pad_top(row, raise, LV_PART_MAIN);
+    if (drop) lv_obj_set_style_pad_bottom(row, drop, LV_PART_MAIN);
 }
 
 // ============ Walking content ============
@@ -1004,10 +1066,47 @@ bool hasBlockOrAtom(const char* p, const char* end) {
     return false;
 }
 
+// Text with its characters in reverse order (UTF-8 aware). A {var} stays whole and live: its
+// value is not known here.
+P::String reversedText(const P::String& text) {
+    P::String out;
+    out.reserve(text.size());
+    for (size_t end = text.size(); end > 0;) {
+        size_t start = end - 1;
+        const size_t open = text[start] == '}' ? text.rfind('{', start) : P::String::npos;
+        if (open != P::String::npos && text.find(' ', open) > start) {
+            start = open;
+        } else {
+            while (start > 0 && (static_cast<unsigned char>(text[start]) & 0xC0) == 0x80) --start;  // to the lead byte
+        }
+        out.append(text, start, end - start);
+        end = start;
+    }
+    return out;
+}
+
+// <bdo dir="rtl">: its characters go right to left (a bidi override does just that)
+void bdoRtl(const TagRef& t, Seg& seg, const Style& st) {
+    Seg inner(nullptr, seg.ctx());
+    inner.continueAfter(seg);
+    walk(t.cstart, t.cend, inner, st, true);
+    const auto& items = inner.items();
+    for (size_t i = items.size(); i-- > 0;) {
+        const auto& it = items[i];
+        if (it.type == Seg::Item::TEXT) seg.shown(reversedText(it.text), it.st);
+        else if (it.type == Seg::Item::BREAK) seg.lineBreak();
+        else seg.atom(it.atom);
+    }
+}
+
 void inlineTag(const TagRef& t, const TagInfo* ti, Seg& seg, const Style& st) {
     const uint8_t look = ti ? ti->look : L_PLAIN;
     if (look == L_SKIP) return;
     Style s = derive(st, t, look);
+    if (is(t.name, "bdo") && lower(attr(t, "dir")) == "rtl") {
+        bdoRtl(t, seg, s);
+        return;
+    }
     if (look == L_QUOTE) seg.text("\xE2\x80\x9C", "\xE2\x80\x9C" + 3, s);  // “
     if (look == L_RT) seg.text("(", "(" + 1, s);
     walk(t.cstart, t.cend, seg, s, true);
@@ -1137,20 +1236,24 @@ void disableControls(lv_obj_t* o);
 void blockElement(const TagRef& t, lv_obj_t* box, const Ctx& ctx) {
     const char* n = t.name;
     if (is(n, "body")) {  // the flow root already is the body
+        applyDir(box, attr(t, "dir").c_str());
         renderInto(t, box, ctx);
         return;
     }
     lv_obj_t* b = newBox(box, kGap);
+    const bool rtl = rtlIn(t, box);  // indents and the quote line are on the side lines start
     if (is(n, "blockquote")) {
-        lv_obj_set_style_pad_left(b, kIndent - 8, LV_PART_MAIN);
+        if (rtl) lv_obj_set_style_pad_right(b, kIndent - 8, LV_PART_MAIN);
+        else lv_obj_set_style_pad_left(b, kIndent - 8, LV_PART_MAIN);
         lv_obj_set_style_text_color(b, lv_color_hex(kH2), LV_PART_MAIN);
 #if !defined(LVGL_MOCK_ENABLED)
-        lv_obj_set_style_border_side(b, LV_BORDER_SIDE_LEFT, LV_PART_MAIN);
+        lv_obj_set_style_border_side(b, rtl ? LV_BORDER_SIDE_RIGHT : LV_BORDER_SIDE_LEFT, LV_PART_MAIN);
 #endif
         lv_obj_set_style_border_width(b, 3, LV_PART_MAIN);
         lv_obj_set_style_border_color(b, lv_color_hex(kRule), LV_PART_MAIN);
     } else if (is(n, "dd")) {
-        lv_obj_set_style_pad_left(b, kIndent, LV_PART_MAIN);
+        if (rtl) lv_obj_set_style_pad_right(b, kIndent, LV_PART_MAIN);
+        else lv_obj_set_style_pad_left(b, kIndent, LV_PART_MAIN);
     } else if (is(n, "fieldset")) {
         lv_obj_set_style_border_width(b, 1, LV_PART_MAIN);
         lv_obj_set_style_border_color(b, lv_color_hex(kRule), LV_PART_MAIN);
@@ -1221,7 +1324,10 @@ void listItem(const TagRef& li, lv_obj_t* parent, const Ctx& ctx, const P::Strin
 
 void listElement(const TagRef& t, lv_obj_t* box, const Ctx& ctx) {
     lv_obj_t* lb = newBox(box, kGapList);
-    if (ctx.listDepth > 0) lv_obj_set_style_pad_left(lb, kIndent / 2, LV_PART_MAIN);
+    if (ctx.listDepth > 0) {  // nested: indented on the side its lines start
+        if (rtlIn(t, box)) lv_obj_set_style_pad_right(lb, kIndent / 2, LV_PART_MAIN);
+        else lv_obj_set_style_pad_left(lb, kIndent / 2, LV_PART_MAIN);
+    }
     applyGlobal(t, lb);
     const bool ordered = is(t.name, "ol");
     P::String type = attr(t, "type");
@@ -1790,7 +1896,10 @@ void renderBlock(const TagRef& t, lv_obj_t* box, const Ctx& ctx) {
     else if (is(n, "picture")) {
         TagRef img;
         if (findChild(t, "img", img)) imgElement(img, box);
-    } else if (is(n, "html")) renderInto(t, box, ctx);
+    } else if (is(n, "html")) {
+        applyDir(box, attr(t, "dir").c_str());  // <html dir="rtl">: the whole document
+        renderInto(t, box, ctx);
+    }
     else if (is(n, "th")) textElement(t, box, ctx);  // outside a table row: plain text
     else if (is(n, "thead") || is(n, "tbody") || is(n, "tfoot")) {
         parse_children(t.cstart, static_cast<int>(t.cend - t.cstart), box);
@@ -2011,6 +2120,23 @@ const char* inlineRun(const char* p, const char* end, lv_obj_t* parent) {
     walk(p, e, seg, Style{}, false);
     seg.flush();
     return e;
+}
+
+// dir="rtl", as far as the watch's fonts need it (they have no right-to-left letters): lines sit at
+// the right; table columns, list markers and words in a row start from the right, as LVGL flex
+// follows base_dir; base_dir and text_align are inherited, as dir is. dir="ltr" undoes it inside;
+// dir="auto" is ltr for these letters.
+void applyDir(lv_obj_t* obj, const char* dir) {
+    if (!dir || !dir[0]) return;
+    const P::String d = lower(P::String(dir));
+    if (d != "rtl" && d != "ltr") return;
+    const bool rtl = d == "rtl";
+    lv_obj_set_style_base_dir(obj, rtl ? LV_BASE_DIR_RTL : LV_BASE_DIR_LTR, LV_PART_MAIN);
+#if !defined(LVGL_MOCK_ENABLED)
+    lv_style_value_t v;  // an alignment of its own (a caption is centred) stays
+    if (lv_obj_get_local_style_prop(obj, LV_STYLE_TEXT_ALIGN, &v, LV_PART_MAIN) == LV_STYLE_RES_FOUND) return;
+#endif
+    lv_obj_set_style_text_align(obj, rtl ? LV_TEXT_ALIGN_RIGHT : LV_TEXT_ALIGN_LEFT, LV_PART_MAIN);
 }
 
 void makeFlow(lv_obj_t* container) {
