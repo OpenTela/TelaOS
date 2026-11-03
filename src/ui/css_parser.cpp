@@ -13,6 +13,7 @@
 #include "ui/css_media.h"
 #include "ui/css_text.h"
 #include "ui/css_values.h"
+#include "ui/dom.h"
 #include "ui/ui_coords.h"
 #include "ui/ui_html_internal.h"
 #include "ui/ui_tag_reader.h"
@@ -1002,9 +1003,11 @@ CssScope::CssScope(std::string_view tag, std::string_view attrs, std::string_vie
     customStack().push_back(Css::instance().customProperties(el));  // before el is its own ancestor
     scopeStack().push_back(el);
     childStack().push_back(Children{});
+    dom_ = Dom::enter(tag, attrs);
 }
 
 CssScope::~CssScope() {
+    if (dom_) Dom::leave();
     scopeStack().pop_back();
     customStack().pop_back();
     childStack().pop_back();

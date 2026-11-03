@@ -124,6 +124,8 @@ namespace UI {
     /// Imperative attribute access
     bool setWidgetAttr(const char* id, const char* attr, const char* value);
     P::String getWidgetAttr(const char* id, const char* attr);
+    /// The same on an element itself (false: an attribute it does not know)
+    bool setElementAttr(UI::Element& elem, const char* attr, const char* value);
 }
 
 /// Global core instance — defined in main.cpp

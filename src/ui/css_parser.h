@@ -56,6 +56,9 @@ public:
     CssScope& operator=(const CssScope&) = delete;
 
     static const P::Array<CssElement>& ancestors();
+
+private:
+    bool dom_ = false;  // the element is in the tree scripts see (UI::Dom)
 };
 
 // While it lives, the scope on top reads its children from `text` instead of `original`, if it

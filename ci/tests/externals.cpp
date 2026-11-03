@@ -22,6 +22,7 @@ const lv_font_t lv_font_montserrat_14 = {14};
 const lv_font_t lv_font_montserrat_16 = {16};
 
 // LVGL classes
+const lv_obj_class_t lv_obj_class = {};
 const lv_obj_class_t lv_label_class = {};
 const lv_obj_class_t lv_textarea_class = {};
 const lv_obj_class_t lv_btn_class = {};

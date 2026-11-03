@@ -316,35 +316,40 @@ bool UI::setWidgetAttr(const char* id, const char* attr, const char* value) {
         LOG_W(Log::UI, "setWidgetAttr: widget '%s' not found", id);
         return false;
     }
-    
+    if (!setElementAttr(*elem, attr, value)) {
+        LOG_W(Log::UI, "setWidgetAttr: unknown attribute '%s'", attr);
+        return false;
+    }
+    LOG_D(Log::UI, "setWidgetAttr: %s.%s = %s", id, attr, value);
+    return true;
+}
+
+bool UI::setElementAttr(UI::Element& elem, const char* attr, const char* value) {
     if (strcmp(attr, "bgcolor") == 0) {
-        UI::setBgColor(elem->box(), parse_color(value));
+        UI::setBgColor(elem.box(), parse_color(value));
     } else if (strcmp(attr, "color") == 0) {
-        UI::setColor(elem->w, parse_color(value));
+        UI::setColor(elem.w, parse_color(value));
     } else if (strcmp(attr, "text") == 0) {
-        UI::setText(elem->w, value);
+        UI::setText(elem.w, value);
     } else if (strcmp(attr, "visible") == 0) {
         bool visible = (strcmp(value, "true") == 0 || strcmp(value, "1") == 0);
-        UI::setVisible(elem->box(), visible);
+        UI::setVisible(elem.box(), visible);
     } else if (strcmp(attr, "x") == 0) {
-        UI::setX(elem->box(), parse_coord_w(value));
+        UI::setX(elem.box(), parse_coord_w(value));
     } else if (strcmp(attr, "y") == 0) {
-        UI::setY(elem->box(), parse_coord_h(value));
+        UI::setY(elem.box(), parse_coord_h(value));
     } else if (strcmp(attr, "w") == 0) {
-        UI::setWidth(elem->box(), parse_coord_w(value));
+        UI::setWidth(elem.box(), parse_coord_w(value));
     } else if (strcmp(attr, "h") == 0) {
-        UI::setHeight(elem->box(), parse_coord_h(value));
+        UI::setHeight(elem.box(), parse_coord_h(value));
     } else if (strcmp(attr, "z-index") == 0) {
-        lv_obj_t* target = elem->parentObj ? elem->parentObj : elem->w.handle;
+        lv_obj_t* target = elem.parentObj ? elem.parentObj : elem.w.handle;
         int z = atoi(value);
         if (z > 0) lv_obj_move_foreground(target);
         else if (z < 0) lv_obj_move_to_index(target, 0);
     } else {
-        LOG_W(Log::UI, "setWidgetAttr: unknown attribute '%s'", attr);
         return false;
     }
-    
-    LOG_D(Log::UI, "setWidgetAttr: %s.%s = %s", id, attr, value);
     return true;
 }
 

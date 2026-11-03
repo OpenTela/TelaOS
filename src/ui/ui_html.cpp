@@ -11,6 +11,7 @@
 #include "ui/ui_types.h"
 #include "ui/html_parser.h"
 #include "ui/css_parser.h"
+#include "ui/dom.h"
 #include "ui/ui_html_flow.h"
 #include "ui/ui_tag_reader.h"
 #include "utils/string_utils.h"
@@ -1498,6 +1499,7 @@ void create_tabs(const char* astart, const char* aend, const char* content, lv_o
     
     // Create tabview
     lv_obj_t* tv = lv_tabview_create(parent);
+    UI::Dom::element(tv, "tabs", std::string_view(astart, static_cast<size_t>(aend - astart)));
     lv_tabview_set_tab_bar_position(tv, LV_DIR_TOP);
     lv_tabview_set_tab_bar_size(tv, barh);
     
@@ -1578,6 +1580,7 @@ void create_tabs(const char* astart, const char* aend, const char* content, lv_o
         {
             UI::CssScope inTabs("tabs", std::string_view(astart, static_cast<size_t>(aend - astart)),
                                 std::string_view(content, static_cast<size_t>(end - content)));
+            UI::Dom::element(tab_page, "tab", std::string_view(tab_astart, static_cast<size_t>(tab_aend - tab_astart)));
             UI::CssScope inTab("tab", std::string_view(tab_astart, static_cast<size_t>(tab_aend - tab_astart)),
                                std::string_view(ta, static_cast<size_t>(tab_content_len)));
             parse_children(ta, tab_content_len, tab_page);
@@ -2025,6 +2028,7 @@ int ui_html_render_internal(const char *html) {
     const char *p = html;
     
     HtmlFlow::reset();  // a new app: the HTML layer forgets the previous one's objects
+    UI::Dom::begin();   // ...and the tree its script sees is built anew
     
     // Pass 0: Parse <head>/<app> sections
     LOG_D(Log::UI, "render_internal: parse_head...");
@@ -2243,10 +2247,12 @@ int ui_html_render_internal(const char *html) {
     // Pass 3: Parse children for all pages
     for (int i = 0; i < content_count; i++) {
         LOG_I(Log::UI, "  page[%d]: len=%d parent=%p", i, contents[i].len, contents[i].parent);
+        UI::Dom::element(contents[i].parent, "page", contents[i].attrs);
         UI::CssScope page("page", contents[i].attrs,  // #settings button {} sees its page
                           std::string_view(contents[i].start, static_cast<size_t>(contents[i].len)));
         parse_children(contents[i].start, contents[i].len, contents[i].parent);
     }
+    UI::Dom::end();
     
     LOG_I(Log::UI, "Done: %d g_core.app().elements, %d groups, %d standalone pages", 
              (int)g_core.app().elements.size(), g_core.app().groupsCount(), g_core.app().pagesCount());

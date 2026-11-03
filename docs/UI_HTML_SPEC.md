@@ -1,9 +1,10 @@
-# UI HTML Specification v0.8
+# UI HTML Specification v0.9
 
 Декларативный язык разметки для создания интерфейсов на ESP32 с LVGL.
 
 ## Changelog
 
+- **v0.9**: `document` для Lua — элементы страницы, как в браузере: [DOM.md](DOM.md).
 - **v0.8**: Стандартные HTML-элементы (`p`, `h1`–`h6`, `ul`/`ol`/`li`, `a`, `img`, `form`, `details`, `dialog`…), полный список — [HTML_TAGS.md](HTML_TAGS.md). Текст прямо в странице, `<div>`, `<td>`. `<input type=…>` по HTML. Виджеты без `x`/`y`/`align` на странице с HTML встают в поток. `<br>`, `<img>` без `/>`, `<td>`/`<li>`/`<p>` без закрывающего тега. Все 148 имён цветов CSS (`green` теперь `#008000`, как в браузере; ярко-зелёный — `lime`).
 - **v0.7**: `oninput` для input. Canvas: `ondraw`, `ontap`, `onhold`. `onclick` с аргументами. `overflow` для label.
 - **v0.6**: Namespaces (`ui.*`, `app.*`, `net.*`, `timer.*`). Templates + `@for`. `<table>`/`<tr>`/`<td>`. setTimeout порядок аргументов. CSV/YAML API.
@@ -565,6 +566,16 @@ Raw HTML → parse_templates() → цикл (max 8 проходов):
 **Алиасы:** `navigate()`, `focus()`, `setAttr()`, `getAttr()`
 
 **setAttr/getAttr атрибуты:** `bgcolor`, `color`, `text`, `visible`, `x`, `y`, `w`, `h`, `z-index`
+
+#### document — элементы, как в браузере
+
+| Функция | Описание |
+|---------|----------|
+| `document.getElementById("id")` | Элемент или `nil` |
+| `el.textContent` | Текст элемента: чтение и запись |
+| `el:getAttribute(name)` / `el:setAttribute(name, value)` / `el:removeAttribute(name)` | Атрибуты; `setAttribute` делает то, что атрибут делает в разметке |
+
+Всё о них — [DOM.md](DOM.md).
 
 #### app.* — управление приложением
 

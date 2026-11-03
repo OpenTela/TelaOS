@@ -99,6 +99,7 @@ typedef enum {
 } lv_dir_t;
 
 // Class stubs
+extern const lv_obj_class_t lv_obj_class;  // a plain object (lv_obj_create)
 extern const lv_obj_class_t lv_label_class;
 extern const lv_obj_class_t lv_textarea_class;
 extern const lv_obj_class_t lv_btn_class;
@@ -698,6 +699,7 @@ inline bool lv_obj_check_type(lv_obj_t* obj, const lv_obj_class_t* cls) {
     if (cls == &lv_switch_class)   return t == "Switch";
     if (cls == &lv_slider_class)   return t == "Slider";
     if (cls == &lv_dropdown_class) return t == "Dropdown";
+    if (cls == &lv_obj_class)      return t == "Container";
     return false;
 }
 #else

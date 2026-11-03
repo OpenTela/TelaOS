@@ -1,0 +1,56 @@
+<app os="1.0" title="DOM" version="0.1" category="test">
+  <!--
+    Test fixture for the DOM in TelaOS (docs/DOM.md): document.getElementById, textContent,
+    getAttribute, setAttribute, removeAttribute. Flashed by the simulator with --extra-data;
+    driven by tests/tela_dom.sim. The script runs when the app starts: a line "read: ..." shows
+    what it read, the others show what it wrote.
+  -->
+  <ui default="/main">
+    <page id="main">
+      <h2>DOM</h2>
+      <p id="fmt">Hello <b>bold</b> world</p>
+      <p id="readFmt">-</p>
+      <label id="rich">Name <i>(optional)</i></label>
+      <p id="readRich">-</p>
+      <ul><li id="item">The item</li></ul>
+      <p id="readItem">-</p>
+      <details id="det"><summary>More</summary><p>Body</p></details>
+      <p id="readDet">-</p>
+      <p id="spans">old <i>words</i> here</p>
+      <p id="gone">this line hides</p>
+      <p id="count">Count: {count}</p>
+      <p id="fixed">Count: {count}</p>
+      <div id="box"><p>Inside: {count}</p><label>two</label></div>
+      <input type="checkbox" id="tick" label="Remember">
+      <button id="btn" onclick="tap">Tap</button>
+      <p id="readTap">-</p>
+      <button id="add" onclick="add">Add</button>
+    </page>
+  </ui>
+  <state>
+    <int name="count" default="0"/>
+  </state>
+  <script language="lua">
+local function el(id) return document.getElementById(id) end
+
+el("readFmt").textContent = "read: " .. el("fmt").textContent
+el("readRich").textContent = "read: " .. el("rich").textContent
+el("readItem").textContent = "read: " .. el("item").textContent
+el("readDet").textContent = "read: " .. el("det").textContent
+el("spans").textContent = "new text"
+el("gone"):setAttribute("hidden", "")
+el("fixed").textContent = "fixed"
+el("box").textContent = "replaced"
+el("tick"):setAttribute("checked", "")
+
+function tap()
+  local b = el("btn")
+  b.textContent = "Tapped"
+  el("readTap").textContent = "read: " .. b.tagName .. " " .. b:getAttribute("onclick")
+end
+
+function add()
+  state.count = state.count + 1
+end
+  </script>
+</app>

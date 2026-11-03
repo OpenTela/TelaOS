@@ -15,6 +15,7 @@
 #include "ui/xml_utils.h"
 #include "ui/css_parser.h"
 #include "ui/css_colors.h"
+#include "ui/dom.h"
 #include "ui/ui_html_flow.h"
 #include "ui/ui_tag_reader.h"
 #include "ui_layout.h"
@@ -1311,6 +1312,8 @@ void create_image(const char *astart, const char *aend, lv_obj_t *parent) {
         img = widget.handle;
     }
     
+    UI::Dom::element(img, "image", std::string_view(astart, static_cast<size_t>(aend - astart)));  // no CSS, still an element
+
     if (align == "center") {
         lv_obj_align(img, LV_ALIGN_TOP_MID, 0, y);
     } else {
@@ -1455,6 +1458,7 @@ void create_canvas(const char *astart, const char *aend, lv_obj_t *parent) {
     }
     
     lv_canvas_set_buffer(canvas, buf, w, h, LV_COLOR_FORMAT_ARGB8888);
+    UI::Dom::element(canvas, "canvas", std::string_view(astart, static_cast<size_t>(aend - astart)));
     
     // Store element with canvas info
     auto elem = P::create<UI::Element>();
@@ -1648,6 +1652,7 @@ void create_qr(const char *astart, const char *aend, const char *content, lv_obj
     uint32_t lightRgb = lightAttr.empty() ? 0xFFFFFF : parse_color(lightAttr.c_str());
 
     lv_obj_t* qr = lv_qrcode_create(parent);
+    UI::Dom::element(qr, "qr", std::string_view(astart, static_cast<size_t>(aend - astart)));
     lv_qrcode_set_size(qr, size);
     lv_qrcode_set_dark_color(qr,  lv_color_hex(darkRgb));
     lv_qrcode_set_light_color(qr, lv_color_hex(lightRgb));

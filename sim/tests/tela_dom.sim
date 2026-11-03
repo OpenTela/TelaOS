@@ -1,0 +1,37 @@
+# tela_dom.sim — the DOM for scripts on the real TelaOS engine (docs/DOM.md).
+# Fixture: sim/tests/fixtures/apps/dom_tags (flashed with --extra-data sim/tests/fixtures).
+# Its script reads and writes the page when it starts, a tap reads and writes a button.
+
+wait 300
+> app launch dom_tags
+wait 800
+
+expect "DOM" :visible
+expect @readFmt "read: Hello bold world"
+expect @readRich "read: Name (optional)"
+expect @readItem "read: The item"
+expect @readDet "read: MoreBody"
+expect @spans "new text"
+expect @gone :hidden
+expect @tick on
+expect @fixed "fixed"
+expect @box "replaced"
+shot dom_01_start
+
+tap "Tap"
+wait 200
+expect @btn "Tapped"
+expect @readTap "read: BUTTON tap"
+
+# {count} goes on writing the line the script left alone, not the one it wrote,
+# and the box's old line is gone: nothing reaches it
+scroll @add
+tap "Add"
+wait 200
+expect @count "Count: 1"
+expect @fixed "fixed"
+expect @box "replaced"
+shot dom_02_after
+
+expect mem.dram_failed 0
+expect mem.psram_failed 0
