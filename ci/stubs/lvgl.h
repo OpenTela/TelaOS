@@ -146,6 +146,8 @@ typedef uint32_t lv_style_selector_t;  // a part | a state
 #define LV_PART_ITEMS     0x050000
 
 #define LV_SIZE_CONTENT   (-1)
+#define LV_DPI_DEF        130  // as in include/lv_conf.h
+#define LV_COLOR_DEPTH    16
 #define LV_OPA_50         128
 #define LV_OPA_70         178
 

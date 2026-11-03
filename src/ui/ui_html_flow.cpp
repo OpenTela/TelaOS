@@ -401,7 +401,10 @@ std::string_view rawAttrs(const TagRef& t) {
 
 // While its content is built, t is an ancestor for CSS selectors (nav a, ul > li)
 struct Inside : UI::CssScope {
-    explicit Inside(const TagRef& t) : UI::CssScope(t.name, rawAttrs(t)) {}
+    explicit Inside(const TagRef& t)
+        : UI::CssScope(t.name, rawAttrs(t),
+                       t.cstart ? std::string_view(t.cstart, t.cend > t.cstart ? static_cast<size_t>(t.cend - t.cstart) : 0)
+                                : std::string_view()) {}
 };
 
 // ============ Entities, whitespace ============

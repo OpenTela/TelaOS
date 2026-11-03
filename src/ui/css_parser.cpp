@@ -10,10 +10,12 @@
 #include "ui/css_parser.h"
 #include "ui/css_box.h"
 #include "ui/css_layout.h"
+#include "ui/css_media.h"
 #include "ui/css_text.h"
 #include "ui/css_values.h"
 #include "ui/ui_coords.h"
 #include "ui/ui_html_internal.h"
+#include "ui/ui_tag_reader.h"
 #include "core/core.h"
 
 #include "widgets/widget_common.h"
@@ -32,6 +34,7 @@ namespace UI {
 
 using CssDetail::AttrTest;
 using CssDetail::Compound;
+using CssDetail::NthTest;
 using CssDetail::Rule;
 using CssDetail::Selector;
 
@@ -263,6 +266,72 @@ bool pseudoState(std::string_view name, uint16_t& state) {
     return true;
 }
 
+// The argument of :nth-child(): odd, even, 3, 2n+1, -n + 3
+bool parseNth(std::string_view arg, NthTest& t) {
+    P::String text;  // without spaces: 2n + 1 is 2n+1
+    for (char c : arg) {
+        if (!isSpace(c)) text += lowerAscii(c);
+    }
+    const std::string_view v(text);
+    auto integer = [](std::string_view d, int& out) {  // 3, +3, -3
+        size_t i = (!d.empty() && (d[0] == '+' || d[0] == '-')) ? 1 : 0;
+        if (i >= d.size()) return false;
+        int x = 0;
+        for (; i < d.size(); ++i) {
+            if (d[i] < '0' || d[i] > '9' || x > 9999) return false;
+            x = x * 10 + (d[i] - '0');
+        }
+        out = d[0] == '-' ? -x : x;
+        return true;
+    };
+    int a = 0, b = 0;
+    const size_t pn = v.find('n');
+    if (v == "odd") {
+        a = 2, b = 1;
+    } else if (v == "even") {
+        a = 2;
+    } else if (pn == std::string_view::npos) {
+        if (!integer(v, b)) return false;
+    } else {
+        const std::string_view as = v.substr(0, pn), bs = v.substr(pn + 1);
+        if (as.empty() || as == "+") a = 1;
+        else if (as == "-") a = -1;
+        else if (!integer(as, a)) return false;
+        if (!bs.empty() && (bs[0] != '+' && bs[0] != '-')) return false;
+        if (!bs.empty() && !integer(bs, b)) return false;
+    }
+    t.a = static_cast<int16_t>(a);
+    t.b = static_cast<int16_t>(b);
+    return true;
+}
+
+// :nth-child( and the others that take an argument; false for any other name
+bool nthFunction(std::string_view name, NthTest& t) {
+    if (equalsNoCase(name, "nth-child")) return true;
+    if (equalsNoCase(name, "nth-last-child")) return t.fromEnd = true;
+    if (equalsNoCase(name, "nth-of-type")) return t.ofType = true;
+    if (equalsNoCase(name, "nth-last-of-type")) return t.fromEnd = t.ofType = true;
+    return false;
+}
+
+// :first-child, :last-child, :only-child and their -of-type forms; false for any other name
+bool nthKeyword(std::string_view name, P::Array<NthTest>& out) {
+    auto ends = [name](std::string_view tail) {
+        return name.size() > tail.size() && equalsNoCase(name.substr(name.size() - tail.size()), tail);
+    };
+    const bool ofType = ends("-of-type");
+    if (!ofType && !ends("-child")) return false;
+    const std::string_view base = name.substr(0, name.size() - (ofType ? 8 : 6));
+    NthTest first, last;
+    first.ofType = last.ofType = ofType;
+    last.fromEnd = true;
+    if (equalsNoCase(base, "first")) out.push_back(first);
+    else if (equalsNoCase(base, "last")) out.push_back(last);
+    else if (equalsNoCase(base, "only")) out.push_back(first), out.push_back(last);
+    else return false;
+    return true;
+}
+
 // One compound selector at i: a type or *, then #id, .class, [attr] and pseudo-classes in any order
 bool parseCompound(std::string_view s, size_t& i, Compound& c) {
     const size_t start = i;
@@ -294,14 +363,24 @@ bool parseCompound(std::string_view s, size_t& i, Compound& c) {
             AttrTest t;
             if (!parseAttrTest(s, i, t)) return false;
             c.attrs.push_back(std::move(t));
-        } else if (ch == ':') {  // :root and the states; anything else (::before, :not()) is not supported
+        } else if (ch == ':') {  // :root, the states, the places; anything else (::before, :not()) is not supported
             size_t j = i + 1;
             while (j < n && isNameChar(s[j])) ++j;
             const std::string_view pc = s.substr(i + 1, j - i - 1);
             uint16_t state = 0;
-            if (equalsNoCase(pc, "root")) c.root = true;
-            else if (pseudoState(pc, state)) c.states = static_cast<uint16_t>(c.states | state);
-            else break;
+            NthTest t;
+            if (equalsNoCase(pc, "root")) {
+                c.root = true;
+            } else if (pseudoState(pc, state)) {
+                c.states = static_cast<uint16_t>(c.states | state);
+            } else if (j < n && s[j] == '(' && nthFunction(pc, t)) {
+                const size_t close = s.find(')', j);
+                if (close == std::string_view::npos || !parseNth(s.substr(j + 1, close - j - 1), t)) return false;
+                c.nths.push_back(t);
+                j = close + 1;
+            } else if (!nthKeyword(pc, c.nths)) {
+                break;
+            }
             ++c.pseudos;
             i = j;
         } else {
@@ -311,8 +390,8 @@ bool parseCompound(std::string_view s, size_t& i, Compound& c) {
     return i > start;
 }
 
-// One complex selector (no commas): compounds joined by ' ' (descendant) and '>' (child).
-// false for anything not supported: :pseudo-classes, ::pseudo-elements, '+' and '~'.
+// One complex selector (no commas): compounds joined by ' ' (descendant), '>' (child), '+' (the
+// next sibling) and '~' (a later sibling). false for anything not supported: :not(), ::before.
 bool parseSelector(std::string_view s, Selector& out) {
     size_t i = 0;
     const size_t n = s.size();
@@ -330,12 +409,12 @@ bool parseSelector(std::string_view s, Selector& out) {
         const bool space = skip();
         if (i >= n) break;
         char comb = ' ';
-        if (s[i] == '>') {
-            comb = '>';
+        if (s[i] == '>' || s[i] == '+' || s[i] == '~') {
+            comb = s[i];
             ++i;
             skip();
         } else if (!space) {
-            return false;  // ':', '+', '~', or a stray character
+            return false;  // ':' that did not read, or a stray character
         }
         if (i >= n) return false;  // nothing after the combinator
         out.combinators += comb;
@@ -391,7 +470,86 @@ bool matchAttr(const AttrTest& t, std::string_view attrs) {
     }
 }
 
-bool matchCompound(const Compound& c, const CssElement& el) {
+// ============ Places among siblings ============
+
+// An element child of a scope's element, as the scope's content reads
+struct Child {
+    P::String tag;           // lower-case
+    std::string_view attrs;  // into the page text: tells the child from the others
+};
+
+// One per scopeStack() entry: the element children of its content, read the first time a
+// selector asks for a place (li:first-child, h2 + p)
+struct Children {
+    bool read = false;
+    P::Array<Child> items;
+};
+
+P::Array<CssElement>& scopeStack();
+P::Array<Children>& childStack();
+
+// The element children of anc[k], read as the page walker reads them (TagReader); nullptr when
+// anc is not the scope stack or k is no scope
+const P::Array<Child>* childrenOf(const P::Array<CssElement>& anc, int k) {
+    if (k < 0 || &anc != &scopeStack() || static_cast<size_t>(k) >= childStack().size()) return nullptr;
+    Children& c = childStack()[static_cast<size_t>(k)];
+    if (!c.read) {
+        c.read = true;
+        TagReader r(anc[static_cast<size_t>(k)].content);
+        StartTag t;
+        for (TagReader::Step step = r.next(t); step != TagReader::Step::End; step = r.next(t)) {
+            if (step != TagReader::Step::Tag) continue;
+            c.items.push_back(Child{t.name, t.attrs.text()});
+            r.content(t);  // its own children are not ours
+        }
+    }
+    return &c.items;
+}
+
+// el's index among kids, found by where its attributes are in the page; npos if it is not there
+// (an element built from other text: a template, a widget an HTML input becomes)
+size_t placeOf(const CssElement& el, const P::Array<Child>& kids) {
+    for (size_t i = 0; i < kids.size(); ++i) {
+        if (kids[i].attrs.data() == el.attrs.data() && el.attrs.data()) return i;
+    }
+    return std::string_view::npos;
+}
+
+bool nthMatches(const NthTest& t, int i) {  // i counts from 1
+    if (t.a == 0) return i == t.b;
+    const int d = i - t.b;
+    return d % t.a == 0 && d / t.a >= 0;
+}
+
+// :first-child, :nth-child() and the others, for el, a child of anc[parent]
+bool matchPlace(const Compound& c, const CssElement& el, int parent, const P::Array<CssElement>& anc) {
+    const P::Array<Child>* kids = childrenOf(anc, parent);
+    const size_t at = kids ? placeOf(el, *kids) : std::string_view::npos;
+    if (at == std::string_view::npos) return false;
+    for (const NthTest& t : c.nths) {
+        int index = 0, count = 0;
+        for (size_t k = 0; k < kids->size(); ++k) {
+            if (t.ofType && (*kids)[k].tag != (*kids)[at].tag) continue;
+            ++count;
+            if (k <= at) ++index;
+        }
+        if (!nthMatches(t, t.fromEnd ? count - index + 1 : index)) return false;
+    }
+    return true;
+}
+
+// A sibling as a selector sees it
+CssElement elementOf(const Child& c) {
+    CssElement e;
+    e.tag = c.tag;
+    e.attrs = c.attrs;
+    Css::findAttr(c.attrs, "id", e.id);
+    Css::findAttr(c.attrs, "class", e.classes);
+    return e;
+}
+
+// el, a child of anc[parent] (-1: no parent known)
+bool matchCompound(const Compound& c, const CssElement& el, int parent, const P::Array<CssElement>& anc) {
     if (c.root && !el.root) return false;  // :root; the root itself (tag html) also takes html {} and * {}
     if (!c.tag.empty() && el.tag != std::string_view(c.tag)) return false;
     if (!c.id.empty() && el.id != std::string_view(c.id)) return false;
@@ -407,21 +565,29 @@ bool matchCompound(const Compound& c, const CssElement& el) {
             return false;
         }
     }
-    return true;
+    return c.nths.empty() || matchPlace(c, el, parent, anc);
 }
 
-// parts[0..part] match the ancestors anc[0..top]: parts[part] is the nearest one to the right
-bool matchAncestors(const Selector& s, int part, const P::Array<CssElement>& anc, int top) {
-    if (part < 0) return true;
-    if (s.combinators[static_cast<size_t>(part)] == '>') {  // the parent itself
-        return top >= 0 && matchCompound(s.parts[static_cast<size_t>(part)], anc[static_cast<size_t>(top)]) &&
-               matchAncestors(s, part - 1, anc, top - 1);
+// parts[0..part] hold, parts[part] for el, a child of anc[parent]
+bool matchPart(const Selector& s, int part, const CssElement& el, int parent, const P::Array<CssElement>& anc) {
+    if (!matchCompound(s.parts[static_cast<size_t>(part)], el, parent, anc)) return false;
+    if (part == 0) return true;
+    const char comb = s.combinators[static_cast<size_t>(part - 1)];
+    if (comb == '>') {  // the parent itself
+        return parent >= 0 && matchPart(s, part - 1, anc[static_cast<size_t>(parent)], parent - 1, anc);
     }
-    for (int k = top; k >= 0; --k) {  // any ancestor; a farther one may be the one that fits the rest
-        if (matchCompound(s.parts[static_cast<size_t>(part)], anc[static_cast<size_t>(k)]) &&
-            matchAncestors(s, part - 1, anc, k - 1)) {
-            return true;
+    if (comb == '+' || comb == '~') {  // the sibling just before, or any before
+        const P::Array<Child>* kids = childrenOf(anc, parent);
+        const size_t at = kids ? placeOf(el, *kids) : std::string_view::npos;
+        if (at == std::string_view::npos) return false;
+        for (size_t k = at; k-- > 0;) {
+            if (matchPart(s, part - 1, elementOf((*kids)[k]), parent, anc)) return true;
+            if (comb == '+') break;
         }
+        return false;
+    }
+    for (int k = parent; k >= 0; --k) {  // any ancestor; a farther one may be the one that fits the rest
+        if (matchPart(s, part - 1, anc[static_cast<size_t>(k)], k - 1, anc)) return true;
     }
     return false;
 }
@@ -429,8 +595,7 @@ bool matchAncestors(const Selector& s, int part, const P::Array<CssElement>& anc
 // top: the nearest ancestor's index in anc
 bool matchSelector(const Selector& s, const CssElement& el, const P::Array<CssElement>& anc, int top) {
     const int last = static_cast<int>(s.parts.size()) - 1;
-    if (last < 0 || !matchCompound(s.parts[static_cast<size_t>(last)], el)) return false;
-    return matchAncestors(s, last - 1, anc, top);
+    return last >= 0 && matchPart(s, last, el, top, anc);
 }
 
 // The same element: the same tag and the same attribute text (views into the same page)
@@ -448,6 +613,11 @@ P::Array<CssElement>& scopeStack() {
 // The custom properties each scope's element declares, var()s put in: one entry per scopeStack() entry
 P::Array<P::Array<CssDecl>>& customStack() {
     static P::Array<P::Array<CssDecl>> s_stack;
+    return s_stack;
+}
+
+P::Array<Children>& childStack() {
+    static P::Array<Children> s_stack;
     return s_stack;
 }
 
@@ -702,22 +872,42 @@ bool Css::findAttr(std::string_view attrs, std::string_view name, std::string_vi
     return found;
 }
 
-CssScope::CssScope(std::string_view tag, std::string_view attrs) {
+CssScope::CssScope(std::string_view tag, std::string_view attrs, std::string_view content) {
     CssElement el;
     el.tag = tag;
     el.attrs = attrs;
+    el.content = content;
     Css::findAttr(attrs, "id", el.id);
     Css::findAttr(attrs, "class", el.classes);
     customStack().push_back(Css::instance().customProperties(el));  // before el is its own ancestor
     scopeStack().push_back(el);
+    childStack().push_back(Children{});
 }
 
 CssScope::~CssScope() {
     scopeStack().pop_back();
     customStack().pop_back();
+    childStack().pop_back();
 }
 
 const P::Array<CssElement>& CssScope::ancestors() { return scopeStack(); }
+
+CssScopeText::CssScopeText(std::string_view original, std::string_view text) {
+    P::Array<CssElement>& st = scopeStack();
+    if (st.empty() || text.data() == original.data()) return;
+    CssElement& top = st.back();
+    if (top.content.data() != original.data() || top.content.size() != original.size()) return;
+    saved_ = top.content;
+    top.content = text;
+    childStack().back() = Children{};  // read again, from text
+    active_ = true;
+}
+
+CssScopeText::~CssScopeText() {
+    if (!active_ || scopeStack().empty()) return;
+    scopeStack().back().content = saved_;
+    childStack().back() = Children{};  // its views were into text
+}
 
 // ============ Parse CSS ============
 
@@ -753,9 +943,17 @@ void Css::parse(std::string_view css) {
             else if (css[pos] == '}') braceCount--;
             pos++;
         }
-        if (!selector.empty() && selector[0] == '@') continue;  // @media, @keyframes...: not yet
-
         const size_t blockLen = braceCount == 0 ? pos - propsStart - 1 : pos - propsStart;
+        if (!selector.empty() && selector[0] == '@') {
+            // @media: its rules count where they stand when the screen fits the query; @keyframes,
+            // @supports and the others are left out
+            const std::string_view at(selector);
+            if (at.size() >= 6 && equalsNoCase(at.substr(0, 6), "@media") && (at.size() == 6 || !isNameChar(at[6])) &&
+                cssMediaMatches(at.substr(6))) {
+                parse(css.substr(propsStart, blockLen));
+            }
+            continue;
+        }
         P::Array<CssDecl> decls = parseDecls(css.substr(propsStart, blockLen));
         if (decls.empty() || selector.empty()) continue;
 

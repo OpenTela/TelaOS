@@ -1,7 +1,8 @@
 <app os="1.0" title="CSS" version="0.1" category="test">
   <!--
     Test fixture for CSS in TelaOS (docs/CSS.md): selectors and cascade; values (page "values");
-    the box (page "box"); layout (page "layout"); text (page "text"); states (page "states").
+    the box (page "box"); layout (page "layout"); text (page "text"); states (page "states");
+    structure and screen (page "structure").
     Flashed by the simulator with --extra-data; driven by tests/tela_css.sim.
     Each line says which rule colors it; a line in white did not get its rule.
   -->
@@ -54,6 +55,13 @@
     .press { background: #333333; transition: background-color 0.3s ease; }
     .press:active { background: #4FC3F7; transform: scale(0.95); }
     .tilted { transform: rotate(-6deg); color: #FFD54F; margin: 12px 0; }
+    @media (max-width: 500px) { .narrow { color: #81C784; } }
+    .bigscreen { display: none; }
+    @media (min-width: 600px) { .bigscreen { display: block; } }
+    .zebra li:nth-child(odd) { background: #333333; }
+    .zebra li:last-child { color: #FFD54F; }
+    #structure h3 ~ p { color: #FF8A65; }
+    #structure h3 + p { color: #4FC3F7; }
   </style>
   <ui default="/main">
 
@@ -73,7 +81,7 @@
       <p class="note" id="note">p.note beats .note: green</p>
       <p class="must" id="strong">!important beats #id: blue</p>
       <p class="gone" id="gone">display: none</p>
-      <p><a href="/values">Values</a> <a href="/box">Box</a> <a href="/layout">Layout</a> <a href="/text">Text</a> <a href="/states">States</a></p>
+      <p><a href="/values">Values</a> <a href="/box">Box</a> <a href="/layout">Layout</a> <a href="/text">Text</a> <a href="/states">States</a> <a href="/structure">Structure</a></p>
     </page>
 
     <page id="values">
@@ -130,6 +138,22 @@
       <button class="press" id="press">:active: blue while pressed</button>
       <label class="tilted" id="tilted">transform: rotate(-6deg)</label>
       <p><a href="/main">Back</a></p>
+    </page>
+
+    <page id="structure">
+      <h2>Structure</h2>
+      <p class="narrow" id="narrow">@media (max-width: 500px): green</p>
+      <p class="bigscreen" id="bigscreen">@media (min-width: 600px): hidden on 480px</p>
+      <ul class="zebra" id="zebra">
+        <li>li:nth-child(odd): a stripe</li>
+        <li>two</li>
+        <li>three</li>
+        <li id="lastli">li:last-child: yellow</li>
+      </ul>
+      <h3>h3</h3>
+      <p id="nextp">h3 + p: blue</p>
+      <p id="laterp">h3 ~ p: orange</p>
+      <a href="/main">Back</a>
     </page>
 
     <page id="more">

@@ -4,10 +4,13 @@
  * widgets as they are built. What works and what does not: docs/CSS.md
  *
  * Selectors: type (button, p), *, .class, #id, [attr], [attr=v] (also ~= |= ^= $= *=, and an
- * `i` flag), any compound of them (button.primary#ok[type]), lists (h1, h2), descendant (nav a)
- * and child (ul > li) combinators, :root, and the states LVGL keeps for a widget: :active
- * (pressed), :focus, :checked, :disabled, :hover. A selector with anything else (::before, a + b)
- * is left out, as a browser leaves out a selector it does not know.
+ * `i` flag), any compound of them (button.primary#ok[type]), lists (h1, h2), descendant (nav a),
+ * child (ul > li) and sibling (h2 + p, h2 ~ p) combinators, :root, the place among siblings
+ * (:first-child, :last-child, :only-child, :nth-child(2n+1) and the -last- and -of-type forms,
+ * read from the page text) and the states LVGL keeps for a widget: :active (pressed), :focus,
+ * :checked, :disabled, :hover. A selector with anything else (::before, :not()) is left out, as
+ * a browser leaves out a selector it does not know. @media whose query holds for the screen
+ * (css_media.h) counts as if its rules stood outside it.
  *
  * Cascade, as in CSS: declarations go by specificity (ids; classes and attributes; types), then
  * by their order in the sheets; style="" comes after the sheets; !important after all of that,
@@ -34,20 +37,38 @@ struct CssElement {
     std::string_view id;
     std::string_view classes;  // as in class="": names separated by spaces
     std::string_view attrs;    // raw attributes of the start tag, for [attr] selectors
+    std::string_view content;  // its content, as an ancestor: where :first-child, h2 + p read its children
     bool root = false;         // the root above every page: :root { --x: ... }
 };
 
 // The elements the page walkers are inside of, outermost first: descendant and child
 // combinators (nav a, ul > li) match against them. A scope lives while its element's content
-// is built, so an element never is its own ancestor.
+// is built, so an element never is its own ancestor. content is the text its children are built
+// from: an element's place among them (li:first-child, h2 + p) is read there, found by where
+// its attributes are in that text.
 class CssScope {
 public:
-    CssScope(std::string_view tag, std::string_view attrs);  // id and class come from attrs
+    // id and class come from attrs
+    CssScope(std::string_view tag, std::string_view attrs, std::string_view content = {});
     ~CssScope();
     CssScope(const CssScope&) = delete;
     CssScope& operator=(const CssScope&) = delete;
 
     static const P::Array<CssElement>& ancestors();
+};
+
+// While it lives, the scope on top reads its children from `text` instead of `original`, if it
+// held `original`: the page walker builds a page from a copy when it expands @for and components
+class CssScopeText {
+public:
+    CssScopeText(std::string_view original, std::string_view text);
+    ~CssScopeText();
+    CssScopeText(const CssScopeText&) = delete;
+    CssScopeText& operator=(const CssScopeText&) = delete;
+
+private:
+    bool active_ = false;
+    std::string_view saved_;
 };
 
 struct CssDecl {
@@ -73,6 +94,15 @@ struct AttrTest {
     bool caseless = false;  // [a=v i]
 };
 
+// :nth-child(2n+1): the element is the (a*k + b)-th for some k >= 0, counted from the start or
+// the end (:nth-last-child, :last-child), among all element siblings or those of its tag (-of-type)
+struct NthTest {
+    int16_t a = 0;
+    int16_t b = 1;
+    bool fromEnd = false;
+    bool ofType = false;
+};
+
 struct Compound {     // button.primary#ok[type]
     P::String tag;    // lower-case; "": any (also *)
     P::String id;
@@ -80,12 +110,13 @@ struct Compound {     // button.primary#ok[type]
     P::Array<AttrTest> attrs;
     bool root = false;    // :root
     uint16_t states = 0;  // :active, :focus, :checked, :disabled, :hover as LV_STATE_* bits
+    P::Array<NthTest> nths;  // :first-child, :nth-child()...
     uint8_t pseudos = 0;  // pseudo-classes, for specificity
 };
 
 struct Selector {
     P::Array<Compound> parts;  // left to right
-    P::String combinators;     // between parts: ' ' descendant, '>' child
+    P::String combinators;     // between parts: ' ' descendant, '>' child, '+' next sibling, '~' a later sibling
     uint32_t specificity = 0;  // ids << 16 | (classes + attributes) << 8 | types
 };
 
