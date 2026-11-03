@@ -20,6 +20,9 @@
 #include "hal/display_hal.h"
 #include <lvgl.h>
 #include <LittleFS.h>
+#include <algorithm>
+#include <string>
+#include <string_view>
 
 // OS version constants
 static constexpr const char* PROTOCOL_VERSION = "2.7";
@@ -41,16 +44,15 @@ static const char* argStr(JsonArray args, int idx, const char* def = "") {
     return def;
 }
 
+// Digits only, at least one
+static bool isDigits(std::string_view s) {
+    return !s.empty() && std::all_of(s.begin(), s.end(), [](char c) { return c >= '0' && c <= '9'; });
+}
+
 // Check if string is a valid integer (optional leading minus, all digits)
-static bool isIntStr(const char* s) {
-    if (!s || !*s) return false;
-    if (*s == '-') s++;
-    if (!*s) return false;  // lone "-"
-    while (*s) {
-        if (*s < '0' || *s > '9') return false;
-        s++;
-    }
-    return true;
+static bool isIntStr(std::string_view s) {
+    if (!s.empty() && s.front() == '-') s.remove_prefix(1);
+    return isDigits(s);  // a lone "-" is not
 }
 
 static int argInt(JsonArray args, int idx, int def = 0) {
@@ -66,9 +68,9 @@ static int argInt(JsonArray args, int idx, int def = 0) {
 
 // === UI Subsystem ===
 
-static Result execUi(const char* cmd, JsonArray args) {
+static Result execUi(std::string_view cmd, JsonArray args) {
     // ui nav <page>
-    if (strcmp(cmd, "nav") == 0) {
+    if (cmd == "nav") {
         const char* page = argStr(args, 0);
         if (!page[0]) return Result::errInvalid("Usage: ui nav <page>");
         
@@ -78,7 +80,7 @@ static Result execUi(const char* cmd, JsonArray args) {
     }
     
     // ui set <widget> <value>
-    if (strcmp(cmd, "set") == 0) {
+    if (cmd == "set") {
         const char* widget = argStr(args, 0);
         if (!widget[0]) return Result::errInvalid("Usage: ui set <widget> <value>");
         
@@ -105,7 +107,7 @@ static Result execUi(const char* cmd, JsonArray args) {
     }
     
     // ui get <widget>
-    if (strcmp(cmd, "get") == 0) {
+    if (cmd == "get") {
         const char* widget = argStr(args, 0);
         if (!widget[0]) return Result::errInvalid("Usage: ui get <widget>");
         
@@ -116,7 +118,7 @@ static Result execUi(const char* cmd, JsonArray args) {
     }
     
     // ui text <widget> <value> — alias for set
-    if (strcmp(cmd, "text") == 0) {
+    if (cmd == "text") {
         const char* widget = argStr(args, 0);
         const char* value = argStr(args, 1);
         if (!widget[0]) return Result::errInvalid("Usage: ui text <widget> <value>");
@@ -126,7 +128,7 @@ static Result execUi(const char* cmd, JsonArray args) {
     }
     
     // ui notify <title> <message>
-    if (strcmp(cmd, "notify") == 0) {
+    if (cmd == "notify") {
         const char* title = argStr(args, 0);
         const char* msg = argStr(args, 1);
         // TODO: implement notification system
@@ -135,7 +137,7 @@ static Result execUi(const char* cmd, JsonArray args) {
     }
     
     // ui call <function> [args...]
-    if (strcmp(cmd, "call") == 0) {
+    if (cmd == "call") {
         const char* func = argStr(args, 0);
         if (!func[0]) return Result::errInvalid("Usage: ui call <function>");
         
@@ -145,7 +147,7 @@ static Result execUi(const char* cmd, JsonArray args) {
     }
     
     // ui tap <x> <y>  OR  ui tap <widgetId>  (alias: click)
-    if (strcmp(cmd, "tap") == 0 || strcmp(cmd, "click") == 0) {
+    if (cmd == "tap" || cmd == "click") {
         int x = argInt(args, 0, -1);
         int y = argInt(args, 1, -1);
         
@@ -168,7 +170,7 @@ static Result execUi(const char* cmd, JsonArray args) {
     }
     
     // ui hold <x> <y> [ms]  OR  ui hold <widgetId> [ms]
-    if (strcmp(cmd, "hold") == 0) {
+    if (cmd == "hold") {
         int x = argInt(args, 0, -1);
         int y, ms;
         
@@ -193,9 +195,9 @@ static Result execUi(const char* cmd, JsonArray args) {
     }
     
     // ui swipe <direction> [speed]  OR  ui swipe <x1> <y1> <x2> <y2> [ms]
-    if (strcmp(cmd, "swipe") == 0) {
-        const char* a0 = argStr(args, 0);
-        if (!a0[0]) return Result::errInvalid("Usage: ui swipe <left|right|up|down> [speed]");
+    if (cmd == "swipe") {
+        const std::string_view a0 = argStr(args, 0);
+        if (a0.empty()) return Result::errInvalid("Usage: ui swipe <left|right|up|down> [speed]");
         
         // Check if first arg is a direction name
         bool isDirection = false;
@@ -205,22 +207,22 @@ static Result execUi(const char* cmd, JsonArray args) {
         int lo = SCREEN_WIDTH / 5;      // 20%
         int hi = SCREEN_WIDTH * 4 / 5;  // 80%
         
-        if (strcmp(a0, "left") == 0 || strcmp(a0, "l") == 0) {
+        if (a0 == "left" || a0 == "l") {
             x1 = hi; y1 = cy; x2 = lo; y2 = cy; isDirection = true;
-        } else if (strcmp(a0, "right") == 0 || strcmp(a0, "r") == 0) {
+        } else if (a0 == "right" || a0 == "r") {
             x1 = lo; y1 = cy; x2 = hi; y2 = cy; isDirection = true;
-        } else if (strcmp(a0, "up") == 0 || strcmp(a0, "u") == 0) {
+        } else if (a0 == "up" || a0 == "u") {
             x1 = cx; y1 = hi; x2 = cx; y2 = lo; isDirection = true;
-        } else if (strcmp(a0, "down") == 0 || strcmp(a0, "d") == 0) {
+        } else if (a0 == "down" || a0 == "d") {
             x1 = cx; y1 = lo; x2 = cx; y2 = hi; isDirection = true;
         }
         
         if (isDirection) {
             // Parse speed: fast=150, normal=300, slow=500
-            const char* speed = argStr(args, 1);
+            const std::string_view speed = argStr(args, 1);
             ms = 300;  // default normal
-            if (strcmp(speed, "fast") == 0) ms = 150;
-            else if (strcmp(speed, "slow") == 0) ms = 500;
+            if (speed == "fast") ms = 150;
+            else if (speed == "slow") ms = 500;
         } else {
             // Coordinate mode: swipe x1 y1 x2 y2 [ms]
             x1 = argInt(args, 0, -1);
@@ -237,7 +239,7 @@ static Result execUi(const char* cmd, JsonArray args) {
     }
     
     // ui type <text>  OR  ui type <widgetId> <text>
-    if (strcmp(cmd, "type") == 0) {
+    if (cmd == "type") {
         const char* text;
         
         if (args.size() >= 2) {
@@ -272,9 +274,9 @@ static Result execUi(const char* cmd, JsonArray args) {
 
 // === System Subsystem ===
 
-static Result execSys(const char* cmd, JsonArray args) {
+static Result execSys(std::string_view cmd, JsonArray args) {
     // sys ping
-    if (strcmp(cmd, "ping") == 0) {
+    if (cmd == "ping") {
         return Result::ok();
     }
 
@@ -282,7 +284,7 @@ static Result execSys(const char* cmd, JsonArray args) {
     //   Arms a full-firmware OTA receive over the BIN channel.
     //   comp_size == 0 -> uncompressed; > 0 -> one LZ4 block of raw_size bytes.
     //   Client then streams the (compressed) image as [2B chunk_id][data] chunks.
-    if (strcmp(cmd, "ota") == 0) {
+    if (cmd == "ota") {
         const char* rawStr  = argStr(args, 0, "");
         const char* compStr = argStr(args, 1, "0");
         const char* sha     = argStr(args, 2, "");
@@ -305,7 +307,7 @@ static Result execSys(const char* cmd, JsonArray args) {
     }
     
     // sys info
-    if (strcmp(cmd, "info") == 0) {
+    if (cmd == "info") {
         auto r = Result::ok();
         r.data["heap_free"] = ESP.getFreeHeap();
         r.data["heap_min"] = ESP.getMinFreeHeap();
@@ -340,14 +342,14 @@ static Result execSys(const char* cmd, JsonArray args) {
     }
     
     // sys reboot
-    if (strcmp(cmd, "reboot") == 0) {
+    if (cmd == "reboot") {
         LOG_W(Log::APP, "Reboot requested");
         ESP.restart();
         return Result::ok("Rebooting...");
     }
     
     // sys screen [color] [scale] — returns binary screenshot
-    if (strcmp(cmd, "screen") == 0) {
+    if (cmd == "screen") {
         const char* color = argStr(args, 0, "rgb16");
         int scale = argInt(args, 1, 0);
         const char* mode = argStr(args, 2, "fixed");
@@ -371,7 +373,7 @@ static Result execSys(const char* cmd, JsonArray args) {
     }
     
     // sys time [timestamp]
-    if (strcmp(cmd, "time") == 0) {
+    if (cmd == "time") {
         if (args.size() > 0) {
             // Set time
             time_t ts = argInt(args, 0, 0);
@@ -387,7 +389,7 @@ static Result execSys(const char* cmd, JsonArray args) {
     
     // sys sync <protocol_version> <datetime_iso> <timezone>
     // sys sync <protocol> <datetime> <timezone> [lang]
-    if (strcmp(cmd, "sync") == 0) {
+    if (cmd == "sync") {
         const char* clientProto = argStr(args, 0);
         const char* datetime = argStr(args, 1);
         const char* tz = argStr(args, 2);
@@ -428,14 +430,18 @@ static Result execSys(const char* cmd, JsonArray args) {
                 sscanf(tz, "%d:%d", &tzH, &tzM);
             }
             
-            // POSIX TZ inverts sign: UTC+3 → "UTC-3"
+            // POSIX TZ inverts sign: UTC+3 → "UTC-3". Hours always signed, minutes in two digits
             int posixH = (sign == '-') ? tzH : -tzH;
-            char tzStr[32];
-            snprintf(tzStr, sizeof(tzStr), "UTC%+d:%02d", posixH, tzM);
-            setenv("TZ", tzStr, 1);
+            P::String tzStr = "UTC";
+            if (posixH >= 0) tzStr += '+';
+            tzStr += std::to_string(posixH).c_str();
+            tzStr += ':';
+            if (tzM >= 0 && tzM < 10) tzStr += '0';
+            tzStr += std::to_string(tzM).c_str();
+            setenv("TZ", tzStr.c_str(), 1);
             tzset();
             
-            LOG_I(Log::APP, "Sync: timezone %s (POSIX: %s)", tz, tzStr);
+            LOG_I(Log::APP, "Sync: timezone %s (POSIX: %s)", tz, tzStr.c_str());
         }
         
         // Store lang if provided
@@ -461,9 +467,9 @@ static Result execSys(const char* cmd, JsonArray args) {
 
 // === App Subsystem ===
 
-static Result execApp(const char* cmd, JsonArray args) {
+static Result execApp(std::string_view cmd, JsonArray args) {
     // app list — returns binary: null-terminated app names
-    if (strcmp(cmd, "list") == 0) {
+    if (cmd == "list") {
         auto& apps = App::Manager::instance().apps();
         
         // Calculate buffer size
@@ -489,7 +495,7 @@ static Result execApp(const char* cmd, JsonArray args) {
     }
     
     // app info <n> — list files and total size
-    if (strcmp(cmd, "info") == 0) {
+    if (cmd == "info") {
         const char* name = argStr(args, 0);
         if (!name[0]) return Result::errInvalid("Usage: app info <n>");
         
@@ -535,12 +541,12 @@ static Result execApp(const char* cmd, JsonArray args) {
     }
     
     // app pull <n> [file|*]
-    if (strcmp(cmd, "pull") == 0) {
+    if (cmd == "pull") {
         const char* name = argStr(args, 0);
         if (!name[0]) return Result::errInvalid("Usage: app pull <n> [file|*]");
         
         const char* fileArg = argStr(args, 1, "");
-        bool allFiles = (strcmp(fileArg, "*") == 0);
+        bool allFiles = std::string_view(fileArg) == "*";
         
         P::String basePath = P::String(SYS_APPS) + name;
         
@@ -631,7 +637,7 @@ static Result execApp(const char* cmd, JsonArray args) {
     
     // app push <name> [file] <size>    — single file (file defaults to {name}.bax)
     // app push <name> * <files_json>   — multi-file
-    if (strcmp(cmd, "push") == 0) {
+    if (cmd == "push") {
         const char* name = argStr(args, 0);
         const char* sizeOrStar = argStr(args, 1, "");
         
@@ -640,13 +646,12 @@ static Result execApp(const char* cmd, JsonArray args) {
         }
         
         // Имя файла должно содержать точку (расширение)
-        auto hasExtension = [](const char* s) -> bool {
-            if (!s || !s[0]) return false;
-            return strchr(s, '.') != nullptr;
+        auto hasExtension = [](std::string_view s) -> bool {
+            return s.find('.') != std::string_view::npos;
         };
         
         // Multi-file: app push myapp * {"weather.bax":1984,"icon.png":512}
-        if (strcmp(sizeOrStar, "*") == 0) {
+        if (std::string_view(sizeOrStar) == "*") {
             const char* filesJson = argStr(args, 2, "");
             if (!filesJson[0]) {
                 return Result::errInvalid("Usage: app push <n> * <files_json>");
@@ -666,6 +671,7 @@ static Result execApp(const char* cmd, JsonArray args) {
             JsonObject obj = doc.as<JsonObject>();
             for (auto kv : obj) {
                 if (count >= 16) break;
+                // FileEntry is the receiver's (bin_receive.h): a name is a char[48] there
                 strncpy(entries[count].name, kv.key().c_str(), sizeof(entries[count].name) - 1);
                 entries[count].name[sizeof(entries[count].name) - 1] = 0;
                 entries[count].size = kv.value().as<uint32_t>();
@@ -703,24 +709,16 @@ static Result execApp(const char* cmd, JsonArray args) {
         // Single file: app push myapp 1984
         //              app push myapp calc.bax 1984
         // Размер = только цифры, без точки. Всё остальное = имя файла.
-        auto isSize = [](const char* s) -> bool {
-            if (!s || !s[0]) return false;
-            for (const char* p = s; *p; p++) {
-                if (*p < '0' || *p > '9') return false;
-            }
-            return true;
-        };
-        
         const char* arg2 = argStr(args, 2, "");
         int size = 0;
-        char defaultFile[48];
-        snprintf(defaultFile, sizeof(defaultFile), "%s.bax", name);
-        const char* fileName = defaultFile;
+        // <name>.bax, cut to 47 characters as before: the receiver keeps no more (FileEntry::name)
+        P::String fileName = P::String(name) + ".bax";
+        fileName.resize(std::min(fileName.size(), sizeof(BinReceive::FileEntry::name) - 1));
         
-        if (isSize(sizeOrStar)) {
+        if (isDigits(sizeOrStar)) {
             size = atoi(sizeOrStar);
             if (arg2[0]) fileName = arg2;
-        } else if (isSize(arg2)) {
+        } else if (isDigits(arg2)) {
             fileName = sizeOrStar;
             size = atoi(arg2);
         } else {
@@ -735,7 +733,7 @@ static Result execApp(const char* cmd, JsonArray args) {
             return Result::errInvalid("Filename must have extension (e.g. calc.bax)");
         }
         
-        if (!BinReceive::start(name, fileName, size)) {
+        if (!BinReceive::start(name, fileName.c_str(), size)) {
             return Result::errMemory("Failed to start receive");
         }
         
@@ -744,11 +742,11 @@ static Result execApp(const char* cmd, JsonArray args) {
         r.data["file"] = fileName;
         r.data["size"] = size;
         
-        LOG_I(Log::APP, "app push %s/%s (%d bytes) - waiting for data", name, fileName, size);
+        LOG_I(Log::APP, "app push %s/%s (%d bytes) - waiting for data", name, fileName.c_str(), size);
         return r;
     }
     // app delete <name>
-    if (strcmp(cmd, "delete") == 0 || strcmp(cmd, "rm") == 0) {
+    if (cmd == "delete" || cmd == "rm") {
         const char* name = argStr(args, 0);
         if (!name[0]) return Result::errInvalid("Usage: app delete <name>");
         
@@ -769,7 +767,7 @@ static Result execApp(const char* cmd, JsonArray args) {
     }
     
     // app launch <name>
-    if (strcmp(cmd, "launch") == 0 || strcmp(cmd, "run") == 0) {
+    if (cmd == "launch" || cmd == "run") {
         const char* name = argStr(args, 0);
         if (!name[0]) return Result::errInvalid("Usage: app launch <name>");
         
@@ -780,7 +778,7 @@ static Result execApp(const char* cmd, JsonArray args) {
     }
     
     // app home
-    if (strcmp(cmd, "home") == 0) {
+    if (cmd == "home") {
         App::Manager::instance().returnToLauncher();
         return Result::ok();
     }
@@ -790,66 +788,76 @@ static Result execApp(const char* cmd, JsonArray args) {
 
 // === Log Subsystem ===
 
-static Result execLog(const char* cmd, JsonArray args) {
+// The categories `log` shows and sets, in this order; key: the name `log show` gives it
+struct LogCategory {
+    const char* name;
+    const char* key;
+    Log::Cat cat;
+};
+static constexpr LogCategory kLogCategories[] = {
+    {"ui", "UI", Log::UI}, {"lua", "LUA", Log::LUA}, {"state", "STATE", Log::STATE},
+    {"app", "APP", Log::APP}, {"ble", "BLE", Log::BLE},
+};
+
+struct LogLevelName {
+    const char* name;
+    const char* shortName;
+    Log::Level level;
+};
+static constexpr LogLevelName kLogLevels[] = {
+    {"verbose", "v", Log::Verbose}, {"debug", "d", Log::Debug}, {"info", "i", Log::Info},
+    {"warn", "w", Log::Warn}, {"error", "e", Log::Error}, {"disabled", "off", Log::Disabled},
+};
+
+// The level named `s` into `level`; shortNames: v, d, i, w, e and off count too
+static bool levelNamed(std::string_view s, bool shortNames, Log::Level& level) {
+    for (const auto& l : kLogLevels) {
+        if (s == l.name || (shortNames && s == l.shortName)) {
+            level = l.level;
+            return true;
+        }
+    }
+    return false;
+}
+
+static Result execLog(std::string_view cmd, JsonArray args) {
     // log [category] [level]
     // log                  — show all levels
     // log verbose          — set all to verbose
     // log ui debug         — set UI to debug
     
-    if (!cmd[0] || strcmp(cmd, "show") == 0) {
+    if (cmd.empty() || cmd == "show") {
         // Show current levels
         auto r = Result::ok();
-        r.data["UI"] = Log::levelName(Log::get(Log::UI));
-        r.data["LUA"] = Log::levelName(Log::get(Log::LUA));
-        r.data["STATE"] = Log::levelName(Log::get(Log::STATE));
-        r.data["APP"] = Log::levelName(Log::get(Log::APP));
-        r.data["BLE"] = Log::levelName(Log::get(Log::BLE));
+        for (const auto& c : kLogCategories) r.data[c.key] = Log::levelName(Log::get(c.cat));
         return r;
     }
     
     // Parse level
     Log::Level level = Log::Info;
-    const char* levelStr = args.size() > 0 ? argStr(args, 0) : cmd;
+    const std::string_view levelStr = args.size() > 0 ? std::string_view(argStr(args, 0)) : cmd;
     
-    if (strcmp(levelStr, "verbose") == 0 || strcmp(levelStr, "v") == 0) level = Log::Verbose;
-    else if (strcmp(levelStr, "debug") == 0 || strcmp(levelStr, "d") == 0) level = Log::Debug;
-    else if (strcmp(levelStr, "info") == 0 || strcmp(levelStr, "i") == 0) level = Log::Info;
-    else if (strcmp(levelStr, "warn") == 0 || strcmp(levelStr, "w") == 0) level = Log::Warn;
-    else if (strcmp(levelStr, "error") == 0 || strcmp(levelStr, "e") == 0) level = Log::Error;
-    else if (strcmp(levelStr, "disabled") == 0 || strcmp(levelStr, "off") == 0) level = Log::Disabled;
-    else {
+    if (!levelNamed(levelStr, true, level)) {
         // First arg is category
-        Log::Cat cat = Log::APP;
-        if (strcmp(cmd, "ui") == 0) cat = Log::UI;
-        else if (strcmp(cmd, "lua") == 0) cat = Log::LUA;
-        else if (strcmp(cmd, "state") == 0) cat = Log::STATE;
-        else if (strcmp(cmd, "app") == 0) cat = Log::APP;
-        else if (strcmp(cmd, "ble") == 0) cat = Log::BLE;
-        else return Result::errInvalid("Unknown category");
+        const LogCategory* cat = nullptr;
+        for (const auto& c : kLogCategories) {
+            if (cmd == c.name) cat = &c;
+        }
+        if (!cat) return Result::errInvalid("Unknown category");
         
-        // Second arg is level
-        levelStr = argStr(args, 0, "info");
-        if (strcmp(levelStr, "verbose") == 0) level = Log::Verbose;
-        else if (strcmp(levelStr, "debug") == 0) level = Log::Debug;
-        else if (strcmp(levelStr, "info") == 0) level = Log::Info;
-        else if (strcmp(levelStr, "warn") == 0) level = Log::Warn;
-        else if (strcmp(levelStr, "error") == 0) level = Log::Error;
-        else if (strcmp(levelStr, "disabled") == 0) level = Log::Disabled;
+        // Second arg is level: full names only, anything else leaves info
+        levelNamed(argStr(args, 0, "info"), false, level);
         
-        Log::set(cat, level);
+        Log::set(cat->cat, level);
         
         auto r = Result::ok();
-        r.data["category"] = cmd;
+        r.data["category"] = cat->name;
         r.data["level"] = Log::levelName(level);
         return r;
     }
     
     // Set all categories
-    Log::set(Log::UI, level);
-    Log::set(Log::LUA, level);
-    Log::set(Log::STATE, level);
-    Log::set(Log::APP, level);
-    Log::set(Log::BLE, level);
+    for (const auto& c : kLogCategories) Log::set(c.cat, level);
     
     auto r = Result::ok();
     r.data["all"] = Log::levelName(level);
@@ -859,10 +867,11 @@ static Result execLog(const char* cmd, JsonArray args) {
 // === Main Entry Points ===
 
 Result exec(const char* subsystem, const char* cmd, JsonArray args) {
-    if (strcmp(subsystem, "ui") == 0) return execUi(cmd, args);
-    if (strcmp(subsystem, "sys") == 0) return execSys(cmd, args);
-    if (strcmp(subsystem, "app") == 0) return execApp(cmd, args);
-    if (strcmp(subsystem, "log") == 0) return execLog(cmd, args);
+    const std::string_view sub = subsystem;
+    if (sub == "ui") return execUi(cmd, args);
+    if (sub == "sys") return execSys(cmd, args);
+    if (sub == "app") return execApp(cmd, args);
+    if (sub == "log") return execLog(cmd, args);
     
     return Result::errInvalid("Unknown subsystem");
 }
@@ -870,55 +879,33 @@ Result exec(const char* subsystem, const char* cmd, JsonArray args) {
 Result exec(const char* line) {
     // Parse: "subsystem cmd arg1 arg2 ..."
     // Supports quoted args: ui type editInput "Hello World"
-    char buf[256];
-    strncpy(buf, line, sizeof(buf) - 1);
-    buf[sizeof(buf) - 1] = 0;
-    
-    // Tokenize with quote support
-    char* tokens[16];
-    int ntokens = 0;
-    char* p = buf;
-    
-    while (*p && ntokens < 16) {
-        // Skip whitespace
-        while (*p == ' ') p++;
-        if (!*p) break;
-        
-        if (*p == '"') {
-            // Quoted token: find closing quote
-            p++;  // skip opening "
-            tokens[ntokens++] = p;
-            while (*p && *p != '"') p++;
-            if (*p) *p++ = '\0';  // terminate & skip closing "
-        } else {
-            // Unquoted token
-            tokens[ntokens++] = p;
-            while (*p && *p != ' ') p++;
-            if (*p) *p++ = '\0';
-        }
+    // Up to 16 tokens, split at spaces; a token that starts with " runs to the next "
+    std::string_view rest = line;
+    P::Array<P::String> tokens;
+    while (tokens.size() < 16) {
+        const size_t start = rest.find_first_not_of(' ');
+        if (start == std::string_view::npos) break;
+        rest.remove_prefix(start);
+        const bool quoted = rest.front() == '"';
+        if (quoted) rest.remove_prefix(1);
+        const size_t end = rest.find(quoted ? '"' : ' ');
+        tokens.emplace_back(rest.substr(0, end));
+        rest = end == std::string_view::npos ? std::string_view() : rest.substr(end + 1);  // past the " or space
     }
     
-    if (ntokens == 0) return Result::errInvalid("Empty command");
+    if (tokens.empty()) return Result::errInvalid("Empty command");
     
-    char* subsystem = tokens[0];
-    char* cmd;
-    int argStart;
-    
-    if (ntokens >= 2) {
-        cmd = tokens[1];
-        argStart = 2;
-    } else {
-        cmd = subsystem;
-        subsystem = (char*)"sys";
-        argStart = 1;
-    }
+    // One token: a sys command ("ping")
+    const bool sysOnly = tokens.size() == 1;
+    const char* subsystem = sysOnly ? "sys" : tokens[0].c_str();
+    const char* cmd = sysOnly ? tokens[0].c_str() : tokens[1].c_str();
     
     // Collect remaining args
     JsonDocument doc;
     JsonArray args = doc.to<JsonArray>();
     
-    for (int i = argStart; i < ntokens; i++) {
-        args.add(tokens[i]);
+    for (size_t i = sysOnly ? 1 : 2; i < tokens.size(); i++) {
+        args.add(tokens[i].c_str());
     }
     
     return exec(subsystem, cmd, args);
