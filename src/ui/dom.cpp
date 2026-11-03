@@ -37,8 +37,7 @@ constexpr uint32_t kBuildMask = (1u << (32 - kIndexBits)) - 1;
 
 enum : uint8_t {
     kGone = 1,    // out of the page: text replaced its content, its object was deleted
-    kStyled = 2,  // CSS was applied to its object
-    kInline = 4,  // ...with its style=""
+    kStyled = 2,  // CSS was applied to its object, its style="" too
 };
 
 // An element. Links are indexes + 1 (0: none)
@@ -400,8 +399,8 @@ void restyleOne(uint32_t i) {
     if (e.undo) e.undo->undo(e.obj, kept);
     P::String rendered;
     const CssElement el = cssElement(i, true, rendered);
-    std::string_view inlineStyle;
-    if (e.flags & kInline) Css::findAttr(e.attrs, "style", inlineStyle);
+    Attr style;  // style="", as a script may have changed it
+    const P::String inlineStyle = findAttr(e.attrs, "style", style) ? decoded(style.value) : P::String();
     CssUndo undo;
     Widget w{e.obj};
     Css::instance().applyMatching(w, el, inlineStyle, &undo);
@@ -420,11 +419,11 @@ void restyleTree(uint32_t i) {
     for (uint32_t c = node(i).first; c; c = node(c).next) restyleTree(c);
 }
 
-// i changed: what its rules may see changes for i, what is in it, the siblings after it
-// (h2 + p, .a ~ li) and what is in them
-void restyleFrom(uint32_t i) {
-    auto all = [i] {
-        for (uint32_t s = i; s; s = node(s).next) restyleTree(s);
+// i changed: what its rules may see changes for i, what is in it and, with siblings, the siblings
+// after it (h2 + p, .a ~ li) and what is in them
+void restyleFrom(uint32_t i, bool siblings) {
+    auto all = [i, siblings] {
+        for (uint32_t s = i; s; s = siblings ? node(s).next : 0) restyleTree(s);
     };
     inScopes(ancestorsOf(i), 0, true, all);
 }
@@ -434,7 +433,8 @@ void attributeChanged(uint32_t i, std::string_view name) {
     if (name == "class" && node(i).obj) {  // class="{var}" is the script's now
         forRegistered(node(i).obj, [](UI::Element& el) { el.classTemplate.clear(); });
     }
-    if ((name == "style" && (node(i).flags & kInline)) || Css::instance().looksAt(name)) restyleFrom(i);
+    if (Css::instance().looksAt(name)) restyleFrom(i, true);
+    else if (name == "style") restyleFrom(i, false);  // its own, and the --x what is in it inherits
 }
 
 // The words of class="": a class="{var}" as it is rendered now
@@ -472,6 +472,41 @@ void setWords(Node n, const P::Array<P::String>& words) {
         v += w;
     }
     setAttribute(n, "class", v);
+}
+
+// ---- style="" ----
+
+// A property name as CSS writes one: background-color, --accent
+bool validProperty(std::string_view name) {
+    if (name.empty()) return false;
+    for (char c : name) {
+        const unsigned char u = static_cast<unsigned char>(c);
+        if (!std::isalnum(u) && c != '-' && c != '_' && u < 0x80) return false;
+    }
+    return true;
+}
+
+P::String propertyKey(std::string_view name) {  // a custom property keeps its case
+    return name.size() > 2 && name[0] == '-' && name[1] == '-' ? P::String(name) : lower(name);
+}
+
+P::Array<CssDecl> styleOf(uint32_t i) {
+    Attr a;
+    return findAttr(node(i).attrs, "style", a) ? Css::declarations(decoded(a.value)) : P::Array<CssDecl>();
+}
+
+// As a browser writes them: "color: red; width: 10px !important;"
+P::String styleText(const P::Array<CssDecl>& decls) {
+    P::String out;
+    for (const CssDecl& d : decls) {
+        if (!out.empty()) out += ' ';
+        out += d.name;
+        out += ": ";
+        out += d.value;
+        if (d.important) out += " !important";
+        out += ';';
+    }
+    return out;
 }
 
 // ---- Selectors ----
@@ -569,7 +604,7 @@ void leave() {
     s_last = s_lastNode ? Last::Left : Last::None;
 }
 
-bool element(lv_obj_t* obj, std::string_view tag, std::string_view attrs, bool styled, bool inlineStyle) {
+bool element(lv_obj_t* obj, std::string_view tag, std::string_view attrs, bool styled) {
     if (!recording() || !obj) return false;
     const uint32_t top = opened().empty() ? 0 : opened().back();
     uint32_t i = 0;
@@ -580,7 +615,7 @@ bool element(lv_obj_t* obj, std::string_view tag, std::string_view attrs, bool s
     }
     if (i) node(i).obj = obj;
     else if (!(i = add(tag, attrs, obj))) return false;
-    if (styled) node(i).flags |= kStyled | (inlineStyle ? kInline : 0);
+    if (styled) node(i).flags |= kStyled;
     if (s_asOn) {  // what the markup says, not what the builder was given
         if (styled) tree().styledAs.emplace_back(i, lower(tag));
         node(i).tag = lower(tree().asTag);
@@ -751,6 +786,54 @@ P::String className(Node n) {
     getAttribute(n, "class", v);
     return v;
 }
+
+bool styleProperty(Node n, std::string_view name, P::String& value, bool& important) {
+    const uint32_t i = indexOf(n);
+    if (!i) return false;
+    const P::String key = propertyKey(name);
+    const P::Array<CssDecl> decls = styleOf(i);
+    for (auto d = decls.rbegin(); d != decls.rend(); ++d) {  // the last one counts, as in CSS
+        if (d->name != key) continue;
+        value = d->value;
+        important = d->important;
+        return true;
+    }
+    return false;
+}
+
+void setStyleProperty(Node n, std::string_view name, std::string_view value, bool important) {
+    const uint32_t i = indexOf(n);
+    if (!i || !validProperty(name)) return;
+    const P::String key = propertyKey(name);
+    P::Array<CssDecl> one;
+    if (!value.empty()) {
+        P::String text = key + ": " + P::String(value) + (important ? " !important" : "");
+        one = Css::declarations(text);
+        // one declaration of this property, as a browser takes it: "red; width: 0" is not one
+        if (one.size() != 1 || one[0].name != key || one[0].important != important) return;
+    }
+    P::Array<CssDecl> decls = styleOf(i);
+    P::Array<CssDecl> out;
+    bool had = false;
+    for (CssDecl& d : decls) {
+        if (d.name != key) {
+            out.push_back(std::move(d));
+        } else if (!had) {  // in the place of the first one
+            had = true;
+            if (!one.empty()) out.push_back(one[0]);
+        }
+    }
+    if (!had && one.empty()) return;  // nothing to take off
+    if (!had) out.push_back(one[0]);
+    setAttribute(n, "style", styleText(out));
+}
+
+P::String cssText(Node n) {
+    const uint32_t i = indexOf(n);
+    return i ? styleText(styleOf(i)) : P::String();
+}
+
+void setCssText(Node n, std::string_view text) { setAttribute(n, "style", styleText(Css::declarations(text))); }
 
 bool querySelector(Node inside, std::string_view selectors, Node& found) {
     P::Array<Node> one;

@@ -1,9 +1,10 @@
-# UI HTML Specification v0.11
+# UI HTML Specification v0.12
 
 Декларативный язык разметки для создания интерфейсов на ESP32 с LVGL.
 
 ## Changelog
 
+- **v0.12**: `el.style` — `style=""` из Lua; `style=""` берут и виджеты TelaOS: [DOM.md](DOM.md), [CSS.md](CSS.md).
 - **v0.11**: `document:querySelector()` и `querySelectorAll()` — элементы по селекторам CSS: [DOM.md](DOM.md).
 - **v0.10**: `el.classList` — классы элемента из Lua; CSS применяется заново: [DOM.md](DOM.md).
 - **v0.9**: `document` для Lua — элементы страницы, как в браузере: [DOM.md](DOM.md).
@@ -578,6 +579,7 @@ Raw HTML → parse_templates() → цикл (max 8 проходов):
 | `el:getAttribute(name)` / `el:setAttribute(name, value)` / `el:removeAttribute(name)` | Атрибуты; `setAttribute` делает то, что атрибут делает в разметке |
 | `el.classList:add(name)` / `remove` / `toggle` / `contains` | Классы; CSS применяется заново |
 | `document:querySelector(s)` / `document:querySelectorAll(s)` | Первый элемент по селектору CSS или все — таблицей; у `el:` — внутри элемента |
+| `el.style.color = "red"` / `el.style.cssText` | Свойства `style=""`; CSS применяется заново |
 
 Всё о них — [DOM.md](DOM.md).
 

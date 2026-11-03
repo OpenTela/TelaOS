@@ -1,4 +1,4 @@
-# DOM v0.3
+# DOM v0.4
 
 DOM в TelaOS: элементы приложения для его скрипта на Lua — так, как браузер даёт их JavaScript.
 Браузер без JS — всё остальное должно быть: HTML (`docs/HTML_TAGS.md`), CSS (`docs/CSS.md`)
@@ -6,6 +6,9 @@ DOM в TelaOS: элементы приложения для его скрипт�
 
 ## Changelog
 
+- **v0.4**: `el.style` — свойства `style=""` по одному: `el.style.color`, `el.style.backgroundColor`,
+  `cssText`, `setProperty`, `removeProperty`. Смена применяет CSS заново. `style=""` разметки
+  теперь берут и виджеты TelaOS (`<label>`, `<button>`, `<div>`…), не только элементы HTML.
 - **v0.3**: `querySelector` и `querySelectorAll` — у `document` и у элемента. Селекторы — те же,
   что читает CSS TelaOS; состояние (`:checked`, `:disabled`) — то, в каком элемент сейчас.
 - **v0.2**: `classList`: `add`, `remove`, `toggle`, `contains`; к ним `el.className`. Смена класса,
@@ -45,7 +48,7 @@ if title:hasAttribute("hidden") then title:removeAttribute("hidden") end
 - Новое приложение — новое дерево: элемент прежнего ничего не находит (`textContent` пуст,
   `getAttribute` — `nil`).
 
-## Работает: 11 из 20
+## Работает: 12 из 20
 
 Знаки: ✅ работает, — нет.
 
@@ -87,7 +90,7 @@ if title:hasAttribute("hidden") then title:removeAttribute("hidden") end
 
 | | Что | Как |
 |---|-----|-----|
-| — | `style.<свойство>` | |
+| ✅ | `style.<свойство>` | `el.style.color = "red"`, `el.style.backgroundColor`; `""` или `nil` снимает |
 
 ### События (4)
 
@@ -119,8 +122,8 @@ if title:hasAttribute("hidden") then title:removeAttribute("hidden") end
 | `open` у `<dialog>` | показывает диалог, снятый — прячет |
 | `id` | `getElementById` и `ui.*` находят элемент по новому |
 | `bgcolor`, `color`, `visible`, `x`, `y`, `w`, `h`, `z-index` | как `ui.setAttr()` |
-| `class` | CSS применяется заново (ниже) |
-| остальные: `style`, `title`, `data-*`… | хранятся: `getAttribute` вернёт их. Если на атрибут смотрит селектор (`[data-tone]`), CSS применяется заново |
+| `class`, `style` | CSS применяется заново (ниже) |
+| остальные: `title`, `data-*`… | хранятся: `getAttribute` вернёт их. Если на атрибут смотрит селектор (`[data-tone]`), CSS применяется заново |
 
 - Логический атрибут (`hidden`, `disabled`, `checked`, `open`) включён при любом значении, кроме
   `false` и `0` — как в разметке TelaOS: `setAttribute("hidden", "")` прячет,
@@ -141,6 +144,29 @@ if title:hasAttribute("hidden") then title:removeAttribute("hidden") end
   остаётся: CSS его больше не трогает.
 - `class="{var}"`: `classList` видит слова, как они подставлены сейчас. После первой правки
   класс — скрипта: `{var}` его больше не меняет.
+
+## Стиль
+
+```lua
+local title = document.getElementById("title")
+title.style.color = "#4FC3F7"
+title.style.fontSize = "24px"
+title.style.display = "none"  -- спрятать
+title.style.display = ""      -- снять: снова как по CSS
+```
+
+- `el.style.<свойство>` — объявление в `style=""` элемента. `backgroundColor` — это
+  `background-color`, можно и `el.style["background-color"]`. Чтение — значение, как записано,
+  или `""`.
+- Запись переписывает `style=""`, как его пишет браузер (`color: red; width: 10px;`), и применяет
+  CSS заново. `style=""` — после листов, а `!important` листа бьёт его, как в CSS (`docs/CSS.md`).
+- `""` или `nil` снимает свойство: возвращается то, что было без него, — правило листа, вид элемента.
+- `el.style.cssText` — весь `style=""`; `el.style = "…"` — то же.
+- `setProperty(name, value, "important")`, `getPropertyValue(name)`, `getPropertyPriority(name)`,
+  `removeProperty(name)` — с именами, как в CSS: `background-color`, `--accent`. `--accent`
+  получает и то, что внутри элемента.
+- Значение из нескольких объявлений (`"red; width: 0"`) и имя с пробелом браузер оставляет без
+  внимания — TelaOS тоже.
 
 ## Поиск по селекторам
 
@@ -195,6 +221,9 @@ local open = document.getElementById("todo"):querySelector("li:not(.done)")
 - Состояние в селекторе — только у самого элемента, как и в CSS: `:checked + label`,
   `li:active a` и `input:not(:checked)` — ошибка. Нет и `:scope`, `:has()`, `:empty`.
 - `::placeholder` ничего не находит: это не элемент. `:root` — тоже: у приложения нет `<html>`.
+- `el.style` хранит значение, как записано: браузер запишет `#F00` как `rgb(255, 0, 0)`, а TelaOS
+  — как есть. Значение, которое CSS не читает, экран не меняет, но в `style=""` остаётся.
+- `el.style` — только `style=""`; итога CSS (`getComputedStyle`) нет.
 
 ## Тесты
 
@@ -204,7 +233,9 @@ local open = document.getElementById("todo"):querySelector("li:not(.done)")
   соседи, место, `id` и атрибуты, что остаётся за скриптом.
 - `ci/tests/lua/test_lua_query.cpp` — `querySelector`, `querySelectorAll`: селекторы, порядок,
   поиск в элементе, состояния, что поменял скрипт, ошибки, элементы прежнего приложения.
+- `ci/tests/lua/test_lua_style.cpp` — `el.style`: свойства, `cssText`, каскад, `--x`, что
+  остаётся без внимания; `style=""` у `<label>` и `<div>` TelaOS.
 - Робот `sim/tests/tela_dom.sim` на `sim/tests/fixtures/apps/dom_tags` — то же на настоящем LVGL:
   абзац из спанов, `{count}` после записи, блок, из которого ушла строка с `{count}`; страница
   classes — классы прячут и показывают то, что внутри, соседа и первый пункт; страница query —
-  `:checked` находит флажок, отмеченный касанием.
+  `:checked` находит флажок, отмеченный касанием; страница style — `style=""` у надписи и `el.style`.

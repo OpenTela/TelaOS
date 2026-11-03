@@ -7,8 +7,8 @@
  * (UI::CssScope), and it gets its object when it is styled (Widget::applyCss). It keeps its
  * attributes as they are written: reading one decodes it, writing one also does on the screen
  * what the attribute does in the markup (hidden, disabled, checked, value...). When a class, an id
- * or another attribute a selector looks at changes, CSS is applied again (classList). Scripts find
- * elements by the selectors of CSS (querySelector).
+ * or another attribute a selector looks at changes, CSS is applied again (classList, el.style).
+ * Scripts find elements by the selectors of CSS (querySelector).
  *
  * An element is a handle. A new build (the next app) makes new handles: the old ones find nothing.
  */
@@ -35,10 +35,9 @@ void clear();  // the app is gone: its elements too
 bool enter(std::string_view tag, std::string_view attrs);  // an element's content starts (false: not recorded)
 void leave();                                              // ...and ends (after an enter that was)
 // An element got its object. The same attributes (the same place in the text) tell that it is
-// the element just entered or left, not a new one. styled: CSS is applied to it now (with its
-// style="" if inlineStyle), and keep() takes what it changed. false: not recorded
-bool element(lv_obj_t* obj, std::string_view tag, std::string_view attrs, bool styled = false,
-             bool inlineStyle = false);
+// the element just entered or left, not a new one. styled: CSS is applied to it now, its
+// style="" too, and keep() takes what it changed. false: not recorded
+bool element(lv_obj_t* obj, std::string_view tag, std::string_view attrs, bool styled = false);
 // What CSS changed on the element just styled: put back when its rules change
 void keep(CssUndo&& undo);
 
@@ -83,6 +82,15 @@ bool addClasses(Node n, const P::Array<std::string_view>& names);
 bool removeClasses(Node n, const P::Array<std::string_view>& names);
 bool toggleClass(Node n, std::string_view name, int force, bool& now);  // force: -1 either way, 0 off, 1 on
 P::String className(Node n);
+
+// el.style: the declarations of style="", by their CSS names (background-color, --accent). A
+// change rewrites style="" as a browser writes it ("color: red;") and applies CSS again
+bool styleProperty(Node n, std::string_view name, P::String& value, bool& important);  // false: none
+// value "": taken off. Left alone, as a browser leaves it: a name with a space or a ':', a value
+// that is not one declaration ("red; width: 0")
+void setStyleProperty(Node n, std::string_view name, std::string_view value, bool important = false);
+P::String cssText(Node n);
+void setCssText(Node n, std::string_view text);
 
 // The elements selectors match, read as CSS reads them (a state, :checked, is the one the widget
 // is in now), in the page order: in the whole app (inside 0) or in `inside`, whose ancestors
