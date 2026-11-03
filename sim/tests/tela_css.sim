@@ -56,3 +56,13 @@ shot css_05_layout
 tap "Back"
 wait 200
 expect "Selectors" :visible
+
+tap "Text"
+wait 200
+expect @tdeco "text-decoration: underline"
+expect @spaced "letter-spacing: 3px"
+expect @tdots :visible
+shot css_06_text
+tap "Back"
+wait 200
+expect "Selectors" :visible

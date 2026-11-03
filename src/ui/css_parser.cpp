@@ -10,6 +10,7 @@
 #include "ui/css_parser.h"
 #include "ui/css_box.h"
 #include "ui/css_layout.h"
+#include "ui/css_text.h"
 #include "ui/css_values.h"
 #include "ui/ui_coords.h"
 #include "ui/ui_html_internal.h"
@@ -976,6 +977,7 @@ void Css::applyProps(Widget& w, const P::Array<CssDecl>& decls) const {
     }
     applyCssBox(o, decls, em);     // margin, border, outline, box-shadow, gradients, overflow
     applyCssLayout(o, decls, em);  // flex, position and left/top/right/bottom, visibility
+    applyCssText(o, decls, em);    // text-decoration, letter-spacing, line-height, one line
     if (fontPx > 0) w.applyFont(fontPx);
 
     // Apply text-valign AFTER height/font are set
