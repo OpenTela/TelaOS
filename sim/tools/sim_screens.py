@@ -5,7 +5,8 @@
 
 Builds the simulator (sim/ of --head) against both checkouts, photographs every page of
 every app the firmware lists (data/apps, native apps, sim/tests/fixtures/apps), runs the
-robot tests (sim/tests/*.sim) on --head, compares the screens pixel by pixel and writes:
+robot tests (sim/tests/*.sim) on --head, compares the screens pixel by pixel and the widget
+trees of every screen (the same pixels over another tree: changed unseen), and writes:
 
     out/report.md        the PR comment: what changed, in words and in pictures
                          (images from --image-url, if given), the watch's memory on every
@@ -304,8 +305,15 @@ def compare(base_dir, head_dir, publish):
                 words = changes(base_dir / f"{name}.json", head_dir / f"{name}.json")
                 if words is not None:
                     e["changes"] = words
+        if e["status"] == "same":
+            # The same pixels over a different widget tree: something no picture shows (an id,
+            # an element out of sight, a hidden one's text) changed
+            words = changes(base_dir / f"{name}.json", head_dir / f"{name}.json")
+            if words and words != [SAME_TREE]:
+                e["status"] = "unseen"
+                e["changes"] = words
         for kind, src in (("before", a), ("after", b)):
-            if e["status"] != "same" and src.exists():
+            if e["status"] not in ("same", "unseen") and src.exists():
                 (publish / kind).mkdir(parents=True, exist_ok=True)
                 shutil.copyfile(src, publish / kind / f"{name}.png")
         entries.append(e)
@@ -323,8 +331,26 @@ def img(url, kind, name, width=200):
     return f'<img src="{url}/{kind}/{name}.png" width="{width}">' if url else "—"
 
 
+def described(entries):
+    """A list item per screen: its changes in words, one line or nested"""
+    out = []
+    for e in entries[:MAX_ROWS]:
+        words = e["changes"]
+        if len(words) == 1:
+            w = words[0]
+            w = w if w[1:2].isupper() else w[:1].lower() + w[1:]  # "QR-код" stays
+            out.append(f"- {screen_title(e['name'])}: {w}")
+        else:
+            out.append(f"- {screen_title(e['name'])}")
+            out += [f"    - {w}" for w in words]  # 4 spaces: nested on GitHub and everywhere
+    if len(entries) > MAX_ROWS:
+        out.append("- И ещё: " + ", ".join(screen_title(e["name"]) for e in entries[MAX_ROWS:]))
+    return out
+
+
 def report(entries, tests, meta, url):
     changed = [e for e in entries if e["status"] == "changed"]
+    unseen = [e for e in entries if e["status"] == "unseen"]
     added = [e for e in entries if e["status"] == "added"]
     removed = [e for e in entries if e["status"] == "removed"]
     same = [e for e in entries if e["status"] == "same"]
@@ -332,8 +358,9 @@ def report(entries, tests, meta, url):
 
     out = [MARKER, "## Экраны в симуляторе", ""]
     rev = f"`{meta['base']}` → `{meta['head']}` · " if meta.get("base") and meta.get("head") else ""
+    quietly = f"незаметно: {len(unseen)}, " if unseen else ""
     out.append(f"{rev}приложений: {len(apps)}, экранов: {len(entries)} — **изменилось: {len(changed)}**, "
-               f"новых: {len(added)}, пропало: {len(removed)}, без изменений: {len(same)}.")
+               f"{quietly}новых: {len(added)}, пропало: {len(removed)}, без изменений: {len(same)}.")
     out.append("")
     if not meta.get("base_built", True):
         out += ["> ⚠️ База не собралась в симуляторе — ниже только экраны этого PR.", ""]
@@ -352,21 +379,9 @@ def report(entries, tests, meta, url):
     out += meta.get("memory", [])
     out += meta.get("pages", [])
 
-    described = [e for e in changed if e.get("changes")]
-    if described:
-        out += ["**Что изменилось**", ""]
-        for e in described[:MAX_ROWS]:
-            words = e["changes"]
-            if len(words) == 1:
-                w = words[0]
-                w = w if w[1:2].isupper() else w[:1].lower() + w[1:]  # "QR-код" stays
-                out.append(f"- {screen_title(e['name'])}: {w}")
-            else:
-                out.append(f"- {screen_title(e['name'])}")
-                out += [f"    - {w}" for w in words]  # 4 spaces: nested on GitHub and everywhere
-        if len(described) > MAX_ROWS:
-            out.append("- И ещё: " + ", ".join(screen_title(e["name"]) for e in described[MAX_ROWS:]))
-        out.append("")
+    in_words = [e for e in changed if e.get("changes")]
+    if in_words:
+        out += ["**Что изменилось**", ""] + described(in_words) + [""]
     if changed:
         out += ["| Экран | До | После | Разница |", "|---|---|---|---|"]
         for e in changed[:MAX_ROWS]:
@@ -375,6 +390,9 @@ def report(entries, tests, meta, url):
         out.append("")
         if len(changed) > MAX_ROWS:
             out += ["И ещё: " + ", ".join(screen_title(e["name"]) for e in changed[MAX_ROWS:]), ""]
+    if unseen:
+        out += ["**Изменилось незаметно** — пиксели те же, а дерево виджетов другое", ""]
+        out += described(unseen) + [""]
     if added:
         out += ["**Новые экраны**", "", "| Экран | После |", "|---|---|"]
         out += [f"| {screen_title(e['name'])} | {img(url, 'after', e['name'])} |" for e in added[:MAX_ROWS]]
@@ -384,7 +402,7 @@ def report(entries, tests, meta, url):
     if removed:
         out += ["**Пропали:** " + ", ".join(screen_title(e["name"]) for e in removed), ""]
     if not (changed or added or removed):
-        out += ["✅ Ни один экран не изменился.", ""]
+        out += ["✅ На вид ни один экран не изменился." if unseen else "✅ Ни один экран не изменился.", ""]
     if same:
         by_app = {}
         for e in same:
@@ -463,7 +481,8 @@ def main():
             "pages": sim_pages.lines(pages)}
     (out / "report.md").write_text(report(entries, tests, meta, args.image_url.rstrip("/")))
     ok = all(t["ok"] for t in tests)
-    counts = {s: sum(1 for e in entries if e["status"] == s) for s in ("changed", "added", "removed", "same")}
+    counts = {s: sum(1 for e in entries if e["status"] == s)
+              for s in ("changed", "unseen", "added", "removed", "same")}
     (out / "status.json").write_text(json.dumps({"ok": ok, "head_built": True, "base_built": meta["base_built"],
                                                  "screens": counts, "tests": tests, "entries": entries,
                                                  "code": {"head": code[0], "base": code[1]},
