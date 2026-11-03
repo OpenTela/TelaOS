@@ -1,6 +1,7 @@
 /**
  * Test: CSS selectors and cascade — lists (h1, h2), descendant and child combinators, *,
- * attribute selectors, the page as an ancestor, specificity, !important and style="", a run of text.
+ * attribute selectors, the page as an ancestor, <label> and <button> as ancestors of their HTML,
+ * specificity, !important and style="", a run of text.
  * The simple selectors and their old cascade are in test_css.cpp. See docs/CSS.md.
  */
 #include <cstdio>
@@ -42,6 +43,8 @@ static const char* APP = R"HTML(
     #inl { color: #FF0000; }
     #runp { color: #0D0D0D; }
     #runp * { color: #FF0000; }
+    .lx i { color: #0E0E0E; }
+    .bx b { color: #0F0F0F; }
   </style>
   <state>
     <int name="n" default="7"/>
@@ -73,6 +76,8 @@ static const char* APP = R"HTML(
       <p id="inl" style="color: #456789">inline</p>
       <p id="inlimp" class="must" style="color: #567890 !important">inline !important</p>
       <p id="runp">n {n} <a href="/x">a</a> <a href="/y">b</a></p>
+      <label class="lx" id="lx">E=mc<sup>2</sup> <i>opt</i></label>
+      <button class="bx" id="bx"><b>Save</b> x<sup>2</sup></button>
     </page>
     <page id="other">
       <p class="big" id="big2">big on other</p>
@@ -94,6 +99,20 @@ static const MW* word(const MW* w, const char* text) {
     if (!w) return nullptr;
     for (const MW* c : w->children) {
         if (c->type == "Label" && c->text == text) return c;
+    }
+    return nullptr;
+}
+
+// A label anywhere under w whose text, without the spaces around it, is text
+static const MW* deepWord(const MW* w, const char* text) {
+    if (!w) return nullptr;
+    for (const MW* c : w->children) {
+        if (c->type == "Label") {
+            const std::string& t = c->text;
+            const size_t b = t.find_first_not_of(' '), e = t.find_last_not_of(' ');
+            if (b != std::string::npos && t.compare(b, e - b + 1, text) == 0) return c;
+        }
+        if (const MW* f = deepWord(c, text)) return f;
     }
     return nullptr;
 }
@@ -146,6 +165,8 @@ int main() {
                    cb ? ("bgcolor " + hex(cb->bgcolor)).c_str() : "no widget");
     }
     expectColor("#main .big: the page is an ancestor", byId("big"), 0x888888);
+    expectColor(".lx i: a <label> is an ancestor of its HTML", deepWord(byId("lx"), "opt"), 0x0E0E0E);
+    expectColor(".bx b: a <button> is an ancestor of its HTML", deepWord(byId("bx"), "Save"), 0x0F0F0F);
     expectColor("#other .big: on the other page", byId("big2"), 0xFF0000);
 
     printf("\nCascade:\n");
