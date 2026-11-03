@@ -7,11 +7,18 @@
  * element just entered, just left, or open: an object can come before its content (a box), inside
  * it (<p> and its text object) or after it (a <label> with HTML in it), and the same element can
  * be entered again (<tabs>, for each tab).
+ *
+ * CSS is applied again from the tree: its ancestors are opened as CSS scopes, outermost first,
+ * with their children given for places among siblings. What the old rules set goes back first
+ * (CssUndo). querySelector walks the tree in the page order with the scopes open the same way.
  */
 #include "ui/dom.h"
 
 #include "core/core.h"
+#include "ui/css_parser.h"
+#include "ui/css_undo.h"
 #include "ui/ui_html_flow.h"
+#include "ui/ui_html_internal.h"
 #include "utils/string_utils.h"
 #include "widgets/widget_common.h"
 
@@ -28,13 +35,20 @@ constexpr uint32_t kIndexBits = 20;
 constexpr uint32_t kIndexMask = (1u << kIndexBits) - 1;
 constexpr uint32_t kBuildMask = (1u << (32 - kIndexBits)) - 1;
 
+enum : uint8_t {
+    kGone = 1,    // out of the page: text replaced its content, its object was deleted
+    kStyled = 2,  // CSS was applied to its object
+    kInline = 4,  // ...with its style=""
+};
+
 // An element. Links are indexes + 1 (0: none)
 struct Entry {
     P::String tag;    // lower-case
     P::String attrs;  // the attribute text of its start tag, as written (and as scripts changed it)
     lv_obj_t* obj = nullptr;
+    P::Ptr<CssUndo> undo;  // what its CSS changed, if anything
     uint32_t parent = 0, first = 0, last = 0, next = 0;
-    bool gone = false;  // out of the page: text replaced its content, its object was deleted
+    uint8_t flags = 0;
 };
 
 struct Tree {
@@ -44,6 +58,7 @@ struct Tree {
     P::Array<std::string_view> sources;
     P::Array<uint32_t> open;
     P::String asTag, asAttrs;  // Dom::As
+    P::Array<std::pair<uint32_t, P::String>> styledAs;  // the tag CSS saw, where Dom::As changed it
 };
 
 // Never destroyed: the app is cleared from its destructor, which may run after statics are gone
@@ -124,8 +139,9 @@ uint32_t add(std::string_view tag, std::string_view attrs, lv_obj_t* obj) {
 
 void dropTree(uint32_t i) {
     Entry& e = node(i);
-    e.gone = true;
+    e.flags |= kGone;
     e.obj = nullptr;
+    e.undo.reset();
     for (uint32_t c = e.first; c; c = node(c).next) dropTree(c);
 }
 
@@ -321,6 +337,188 @@ void apply(const Entry& e, std::string_view name, std::string_view value, bool o
     }
 }
 
+// ---- CSS again ----
+
+// The tag CSS saw for i: the builder's, where Dom::As kept the markup's for scripts
+std::string_view cssTag(uint32_t i) {
+    for (const auto& as : tree().styledAs) {
+        if (as.first == i) return as.second;
+    }
+    return node(i).tag;
+}
+
+// The tag CSS sees for i: the one CSS saw when the page was built (css), or the one scripts see
+std::string_view tagFor(uint32_t i, bool css) { return css ? cssTag(i) : std::string_view(node(i).tag); }
+
+P::Array<CssChild> childrenOf(uint32_t i) {
+    P::Array<CssChild> kids;
+    for (uint32_t c = node(i).first; c; c = node(c).next) kids.push_back(CssChild{node(c).tag, node(c).attrs});
+    return kids;
+}
+
+P::Array<uint32_t> ancestorsOf(uint32_t i) {  // outermost first
+    P::Array<uint32_t> chain;
+    for (uint32_t p = node(i).parent; p; p = node(p).parent) chain.push_back(p);
+    std::reverse(chain.begin(), chain.end());
+    return chain;
+}
+
+// f() with the CSS scopes of chain[k..] open, outermost first
+template <typename F>
+void inScopes(const P::Array<uint32_t>& chain, size_t k, bool css, F& f) {
+    if (k == chain.size()) {
+        f();
+        return;
+    }
+    const uint32_t a = chain[k];
+    const P::Array<CssChild> kids = childrenOf(a);
+    CssScope scope(tagFor(a, css), node(a).attrs, kids);
+    inScopes(chain, k + 1, css, f);
+}
+
+// i as a selector sees it. rendered: room for its class="{var}" as the builder rendered it
+CssElement cssElement(uint32_t i, bool css, P::String& rendered) {
+    const Entry& e = node(i);
+    CssElement el;
+    el.tag = tagFor(i, css);
+    el.attrs = e.attrs;
+    Css::findAttr(e.attrs, "id", el.id);
+    Css::findAttr(e.attrs, "class", el.classes);
+    if (el.classes.find('{') != std::string_view::npos) {
+        rendered = render_template(P::String(el.classes).c_str());
+        el.classes = rendered;
+    }
+    return el;
+}
+
+// CSS on i again: what the old rules set goes back, the rules that apply now are put on, and what
+// something else set after CSS stays on top
+void restyleOne(uint32_t i) {
+    Entry& e = node(i);
+    if (!(e.flags & kStyled) || (e.flags & kGone) || !e.obj) return;
+    CssUndo kept;
+    if (e.undo) e.undo->undo(e.obj, kept);
+    P::String rendered;
+    const CssElement el = cssElement(i, true, rendered);
+    std::string_view inlineStyle;
+    if (e.flags & kInline) Css::findAttr(e.attrs, "style", inlineStyle);
+    CssUndo undo;
+    Widget w{e.obj};
+    Css::instance().applyMatching(w, el, inlineStyle, &undo);
+    kept.restore(e.obj);
+    if (undo.empty()) e.undo.reset();
+    else e.undo = P::create<CssUndo>(std::move(undo));
+    Attr hidden;  // hidden= still says what it says
+    if (findAttr(e.attrs, "hidden", hidden) && flagOn(hidden.value)) lv_obj_add_flag(e.obj, LV_OBJ_FLAG_HIDDEN);
+}
+
+void restyleTree(uint32_t i) {
+    restyleOne(i);
+    if (!node(i).first) return;
+    const P::Array<CssChild> kids = childrenOf(i);
+    CssScope scope(cssTag(i), node(i).attrs, kids);
+    for (uint32_t c = node(i).first; c; c = node(c).next) restyleTree(c);
+}
+
+// i changed: what its rules may see changes for i, what is in it, the siblings after it
+// (h2 + p, .a ~ li) and what is in them
+void restyleFrom(uint32_t i) {
+    auto all = [i] {
+        for (uint32_t s = i; s; s = node(s).next) restyleTree(s);
+    };
+    inScopes(ancestorsOf(i), 0, true, all);
+}
+
+// After attribute `name` of i changed
+void attributeChanged(uint32_t i, std::string_view name) {
+    if (name == "class" && node(i).obj) {  // class="{var}" is the script's now
+        forRegistered(node(i).obj, [](UI::Element& el) { el.classTemplate.clear(); });
+    }
+    if ((name == "style" && (node(i).flags & kInline)) || Css::instance().looksAt(name)) restyleFrom(i);
+}
+
+// The words of class="": a class="{var}" as it is rendered now
+P::Array<P::String> classWords(uint32_t i) {
+    P::Array<P::String> words;
+    Attr a;
+    if (!findAttr(node(i).attrs, "class", a)) return words;
+    P::String v = decoded(a.value);
+    if (v.find('{') != P::String::npos) v = render_template(v.c_str());
+    for (size_t k = 0; k < v.size();) {
+        while (k < v.size() && isSpace(v[k])) ++k;
+        const size_t start = k;
+        while (k < v.size() && !isSpace(v[k])) ++k;
+        if (k > start) {
+            P::String w = v.substr(start, k - start);
+            if (std::find(words.begin(), words.end(), w) == words.end()) words.push_back(std::move(w));
+        }
+    }
+    return words;
+}
+
+bool validClass(std::string_view name) {
+    if (name.empty()) return false;
+    for (char c : name) {
+        if (isSpace(c)) return false;
+    }
+    return true;
+}
+
+// class="" set to the words, joined as a browser joins them, and CSS applied again
+void setWords(Node n, const P::Array<P::String>& words) {
+    P::String v;
+    for (const P::String& w : words) {
+        if (!v.empty()) v += ' ';
+        v += w;
+    }
+    setAttribute(n, "class", v);
+}
+
+// ---- Selectors ----
+
+// The states a selector names (:active, :focus, :checked, :disabled) that obj is in now
+uint16_t statesOf(lv_obj_t* obj) {
+    uint16_t states = 0;
+    if (!obj) return states;
+    for (const uint16_t s : {LV_STATE_PRESSED, LV_STATE_FOCUSED, LV_STATE_CHECKED, LV_STATE_DISABLED}) {
+        if (lv_obj_has_state(obj, s)) states = static_cast<uint16_t>(states | s);
+    }
+    return states;
+}
+
+bool matches(uint32_t i, const CssQuery& q) {
+    P::String rendered;
+    return q.matches(cssElement(i, false, rendered), statesOf(node(i).obj));
+}
+
+// What q matches in i, in the page order, until `limit` are found; the scopes above i are open
+void collect(uint32_t i, const CssQuery& q, size_t limit, P::Array<Node>& found) {
+    if (!node(i).first || found.size() >= limit) return;
+    const P::Array<CssChild> kids = childrenOf(i);
+    CssScope scope(node(i).tag, node(i).attrs, kids);
+    for (uint32_t c = node(i).first; c && found.size() < limit; c = node(c).next) {
+        if (matches(c, q)) found.push_back(handle(c));
+        collect(c, q, limit, found);
+    }
+}
+
+bool query(Node inside, std::string_view selectors, size_t limit, P::Array<Node>& found) {
+    const CssQuery q(selectors);
+    if (!q.ok()) return false;
+    if (inside) {
+        const uint32_t i = indexOf(inside);
+        auto in = [&] { collect(i, q, limit, found); };
+        if (i) inScopes(ancestorsOf(i), 0, false, in);  // its ancestors count: .menu a
+        return true;
+    }
+    for (uint32_t i = 1; i <= nodes().size() && found.size() < limit; ++i) {
+        if (node(i).parent || (node(i).flags & kGone)) continue;  // the pages, then what is in them
+        if (matches(i, q)) found.push_back(handle(i));
+        collect(i, q, limit, found);
+    }
+    return true;
+}
+
 }  // namespace
 
 // ============ Recording ============
@@ -342,6 +540,7 @@ void end() {
 void clear() {
     nodes().clear();
     tree().sources.clear();
+    tree().styledAs.clear();
     opened().clear();
     s_building = false;
     s_paused = 0;
@@ -370,8 +569,8 @@ void leave() {
     s_last = s_lastNode ? Last::Left : Last::None;
 }
 
-void element(lv_obj_t* obj, std::string_view tag, std::string_view attrs) {
-    if (!recording() || !obj) return;
+bool element(lv_obj_t* obj, std::string_view tag, std::string_view attrs, bool styled, bool inlineStyle) {
+    if (!recording() || !obj) return false;
     const uint32_t top = opened().empty() ? 0 : opened().back();
     uint32_t i = 0;
     if (top && !node(top).obj && sameSource(top, attrs)) {
@@ -380,14 +579,22 @@ void element(lv_obj_t* obj, std::string_view tag, std::string_view attrs) {
         i = s_lastNode;  // styled after its content: a <label> with HTML in it
     }
     if (i) node(i).obj = obj;
-    else if (!(i = add(tag, attrs, obj))) return;
+    else if (!(i = add(tag, attrs, obj))) return false;
+    if (styled) node(i).flags |= kStyled | (inlineStyle ? kInline : 0);
     if (s_asOn) {  // what the markup says, not what the builder was given
+        if (styled) tree().styledAs.emplace_back(i, lower(tag));
         node(i).tag = lower(tree().asTag);
         node(i).attrs = std::move(tree().asAttrs);
         s_asOn = false;
     }
     s_last = Last::Element;
     s_lastNode = i;
+    return true;
+}
+
+void keep(CssUndo&& undo) {
+    if (!s_lastNode || s_last != Last::Element || undo.empty()) return;
+    node(s_lastNode).undo = P::create<CssUndo>(std::move(undo));
 }
 
 void contentReplaced(lv_obj_t* obj) {
@@ -419,7 +626,7 @@ Node getElementById(std::string_view id) {
     for (uint32_t i = 1; i <= nodes().size(); ++i) {
         const Entry& e = node(i);
         Attr a;
-        if (!e.gone && findAttr(e.attrs, "id", a) && decoded(a.value) == id) return handle(i);
+        if (!(e.flags & kGone) && findAttr(e.attrs, "id", a) && decoded(a.value) == id) return handle(i);
     }
     return 0;
 }
@@ -473,6 +680,7 @@ bool setAttribute(Node n, std::string_view name, std::string_view value) {
     const P::String key = lower(name);
     node(i).attrs = edited(node(i).attrs, key, &value);
     apply(node(i), key, value, true);
+    attributeChanged(i, key);
     return true;
 }
 
@@ -482,6 +690,78 @@ void removeAttribute(Node n, std::string_view name) {
     const P::String key = lower(name);
     node(i).attrs = edited(node(i).attrs, key, nullptr);
     apply(node(i), key, {}, false);
+    attributeChanged(i, key);
+}
+
+bool hasClass(Node n, std::string_view name) {
+    const uint32_t i = indexOf(n);
+    if (!i || !validClass(name)) return false;
+    const P::Array<P::String> words = classWords(i);
+    return std::find(words.begin(), words.end(), name) != words.end();
+}
+
+bool addClasses(Node n, const P::Array<std::string_view>& names) {
+    for (std::string_view c : names) {
+        if (!validClass(c)) return false;
+    }
+    const uint32_t i = indexOf(n);
+    if (!i) return true;
+    P::Array<P::String> words = classWords(i);
+    for (std::string_view c : names) {
+        if (std::find(words.begin(), words.end(), c) == words.end()) words.emplace_back(c);
+    }
+    setWords(n, words);
+    return true;
+}
+
+bool removeClasses(Node n, const P::Array<std::string_view>& names) {
+    for (std::string_view c : names) {
+        if (!validClass(c)) return false;
+    }
+    const uint32_t i = indexOf(n);
+    if (!i) return true;
+    P::Array<P::String> words = classWords(i);
+    words.erase(std::remove_if(words.begin(), words.end(),
+                               [&](const P::String& w) {
+                                   return std::find(names.begin(), names.end(), std::string_view(w)) != names.end();
+                               }),
+                words.end());
+    setWords(n, words);
+    return true;
+}
+
+bool toggleClass(Node n, std::string_view name, int force, bool& now) {
+    now = false;
+    if (!validClass(name)) return false;
+    const uint32_t i = indexOf(n);
+    if (!i) return true;
+    P::Array<P::String> words = classWords(i);
+    const auto at = std::find(words.begin(), words.end(), name);
+    const bool has = at != words.end();
+    now = force < 0 ? !has : force > 0;
+    if (now == has) return true;  // as it is: nothing changes
+    if (now) words.emplace_back(name);
+    else words.erase(at);
+    setWords(n, words);
+    return true;
+}
+
+P::String className(Node n) {
+    P::String v;
+    getAttribute(n, "class", v);
+    return v;
+}
+
+bool querySelector(Node inside, std::string_view selectors, Node& found) {
+    P::Array<Node> one;
+    const bool ok = query(inside, selectors, 1, one);
+    found = one.empty() ? 0 : one[0];
+    return ok;
+}
+
+bool querySelectorAll(Node inside, std::string_view selectors, P::Array<Node>& found) {
+    found.clear();
+    return query(inside, selectors, SIZE_MAX, found);
 }
 
 }  // namespace Dom

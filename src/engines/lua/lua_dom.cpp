@@ -3,6 +3,7 @@
  *
  * An element is a userdata holding its handle (UI::Dom::Node). The same element is the same Lua
  * value each time it is found, as in a browser: a weak table keeps the userdata of each handle.
+ * el.classList is another userdata with the same handle: el.classList:add("on").
  */
 #include "engines/lua/lua_dom.h"
 #include "ui/dom.h"
@@ -13,6 +14,7 @@ namespace LuaDom {
 namespace {
 
 constexpr const char* kElement = "TelaElement";
+constexpr const char* kClassList = "TelaClassList";
 constexpr const char* kKnown = "TelaOS.elements";  // handle → its userdata, weak
 
 struct Ref {
@@ -87,15 +89,108 @@ int hasAttribute(lua_State* L) {
     return 1;
 }
 
+// ---- querySelector ----
+
+int badSelector(lua_State* L, const char* what, int at) {
+    return luaL_error(L, "%s: '%s' is not a selector TelaOS reads", what, lua_tostring(L, at));
+}
+
+// The first element the selectors (argument at) match in `in` (0: the whole app); nil if none
+int findFirst(lua_State* L, UI::Dom::Node in, int at) {
+    UI::Dom::Node found = 0;
+    if (!UI::Dom::querySelector(in, arg(L, at), found)) return badSelector(L, "querySelector", at);
+    push(L, found);
+    return 1;
+}
+
+// All of them, in the page order: a Lua array (#list, list[1], ipairs)
+int findAll(lua_State* L, UI::Dom::Node in, int at) {
+    P::Array<UI::Dom::Node> found;
+    if (!UI::Dom::querySelectorAll(in, arg(L, at), found)) return badSelector(L, "querySelectorAll", at);
+    lua_createtable(L, static_cast<int>(found.size()), 0);
+    for (size_t k = 0; k < found.size(); ++k) {
+        push(L, found[k]);
+        lua_rawseti(L, -2, static_cast<lua_Integer>(k + 1));
+    }
+    return 1;
+}
+
+// document.querySelector(s) and document:querySelector(s); el:querySelector(s) looks in el
+int docQuerySelector(lua_State* L) { return findFirst(L, 0, lua_istable(L, 1) ? 2 : 1); }
+int docQuerySelectorAll(lua_State* L) { return findAll(L, 0, lua_istable(L, 1) ? 2 : 1); }
+int querySelector(lua_State* L) { return findFirst(L, self(L), 2); }
+int querySelectorAll(lua_State* L) { return findAll(L, self(L), 2); }
+
+// ---- classList ----
+
+UI::Dom::Node listOf(lua_State* L) { return static_cast<Ref*>(luaL_checkudata(L, 1, kClassList))->node; }
+
+void pushList(lua_State* L, UI::Dom::Node n) {
+    auto* ref = static_cast<Ref*>(lua_newuserdatauv(L, sizeof(Ref), 0));
+    ref->node = n;
+    luaL_setmetatable(L, kClassList);
+}
+
+P::Array<std::string_view> names(lua_State* L) {
+    P::Array<std::string_view> out;
+    for (int i = 2; i <= lua_gettop(L); ++i) out.push_back(arg(L, i));
+    return out;
+}
+
+int badName(lua_State* L, const char* what) {
+    return luaL_error(L, "classList.%s: a class name is empty or has a space in it", what);
+}
+
+int classAdd(lua_State* L) {
+    const UI::Dom::Node n = listOf(L);
+    return UI::Dom::addClasses(n, names(L)) ? 0 : badName(L, "add");
+}
+
+int classRemove(lua_State* L) {
+    const UI::Dom::Node n = listOf(L);
+    return UI::Dom::removeClasses(n, names(L)) ? 0 : badName(L, "remove");
+}
+
+// toggle(name): the other way; toggle(name, true|false): on or off. It says whether it is on now
+int classToggle(lua_State* L) {
+    const UI::Dom::Node n = listOf(L);
+    const std::string_view name = arg(L, 2);
+    const int force = lua_isnoneornil(L, 3) ? -1 : (lua_toboolean(L, 3) ? 1 : 0);
+    bool now = false;
+    if (!UI::Dom::toggleClass(n, name, force, now)) return badName(L, "toggle");
+    lua_pushboolean(L, now);
+    return 1;
+}
+
+int classContains(lua_State* L) {
+    lua_pushboolean(L, UI::Dom::hasClass(listOf(L), arg(L, 2)));
+    return 1;
+}
+
+int classString(lua_State* L) {
+    pushString(L, UI::Dom::className(listOf(L)));
+    return 1;
+}
+
+const luaL_Reg kClassMethods[] = {
+    {"add", classAdd},
+    {"remove", classRemove},
+    {"toggle", classToggle},
+    {"contains", classContains},
+    {nullptr, nullptr},
+};
+
 const luaL_Reg kMethods[] = {
     {"getAttribute", getAttribute},
     {"setAttribute", setAttribute},
     {"removeAttribute", removeAttribute},
     {"hasAttribute", hasAttribute},
+    {"querySelector", querySelector},
+    {"querySelectorAll", querySelectorAll},
     {nullptr, nullptr},
 };
 
-// el.textContent, el.id, el.tagName, el:method(); anything else is nil
+// el.textContent, el.id, el.tagName, el.className, el.classList, el:method(); anything else is nil
 int index(lua_State* L) {
     const UI::Dom::Node n = self(L);
     if (lua_type(L, 2) != LUA_TSTRING) {
@@ -111,6 +206,10 @@ int index(lua_State* L) {
         pushString(L, id);
     } else if (key == "tagName") {
         pushString(L, UI::Dom::tagName(n));
+    } else if (key == "className") {
+        pushString(L, UI::Dom::className(n));
+    } else if (key == "classList") {
+        pushList(L, n);
     } else {
         lua_pushvalue(L, 2);
         lua_rawget(L, lua_upvalueindex(1));  // the methods
@@ -125,6 +224,8 @@ int newindex(lua_State* L) {
         UI::Dom::setTextContent(n, text(L, 3));
     } else if (key == "id") {
         UI::Dom::setAttribute(n, "id", text(L, 3));
+    } else if (key == "className") {
+        UI::Dom::setAttribute(n, "class", text(L, 3));
     } else {
         return luaL_error(L, "an element has no '%s' to set", lua_tostring(L, 2));
     }
@@ -161,9 +262,20 @@ void registerAll(lua_State* L) {
     lua_setfield(L, -2, "__tostring");
     lua_pop(L, 1);
 
+    luaL_newmetatable(L, kClassList);
+    luaL_newlib(L, kClassMethods);
+    lua_setfield(L, -2, "__index");
+    lua_pushcfunction(L, classString);
+    lua_setfield(L, -2, "__tostring");
+    lua_pop(L, 1);
+
     lua_newtable(L);
     lua_pushcfunction(L, getElementById);
     lua_setfield(L, -2, "getElementById");
+    lua_pushcfunction(L, docQuerySelector);
+    lua_setfield(L, -2, "querySelector");
+    lua_pushcfunction(L, docQuerySelectorAll);
+    lua_setfield(L, -2, "querySelectorAll");
     lua_setglobal(L, "document");
 }
 

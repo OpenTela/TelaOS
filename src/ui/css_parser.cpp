@@ -12,6 +12,7 @@
 #include "ui/css_layout.h"
 #include "ui/css_media.h"
 #include "ui/css_text.h"
+#include "ui/css_undo.h"
 #include "ui/css_values.h"
 #include "ui/dom.h"
 #include "ui/ui_coords.h"
@@ -723,6 +724,23 @@ bool sameElement(const CssElement& a, const CssElement& b) {
     return a.tag == b.tag && a.attrs.data() == b.attrs.data() && a.attrs.size() == b.attrs.size();
 }
 
+// A part of s looks at attribute `name` (lower-case): .x is class, #x is id
+bool looksAtAttr(const Selector& s, std::string_view name) {
+    for (const Compound& c : s.parts) {
+        if ((name == "class" && !c.classes.empty()) || (name == "id" && !c.id.empty())) return true;
+        for (const AttrTest& t : c.attrs) {
+            if (std::string_view(t.name) == name) return true;
+        }
+        if (!c.extra) continue;
+        for (const Logical& l : c.extra->logic) {
+            for (const Selector& inner : l.list) {
+                if (looksAtAttr(inner, name)) return true;
+            }
+        }
+    }
+    return false;
+}
+
 // ============ Scopes ============
 
 P::Array<CssElement>& scopeStack() {
@@ -1006,6 +1024,13 @@ CssScope::CssScope(std::string_view tag, std::string_view attrs, std::string_vie
     dom_ = Dom::enter(tag, attrs);
 }
 
+CssScope::CssScope(std::string_view tag, std::string_view attrs, const P::Array<CssChild>& children)
+    : CssScope(tag, attrs) {
+    Children& kids = childStack().back();
+    kids.read = true;
+    for (const CssChild& c : children) kids.items.push_back(Child{P::String(c.tag), c.attrs});
+}
+
 CssScope::~CssScope() {
     if (dom_) Dom::leave();
     scopeStack().pop_back();
@@ -1014,6 +1039,28 @@ CssScope::~CssScope() {
 }
 
 const P::Array<CssElement>& CssScope::ancestors() { return scopeStack(); }
+
+CssQuery::CssQuery(std::string_view selectors) {
+    for (std::string_view item : selectorList(selectors)) {
+        Selector one;
+        if (!parseSelector(item, one)) {  // "", a[, ::before: the whole list is wrong
+            list_.clear();
+            return;
+        }
+        list_.push_back(std::move(one));
+    }
+}
+
+bool CssQuery::matches(const CssElement& el, uint16_t states) const {
+    const P::Array<CssElement>& anc = scopeStack();
+    for (const Selector& s : list_) {
+        const Compound& last = s.parts.back();
+        if (last.pseudo != Pseudo::None) continue;  // ::placeholder is no element
+        if ((states & last.states) != last.states) continue;
+        if (matchSelector(s, el, anc, static_cast<int>(anc.size()) - 1)) return true;
+    }
+    return false;
+}
 
 CssScopeText::CssScopeText(std::string_view original, std::string_view text) {
     P::Array<CssElement>& st = scopeStack();
@@ -1233,10 +1280,21 @@ P::Array<CssStateDecls> Css::cascadeIn(const CssElement& el, std::string_view in
     return groups;
 }
 
-void Css::applyMatching(Widget& w, const CssElement& el, std::string_view inlineStyle) const {
+bool Css::looksAt(std::string_view name) const {
+    const P::String n = lowered(name);
+    for (const Rule& r : m_rules) {
+        for (const Selector& s : r.selectors) {
+            if (looksAtAttr(s, n)) return true;
+        }
+    }
+    return false;
+}
+
+void Css::applyMatching(Widget& w, const CssElement& el, std::string_view inlineStyle, CssUndo* undo) const {
     if (!w.handle) return;
     if (m_rules.empty() && inlineStyle.empty()) return;
     const P::Array<CssStateDecls> groups = cascadeStates(el, inlineStyle);
+    if (undo) undo->begin(w.handle);  // what CSS changes from here on is kept
     for (const CssStateDecls& g : groups) applyProps(w, g.decls, g.state);  // the element as it is first
     applyCssTransitions(w.handle, groups);
     if (m_hasPlaceholder && lv_obj_check_type(w.handle, &lv_textarea_class)) {
@@ -1247,6 +1305,7 @@ void Css::applyMatching(Widget& w, const CssElement& el, std::string_view inline
         const P::Array<CssStateDecls> hint = cascadeIn(el, {}, anc, top, customStack(), true, Pseudo::Placeholder);
         if (!hint.empty() && hint[0].state == 0) applyCssPlaceholder(w.handle, hint[0].decls, fontPxOf(w.handle));
     }
+    if (undo) undo->end(w.handle);
 }
 
 void Css::applyMatching(Widget& w, const char* tag, const char* id, const char* classNames) const {
