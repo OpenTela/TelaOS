@@ -1,10 +1,13 @@
-# CSS v0.4
+# CSS v0.5
 
 CSS в TelaOS: что из CSS имеет смысл на экране часов, что уже работает и во что оно превращается
 в LVGL. Браузер без JS — всё остальное должно быть: HTML (`docs/HTML_TAGS.md`) и CSS.
 
 ## Changelog
 
+- **v0.5**: Раскладка. `display: flex`, `flex-direction`, `flex-wrap`, `flex-flow`, `justify-content`,
+  `align-items`, `align-content`, `flex`, `flex-grow`; `position: relative`, `absolute`, `fixed`
+  с `left`/`top`/`right`/`bottom`; `visibility: hidden`.
 - **v0.4**: Блок. `margin` (1–4 значения, отрицательные), `border` и стороны (`border-bottom`,
   `border-width`…), `outline` и `outline-offset`, `box-shadow`, `overflow` (`hidden`, `auto`, `scroll`,
   `visible`, по осям), `linear-gradient()` вдоль осей. `border: none` убирает и рамку, которую
@@ -32,7 +35,7 @@ CSS в TelaOS: что из CSS имеет смысл на экране часо�
 - Движок: `src/ui/css_parser.cpp`. Предки элемента для селекторов — `UI::CssScope`: страница,
   `<div>`, таблицы, вкладки, `<label>` и `<button>` с HTML внутри и элементы HTML, пока строится их содержимое.
 
-## Работает: 35 из 65
+## Работает: 41 из 65
 
 Знаки: ✅ работает, ½ частично (не считается), — нет.
 
@@ -91,21 +94,21 @@ CSS в TelaOS: что из CSS имеет смысл на экране часо�
 | | Что | Как |
 |---|-----|-----|
 | ✅ | `display: none` | из листа и из `style=""` |
-| — | `display: block`, `inline`, `inline-block` | |
-| — | `visibility: hidden` | |
-| ✅ | `left`, `top` | |
-| — | `right`, `bottom` | |
-| — | `position: relative`, `absolute`, `fixed` | |
+| — | `display: block`, `inline`, `inline-block` | блок или строка — по тегу |
+| ✅ | `visibility: hidden` | `opa` 0: место остаётся, касания не доходят |
+| ✅ | `left`, `top` | без `position` — координаты, как `x=` и `y=` у TelaOS |
+| ✅ | `right`, `bottom` | с `position` |
+| ✅ | `position: relative`, `absolute`, `fixed` | `relative` — сдвиг (`translate_*`); `absolute` — вне раскладки, от краёв родителя; `fixed` — к тому же не прокручивается; `sticky` — как `static` |
 | ✅ | `z-index` | |
 
 ### Flex (5)
 
 | | Что | Как |
 |---|-----|-----|
-| — | `display: flex`, `flex-direction`, `flex-wrap` | у TelaOS `<div flex=…>` есть, из CSS — нет |
-| — | `justify-content`, `align-items`, `align-content` | |
+| ✅ | `display: flex`, `flex-direction`, `flex-wrap` | и `flex-flow`; `wrap-reverse` — как `wrap` |
+| ✅ | `justify-content`, `align-items`, `align-content` | `stretch` и `baseline` — к началу: в LVGL их нет |
 | ✅ | `gap` | два значения, `row-gap`, `column-gap` |
-| — | `flex-grow`, `flex` | |
+| ✅ | `flex-grow`, `flex` | растёт, если контейнеру есть куда: у колонки с высотой по содержимому места нет, как в CSS |
 | — | `order` | |
 
 ### Текст (12)
@@ -178,6 +181,11 @@ CSS в TelaOS: что из CSS имеет смысл на экране часо�
 - У рамки одна толщина и один цвет: если стороны заданы разными, берутся у стороны, заданной
   последней. `dashed`, `dotted`, `double` и другие стили рисуются сплошной линией.
 - `box-shadow: inset` не рисуется: LVGL рисует тень только снаружи.
+- `position: absolute` считается от родителя, а не от ближайшего предка с `position`;
+  `fixed` — тоже от родителя, но не прокручивается вместе с ним.
+- Элементы flex-контейнера — его блоки и виджеты. Строчный текст внутри (`<nav><a>…</a> <a>…</a></nav>`)
+  остаётся одной строкой, а не отдельными элементами.
+- `align-items: stretch` — по умолчанию в CSS — в LVGL нет: элементы остаются своего размера.
 
 ## Тесты
 
@@ -185,6 +193,7 @@ CSS в TelaOS: что из CSS имеет смысл на экране часо�
 - `ci/tests/ui/test_css_selectors.cpp` — селекторы и каскад.
 - `ci/tests/ui/test_css_values.cpp` — значения: цвета, длины, 1–4 значения, `var()`, значения, которые не читаются.
 - `ci/tests/ui/test_css_box.cpp` — блок: `margin`, `border`, `outline`, `box-shadow`, градиенты, `overflow`.
+- `ci/tests/ui/test_css_layout.cpp` — раскладка: flex, `position`, `visibility`.
 - Симулятор (`docs/SIMULATOR.md`): приложение-образец `sim/tests/fixtures/apps/css_tags`,
   сценарий `sim/tests/tela_css.sim`. Цвет каждой строки на снимке говорит, сработало ли её правило;
-  страница `values` — значения, `box` — блок.
+  страница `values` — значения, `box` — блок, `layout` — раскладка.
