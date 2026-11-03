@@ -1,4 +1,5 @@
 #include "ui/dynamic_app.h"
+#include "ui/dom.h"
 #include "ui/ui_html_internal.h"
 #include "core/core.h"
 #include "core/state_store.h"
@@ -15,6 +16,7 @@ DynamicApp::~DynamicApp() {
         lv_obj_clean(scr);
         lv_obj_clear_flag(scr, LV_OBJ_FLAG_SCROLLABLE);
     }
+    UI::Dom::clear();  // its elements went with the widgets
     // Then all vectors, strings, maps auto-destroyed by default destructors
 }
 
@@ -117,6 +119,22 @@ void DynamicApp::setZIndex(lv_obj_t* handle, int z) {
         }
     }
     deferredZIndex[handle] = z;
+}
+
+void DynamicApp::forgetInside(lv_obj_t* box) {
+    if (!box) return;
+    const auto inside = [box](lv_obj_t* o) {
+        for (o = o ? lv_obj_get_parent(o) : nullptr; o; o = lv_obj_get_parent(o)) {
+            if (o == box) return true;
+        }
+        return false;
+    };
+    for (auto& el : elements) {
+        if (el && (inside(el->w.handle) || inside(el->parentObj))) {
+            el->w.handle = nullptr;
+            el->parentObj = nullptr;
+        }
+    }
 }
 
 void DynamicApp::applyZIndex() {

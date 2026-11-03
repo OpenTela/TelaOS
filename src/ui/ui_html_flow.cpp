@@ -19,6 +19,7 @@
 #include "ui/css_box.h"
 #include "ui/css_parser.h"
 #include "ui/css_values.h"
+#include "ui/dom.h"
 #include "ui/ui_coords.h"
 #include "ui/ui_html_internal.h"
 #include "ui/ui_tag_reader.h"
@@ -28,6 +29,9 @@
 #include "widgets/widget_common.h"
 
 #include <lvgl.h>
+#if LV_USE_SPAN
+#include "src/widgets/span/lv_span_private.h"  // a span's text, for textContent
+#endif
 
 #include <strings.h>
 
@@ -1425,6 +1429,7 @@ void imgElement(const TagRef& t, lv_obj_t* parent) {
     if (!oc.empty()) a += " onclick=\"" + oc + "\"";
     if (const P::String alt = attr(t, "alt"); !alt.empty()) a += " alt=\"" + alt + "\"";  // shown if the file is not there
     if (!id.empty()) a += " id=\"" + id + "\"";
+    UI::Dom::As as(t.name, rawAttrs(t));  // for scripts it stays the <img> it is
     create_image(a.c_str(), a.c_str() + a.size(), parent);
 }
 
@@ -1640,7 +1645,10 @@ void inputElement(const TagRef& t, lv_obj_t* parent) {
                       flagFor(t, "disabled");
         if (attr(t, "min").empty()) a += " min=\"0\"";
         if (attr(t, "max").empty()) a += " max=\"100\"";
-        create_slider(a.c_str(), a.c_str() + a.size(), parent);
+        {
+            UI::Dom::As as(t.name, rawAttrs(t));
+            create_slider(a.c_str(), a.c_str() + a.size(), parent);
+        }
         lv_obj_t* s = lv_obj_get_child(parent, -1);
         if (s && attr(t, "bind").empty() && !attr(t, "value").empty()) {
             const int32_t value = atoi(attr(t, "value").c_str());
@@ -1654,6 +1662,7 @@ void inputElement(const TagRef& t, lv_obj_t* parent) {
         if (label.empty()) label = type == "submit" ? "Submit" : type == "reset" ? "Reset" : "";
         P::String a = keepAttrs(t, {"id", "class", "onclick", "href", "w", "h", "bgcolor", "color"}) +
                       flagFor(t, "disabled");
+        UI::Dom::As as(t.name, rawAttrs(t));
         create_button(a.c_str(), a.c_str() + a.size(), label.c_str(), parent);
         return;
     }
@@ -1666,7 +1675,10 @@ void inputElement(const TagRef& t, lv_obj_t* parent) {
                                 "w", "h", "bgcolor", "color", "maxlength"}) +
                   flagFor(t, "readonly") + flagFor(t, "disabled");
     if (type == "password") a += " password=\"true\"";
-    create_input(a.c_str(), a.c_str() + a.size(), "", parent);
+    {
+        UI::Dom::As as(t.name, rawAttrs(t));
+        create_input(a.c_str(), a.c_str() + a.size(), "", parent);
+    }
     if (attr(t, "bind").empty() && !attr(t, "value").empty()) {
         if (lv_obj_t* ta = lastTextarea(parent)) lv_textarea_set_text(ta, attr(t, "value").c_str());
     }
@@ -1684,7 +1696,10 @@ void textareaElement(const TagRef& t, lv_obj_t* parent) {
         h = buf;
     }
     if (!h.empty()) a += " h=\"" + h + "\"";
-    create_input(a.c_str(), a.c_str() + a.size(), "", parent);
+    {
+        UI::Dom::As as(t.name, rawAttrs(t));
+        create_input(a.c_str(), a.c_str() + a.size(), "", parent);
+    }
     if (attr(t, "bind").empty() && t.cend > t.cstart) {
         P::String text;
         const char* s = t.cstart;
@@ -1783,6 +1798,7 @@ void detailsElement(const TagRef& t, lv_obj_t* box, const Ctx& ctx) {
     lv_obj_t* title = newBox(head, 0);
     lv_obj_set_width(title, 0);
     lv_obj_set_flex_grow(title, 1);
+    setContentBox(head, title);  // its text is the summary's, without the marker
 
     Inside in(t);
     TagRef sum;
@@ -1884,7 +1900,10 @@ void fallbackElement(const TagRef& t, lv_obj_t* box, const Ctx& ctx) {
     if (!is(t.name, "svg") && !is(t.name, "math")) {
         // fallback content = what a browser without the feature shows (sources/tracks excluded)
         Seg probe(nullptr, ctx);
-        walk(t.cstart, t.cend, probe, Style{}, true);
+        {
+            UI::Dom::Pause dry;  // its elements are recorded when it is built, below
+            walk(t.cstart, t.cend, probe, Style{}, true);
+        }
         bool text = false;
         for (const auto& it : probe.items()) {
             for (char c : it.text) text = text || !isspace(static_cast<unsigned char>(c));
@@ -1908,7 +1927,10 @@ void thElement(const TagRef& t, lv_obj_t* parent) {
     s += ">";
     s.append(t.cstart, t.cend - t.cstart);
     s += "</td>";
-    parse_children(s.c_str(), static_cast<int>(s.size()), parent);
+    {
+        UI::Dom::As as(t.name, rawAttrs(t));
+        parse_children(s.c_str(), static_cast<int>(s.size()), parent);
+    }
     if (lv_obj_t* td = lv_obj_get_child(parent, -1)) {
         lv_obj_set_style_text_color(td, lv_color_hex(kAccent), LV_PART_MAIN);
         lv_obj_set_style_text_align(td, LV_TEXT_ALIGN_CENTER, LV_PART_MAIN);
@@ -2140,10 +2162,12 @@ bool inFlow(lv_obj_t* box) { return s_flow.count(box) != 0; }
 bool setText(lv_obj_t* obj, const char* text) {
     if (!obj) return false;
     const char* s = text ? text : "";
+    lv_obj_t* const owner = obj;
     auto c = s_contentOf.find(obj);
     if (c != s_contentOf.end()) obj = c->second;
 #if LV_USE_SPAN
     if (lv_obj_check_type(obj, &lv_spangroup_class)) {  // formatted paragraph: one plain span
+        UI::Dom::contentReplaced(owner);  // its <b>, <a>... are gone
         while (lv_spangroup_get_span_count(obj) > 0) lv_spangroup_delete_span(obj, lv_spangroup_get_child(obj, 0));
         lv_span_set_text(lv_spangroup_new_span(obj), s);
         lv_spangroup_refr_mode(obj);
@@ -2155,11 +2179,48 @@ bool setText(lv_obj_t* obj, const char* text) {
         return true;
     }
     if (s_flow.count(obj)) {  // a block: the text replaces its content, like DOM textContent
+        UI::Dom::contentReplaced(owner);
+        g_core.app().forgetInside(obj);  // {var} and ui.* no longer reach what is deleted here
         lv_obj_clean(obj);
         newTextLabel(obj, s);
         return true;
     }
     return false;
+}
+
+P::String getText(lv_obj_t* obj) {
+    if (!obj) return "";
+    auto c = s_contentOf.find(obj);
+    if (c != s_contentOf.end()) obj = c->second;
+    if (lv_obj_check_type(obj, &lv_label_class)) return lv_label_get_text(obj);
+#if LV_USE_SPAN
+    if (lv_obj_check_type(obj, &lv_spangroup_class)) {
+        P::String s;
+        for (uint32_t i = 0; i < lv_spangroup_get_span_count(obj); ++i) {
+            const lv_span_t* span = lv_spangroup_get_child(obj, static_cast<int32_t>(i));
+            if (span && span->txt) s += span->txt;  // LVGL 9.2 has no getter for it
+        }
+        return s;
+    }
+#endif
+    if (s_toggles.count(obj) || lv_obj_check_type(obj, &lv_textarea_class)) return "";  // its label is not text of the page
+    P::String s;
+    const uint32_t n = static_cast<uint32_t>(lv_obj_get_child_count(obj));
+    for (uint32_t i = 0; i < n; ++i) s += getText(lv_obj_get_child(obj, static_cast<int32_t>(i)));
+    return s;
+}
+
+bool setChecked(lv_obj_t* obj, bool on) {
+    const auto it = s_toggles.find(obj);
+    if (it == s_toggles.end() && !lv_obj_check_type(obj, &lv_switch_class)) return false;
+    if (on) lv_obj_add_state(obj, LV_STATE_CHECKED);
+    else lv_obj_clear_state(obj, LV_STATE_CHECKED);
+    if (on && it != s_toggles.end() && it->second.radio) {
+        for (auto& [o, other] : s_toggles) {
+            if (o != obj && other.radio && other.name == it->second.name) lv_obj_clear_state(o, LV_STATE_CHECKED);
+        }
+    }
+    return true;
 }
 
 void labelFor(lv_obj_t* label, const char* id) {

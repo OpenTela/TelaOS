@@ -4,6 +4,7 @@
 #include "engines/lua/lua_timer.h"
 #include "engines/lua/lua_fetch.h"
 #include "engines/lua/lua_ui.h"
+#include "engines/lua/lua_dom.h"
 #include "engines/lua/lua_csv.h"
 #include "engines/lua/lua_yaml.h"
 #include "engines/lua/lua_crypto.h"
@@ -59,6 +60,7 @@ bool LuaEngine::init() {
     LuaTimer::registerAll(m_lua);
     LuaFetch::registerAll(m_lua);
     LuaUI::registerAll(m_lua);
+    LuaDom::registerAll(m_lua);
     LuaCSV::registerAll(m_lua);
     LuaYAML::registerAll(m_lua);
     LuaCrypto::registerAll(m_lua);

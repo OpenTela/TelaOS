@@ -36,6 +36,9 @@ public:
     int  addPage(const char* id, lv_obj_t* obj);
     void setZIndex(lv_obj_t* handle, int z);
     void applyZIndex();
+    // box's content is about to be deleted (text replaces it): the elements inside it lose their
+    // objects, and bindings and ui.* pass them by
+    void forgetInside(lv_obj_t* box);
 
     // --- Page accessors ---
     int            pagesCount()   const { return page_count; }

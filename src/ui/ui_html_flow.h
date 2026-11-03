@@ -12,6 +12,8 @@
 
 #include "lvgl.h"  // first: maps the TelaOS-style `struct _lv_obj_t` forward declarations
 
+#include "utils/psram_alloc.h"
+
 #include <cstddef>
 
 namespace HtmlFlow {
@@ -65,6 +67,12 @@ void labelControl(lv_obj_t* label, lv_obj_t* control);
 // ui.setText() on an element built here (text with spans, a block, a checkbox, <li>, <dialog>).
 // false: not ours, the caller handles it.
 bool setText(lv_obj_t* obj, const char* text);
+// The text obj shows, as DOM textContent reads it: a label's, a paragraph's spans, a box's
+// children in order (an <li> without its marker). A field, a checkbox, a slider have none.
+P::String getText(lv_obj_t* obj);
+// checked= from a script: a checkbox or a switch takes it, a radio turns the rest of its group
+// off. No change event and no bind=, as a browser fires none. false: obj is none of them
+bool setChecked(lv_obj_t* obj, bool on);
 // New app: forget the objects of the previous one
 void reset();
 
