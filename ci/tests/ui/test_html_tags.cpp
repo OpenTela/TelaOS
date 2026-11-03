@@ -269,6 +269,9 @@ static const char* APP_FLOW = R"HTML(
   <label id="free">Free</label>
   <label id="pinned" x="10" y="20">Pinned</label>
   <button id="btn">Btn</button>
+  <list id="glist" grow="3"><item>one</item></list>
+  <div id="gdiv" grow="2">box</div>
+  <div flex="column" h="100"><label id="glbl" grow="1">grows</label></div>
   Tail <b>text</b> <i>here</i>
 </page></ui></app>
 )HTML";
@@ -506,6 +509,11 @@ int main() {
         expectTrue("text right inside the page: one line", byText("Tail text here") != nullptr);
         expectTrue("comment with '>' leaves no text", textOf(page).find("bracket") == std::string::npos);
         expectTrue("<style> in the page applies to class", para && para->color == 0xFF0000);
+        // a flow box is a block, not a flex row of a TelaOS layout: grow= would size the widget
+        // from the box's own content height, a loop
+        expectTrue("grow= on a TelaOS widget in the flow: none", byId("glist") && byId("glist")->flexGrow == 0);
+        expectTrue("grow= on a TelaOS div in the flow: none", byId("gdiv") && byId("gdiv")->flexGrow == 0);
+        expectTrue("grow= in a TelaOS flex div: kept", byId("glbl") && byId("glbl")->flexGrow == 1);
     }
 
     printf("\nColors:\n");

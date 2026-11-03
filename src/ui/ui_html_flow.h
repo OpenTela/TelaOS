@@ -44,6 +44,8 @@ bool hasHtml(const char* html, size_t len);
 bool isPositioned(const char* tag, const char* astart, const char* aend);
 // The flow box of a container: the container itself if it is one, else its implicit root
 lv_obj_t* flowBox(lv_obj_t* parent);
+// A flow box: a block of an HTML page, its children stack top to bottom
+bool inFlow(lv_obj_t* box);
 
 // <label for="id">: a tap on `label` works the control with that id, as in a browser
 void labelFor(lv_obj_t* label, const char* id);
