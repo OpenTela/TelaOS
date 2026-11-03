@@ -203,13 +203,13 @@ bool borderDecl(const CssDecl& d, float em, Border& b) {
     return true;
 }
 
-void applyBorder(lv_obj_t* o, const Border& b) {
+void applyBorder(lv_obj_t* o, const Border& b, lv_style_selector_t sel) {
     lv_border_side_t mask = LV_BORDER_SIDE_NONE;
     for (size_t k = 0; k < 4; ++k) {
         if (b.sides[k].shown()) mask = static_cast<lv_border_side_t>(mask | kSideBits[k]);
     }
     if (mask == LV_BORDER_SIDE_NONE) {
-        lv_obj_set_style_border_width(o, 0, 0);
+        lv_obj_set_style_border_width(o, 0, sel);
         return;
     }
     size_t k = b.last;
@@ -219,10 +219,10 @@ void applyBorder(lv_obj_t* o, const Border& b) {
     }
     const Line& l = b.sides[k];
     const CssColor c = l.hasColor ? l.color : currentColor(o);
-    lv_obj_set_style_border_width(o, l.width, 0);
-    lv_obj_set_style_border_color(o, lv_color_hex(c.rgb), 0);
-    lv_obj_set_style_border_opa(o, c.alpha, 0);
-    lv_obj_set_style_border_side(o, mask, 0);
+    lv_obj_set_style_border_width(o, l.width, sel);
+    lv_obj_set_style_border_color(o, lv_color_hex(c.rgb), sel);
+    lv_obj_set_style_border_opa(o, c.alpha, sel);
+    lv_obj_set_style_border_side(o, mask, sel);
 }
 
 struct Outline {
@@ -255,16 +255,16 @@ bool outlineDecl(const CssDecl& d, float em, Outline& out) {
     return false;
 }
 
-void applyOutline(lv_obj_t* o, const Outline& out) {
-    if (out.hasOffset) lv_obj_set_style_outline_pad(o, out.offset, 0);
+void applyOutline(lv_obj_t* o, const Outline& out, lv_style_selector_t sel) {
+    if (out.hasOffset) lv_obj_set_style_outline_pad(o, out.offset, sel);
     if (!out.line.shown()) {
-        lv_obj_set_style_outline_width(o, 0, 0);
+        lv_obj_set_style_outline_width(o, 0, sel);
         return;
     }
     const CssColor c = out.line.hasColor ? out.line.color : currentColor(o);
-    lv_obj_set_style_outline_width(o, out.line.width, 0);
-    lv_obj_set_style_outline_color(o, lv_color_hex(c.rgb), 0);
-    lv_obj_set_style_outline_opa(o, c.alpha, 0);
+    lv_obj_set_style_outline_width(o, out.line.width, sel);
+    lv_obj_set_style_outline_color(o, lv_color_hex(c.rgb), sel);
+    lv_obj_set_style_outline_opa(o, c.alpha, sel);
 }
 
 // ============ margin ============
@@ -328,18 +328,18 @@ bool shadowValue(std::string_view value, float em, Shadow& out) {
     return true;
 }
 
-void applyShadow(lv_obj_t* o, const Shadow& s) {
+void applyShadow(lv_obj_t* o, const Shadow& s, lv_style_selector_t sel) {
     if (s.none) {
-        lv_obj_set_style_shadow_width(o, 0, 0);
+        lv_obj_set_style_shadow_width(o, 0, sel);
         return;
     }
     const CssColor c = s.hasColor ? s.color : currentColor(o);
-    lv_obj_set_style_shadow_width(o, std::max<int32_t>(1, s.blur), 0);  // LVGL draws nothing at 0
-    lv_obj_set_style_shadow_offset_x(o, s.x, 0);
-    lv_obj_set_style_shadow_offset_y(o, s.y, 0);
-    lv_obj_set_style_shadow_spread(o, s.spread, 0);
-    lv_obj_set_style_shadow_color(o, lv_color_hex(c.rgb), 0);
-    lv_obj_set_style_shadow_opa(o, c.alpha, 0);
+    lv_obj_set_style_shadow_width(o, std::max<int32_t>(1, s.blur), sel);  // LVGL draws nothing at 0
+    lv_obj_set_style_shadow_offset_x(o, s.x, sel);
+    lv_obj_set_style_shadow_offset_y(o, s.y, sel);
+    lv_obj_set_style_shadow_spread(o, s.spread, sel);
+    lv_obj_set_style_shadow_color(o, lv_color_hex(c.rgb), sel);
+    lv_obj_set_style_shadow_opa(o, c.alpha, sel);
 }
 
 // ============ linear-gradient() ============
@@ -409,15 +409,15 @@ bool linearGradient(std::string_view text, Gradient& g) {
     return true;
 }
 
-void applyGradient(lv_obj_t* o, const Gradient& g) {
-    lv_obj_set_style_bg_color(o, lv_color_hex(g.from.rgb), 0);
-    lv_obj_set_style_bg_grad_color(o, lv_color_hex(g.to.rgb), 0);
-    lv_obj_set_style_bg_grad_dir(o, g.dir, 0);
-    lv_obj_set_style_bg_main_stop(o, g.fromStop, 0);
-    lv_obj_set_style_bg_grad_stop(o, g.toStop, 0);
-    lv_obj_set_style_bg_main_opa(o, g.from.alpha, 0);
-    lv_obj_set_style_bg_grad_opa(o, g.to.alpha, 0);
-    lv_obj_set_style_bg_opa(o, LV_OPA_COVER, 0);
+void applyGradient(lv_obj_t* o, const Gradient& g, lv_style_selector_t sel) {
+    lv_obj_set_style_bg_color(o, lv_color_hex(g.from.rgb), sel);
+    lv_obj_set_style_bg_grad_color(o, lv_color_hex(g.to.rgb), sel);
+    lv_obj_set_style_bg_grad_dir(o, g.dir, sel);
+    lv_obj_set_style_bg_main_stop(o, g.fromStop, sel);
+    lv_obj_set_style_bg_grad_stop(o, g.toStop, sel);
+    lv_obj_set_style_bg_main_opa(o, g.from.alpha, sel);
+    lv_obj_set_style_bg_grad_opa(o, g.to.alpha, sel);
+    lv_obj_set_style_bg_opa(o, LV_OPA_COVER, sel);
 }
 
 // ============ overflow ============
@@ -447,14 +447,29 @@ void applyOverflow(lv_obj_t* o, Flow x, Flow y) {
     } else {
         lv_obj_clear_flag(o, LV_OBJ_FLAG_SCROLLABLE);
     }
-    if (x == Flow::Visible && y == Flow::Visible) lv_obj_add_flag(o, LV_OBJ_FLAG_OVERFLOW_VISIBLE);
-    else lv_obj_clear_flag(o, LV_OBJ_FLAG_OVERFLOW_VISIBLE);
+    letOverflow(o, x == Flow::Visible && y == Flow::Visible);
 }
+
+void overflowRoom(lv_event_t* e) { lv_event_set_ext_draw_size(e, kOverflowRoom); }
 
 }  // namespace
 
-void applyCssBox(lv_obj_t* o, const P::Array<CssDecl>& decls, float em) {
+void letOverflow(lv_obj_t* o, bool visible) {
     if (!o) return;
+    lv_obj_remove_event_cb(o, overflowRoom);
+    if (visible) {
+        lv_obj_add_flag(o, LV_OBJ_FLAG_OVERFLOW_VISIBLE);
+        lv_obj_add_event_cb(o, overflowRoom, LV_EVENT_REFR_EXT_DRAW_SIZE, nullptr);
+    } else {
+        lv_obj_clear_flag(o, LV_OBJ_FLAG_OVERFLOW_VISIBLE);
+    }
+    lv_obj_refresh_ext_draw_size(o);
+}
+
+void applyCssBox(lv_obj_t* o, const P::Array<CssDecl>& decls, float em, uint16_t state) {
+    if (!o) return;
+    const bool base = state == 0;
+    const lv_style_selector_t sel = LV_PART_MAIN | state;
     Border border;
     Outline outline;
     Shadow shadow;
@@ -470,6 +485,8 @@ void applyCssBox(lv_obj_t* o, const P::Array<CssDecl>& decls, float em) {
             if (borderDecl(d, em, border)) border.any = true;
         } else if (startsNoCase(name, "outline")) {
             if (outlineDecl(d, em, outline)) outline.any = true;
+        } else if (!base && (startsNoCase(name, "margin") || startsNoCase(name, "overflow"))) {
+            continue;  // where the element sits and what it shows: the element itself, not a state
         } else if (name == "margin") {
             std::array<int32_t, 4> m{};
             if (fourSides(value, m, [em](std::string_view p, int32_t& x) { return marginValue(p, em, x); })) {
@@ -512,11 +529,310 @@ void applyCssBox(lv_obj_t* o, const P::Array<CssDecl>& decls, float em) {
             if (flowValue(value, fy)) flowSet = true;
         }
     }
-    if (border.any) applyBorder(o, border);
-    if (outline.any) applyOutline(o, outline);
-    if (hasShadow) applyShadow(o, shadow);
-    if (hasGradient) applyGradient(o, gradient);
-    if (flowSet) applyOverflow(o, fx, fy);
+    if (border.any) applyBorder(o, border, sel);
+    if (outline.any) applyOutline(o, outline, sel);
+    if (hasShadow) applyShadow(o, shadow, sel);
+    if (hasGradient) applyGradient(o, gradient, sel);
+    if (flowSet && base) applyOverflow(o, fx, fy);
+}
+
+namespace {
+
+// ============ transform ============
+
+struct Transform {
+    bool given = false;      // a transform that reads (none too)
+    bool translate = false;  // translate() in it, or none: then translate_x/y are set
+    int32_t x = 0, y = 0;    // px, or lv_pct() of the element's own size
+    float sx = 1, sy = 1;
+    float deg = 0;
+};
+
+// An angle: 45deg, 0.25turn, 1.57rad, 50grad; 0 without a unit
+bool angleValue(std::string_view v, float& deg) {
+    v = trimmed(v);
+    size_t i = 0;
+    float n = 0;
+    if (!cssNumber(v, i, n)) return false;
+    const std::string_view u = v.substr(i);
+    if (u.empty() && n == 0) deg = 0;
+    else if (equalsNoCase(u, "deg")) deg = n;
+    else if (equalsNoCase(u, "turn")) deg = n * 360;
+    else if (equalsNoCase(u, "rad")) deg = n * 57.29578f;
+    else if (equalsNoCase(u, "grad")) deg = n * 0.9f;
+    else return false;
+    return true;
+}
+
+// translate(): a length, or a percentage of the element's own size (LVGL takes lv_pct() for that)
+bool shiftValue(std::string_view v, float em, int32_t& px) {
+    float p = 0;
+    if (cssPercent(v, p)) {
+        px = lv_pct(static_cast<int32_t>(std::lround(p)));
+        return true;
+    }
+    return cssLength(v, em, px);
+}
+
+// scale(): a number or a percentage
+bool scaleValue(std::string_view v, float& s) {
+    v = trimmed(v);
+    size_t i = 0;
+    if (cssPercent(v, s)) {
+        s /= 100;
+        return true;
+    }
+    return cssNumber(v, i, s) && i == v.size();
+}
+
+// transform: translate(10px, 5px) scale(1.2) rotate(45deg), none. LVGL applies a translation, a
+// scale and a rotation, in that order, whatever the order in CSS; skew(), matrix() and 3D are out.
+bool transformValue(std::string_view value, float em, Transform& t) {
+    value = trimmed(value);
+    Transform out;
+    out.given = true;
+    if (equalsNoCase(value, "none")) {
+        out.translate = true;
+        t = out;
+        return true;
+    }
+    const P::Array<std::string_view> fns = cssParts(value);
+    if (fns.empty()) return false;
+    for (std::string_view fn : fns) {
+        const size_t open = fn.find('(');
+        if (open == std::string_view::npos || fn.back() != ')') return false;
+        const std::string_view name = fn.substr(0, open);
+        const P::Array<std::string_view> args = cssList(fn.substr(open + 1, fn.size() - open - 2));
+        const size_t n = args.size();
+        float a = 0, b = 0;
+        if (equalsNoCase(name, "translate") && (n == 1 || n == 2)) {
+            if (!shiftValue(args[0], em, out.x) || (n == 2 && !shiftValue(args[1], em, out.y))) return false;
+            out.translate = true;
+        } else if (equalsNoCase(name, "translatex") && n == 1) {
+            if (!shiftValue(args[0], em, out.x)) return false;
+            out.translate = true;
+        } else if (equalsNoCase(name, "translatey") && n == 1) {
+            if (!shiftValue(args[0], em, out.y)) return false;
+            out.translate = true;
+        } else if (equalsNoCase(name, "scale") && (n == 1 || n == 2)) {
+            if (!scaleValue(args[0], a) || (n == 2 && !scaleValue(args[1], b))) return false;
+            out.sx *= a;
+            out.sy *= n == 2 ? b : a;
+        } else if (equalsNoCase(name, "scalex") && n == 1) {
+            if (!scaleValue(args[0], a)) return false;
+            out.sx *= a;
+        } else if (equalsNoCase(name, "scaley") && n == 1) {
+            if (!scaleValue(args[0], a)) return false;
+            out.sy *= a;
+        } else if ((equalsNoCase(name, "rotate") || equalsNoCase(name, "rotatez")) && n == 1) {
+            if (!angleValue(args[0], a)) return false;
+            out.deg += a;
+        } else {
+            return false;
+        }
+    }
+    t = out;
+    return true;
+}
+
+// ============ transition ============
+
+// What a CSS property animates in LVGL
+struct Animated {
+    const char* name;
+    std::array<lv_style_prop_t, 6> props;  // the rest is LV_STYLE_PROP_INV
+};
+
+const std::array<Animated, 13> kAnimated{{
+    {"color", {LV_STYLE_TEXT_COLOR, LV_STYLE_TEXT_OPA}},
+    {"background-color", {LV_STYLE_BG_COLOR, LV_STYLE_BG_OPA}},
+    {"background", {LV_STYLE_BG_COLOR, LV_STYLE_BG_OPA}},
+    {"opacity", {LV_STYLE_OPA}},
+    {"border-color", {LV_STYLE_BORDER_COLOR, LV_STYLE_BORDER_OPA}},
+    {"border-width", {LV_STYLE_BORDER_WIDTH}},
+    {"border", {LV_STYLE_BORDER_COLOR, LV_STYLE_BORDER_OPA, LV_STYLE_BORDER_WIDTH}},
+    {"outline-color", {LV_STYLE_OUTLINE_COLOR, LV_STYLE_OUTLINE_OPA}},
+    {"outline-width", {LV_STYLE_OUTLINE_WIDTH}},
+    {"outline", {LV_STYLE_OUTLINE_COLOR, LV_STYLE_OUTLINE_OPA, LV_STYLE_OUTLINE_WIDTH}},
+    {"box-shadow", {LV_STYLE_SHADOW_WIDTH, LV_STYLE_SHADOW_OFFSET_X, LV_STYLE_SHADOW_OFFSET_Y, LV_STYLE_SHADOW_SPREAD,
+                    LV_STYLE_SHADOW_COLOR, LV_STYLE_SHADOW_OPA}},
+    {"transform", {LV_STYLE_TRANSLATE_X, LV_STYLE_TRANSLATE_Y, LV_STYLE_TRANSFORM_SCALE_X, LV_STYLE_TRANSFORM_SCALE_Y,
+                   LV_STYLE_TRANSFORM_ROTATION}},
+    {"border-radius", {LV_STYLE_RADIUS}},
+}};
+constexpr uint32_t kAll = (1u << kAnimated.size()) - 1;
+
+struct Transition {
+    uint32_t props = 0;  // bits of kAnimated
+    uint32_t time = 0;   // ms
+    uint32_t delay = 0;
+    lv_anim_path_cb_t path = lv_anim_path_ease_in_out;  // ease
+};
+
+// 0.3s, 300ms
+bool timeValue(std::string_view v, uint32_t& ms) {
+    v = trimmed(v);
+    size_t i = 0;
+    float n = 0;
+    if (!cssNumber(v, i, n) || n < 0) return false;
+    const std::string_view u = v.substr(i);
+    if (equalsNoCase(u, "s")) ms = static_cast<uint32_t>(std::lround(n * 1000));
+    else if (equalsNoCase(u, "ms")) ms = static_cast<uint32_t>(std::lround(n));
+    else return false;
+    return true;
+}
+
+// The easing: LVGL's paths; steps() steps, cubic-bezier() eases in and out
+bool pathValue(std::string_view v, lv_anim_path_cb_t& path) {
+    v = trimmed(v);
+    if (equalsNoCase(v, "linear")) path = lv_anim_path_linear;
+    else if (equalsNoCase(v, "ease") || equalsNoCase(v, "ease-in-out")) path = lv_anim_path_ease_in_out;
+    else if (equalsNoCase(v, "ease-in")) path = lv_anim_path_ease_in;
+    else if (equalsNoCase(v, "ease-out")) path = lv_anim_path_ease_out;
+    else if (equalsNoCase(v, "step-start") || equalsNoCase(v, "step-end") || startsNoCase(v, "steps(")) path = lv_anim_path_step;
+    else if (startsNoCase(v, "cubic-bezier(")) path = lv_anim_path_ease_in_out;
+    else return false;
+    return true;
+}
+
+// A property name: its bit, all of them for all; 0 for one LVGL does not animate
+uint32_t propBits(std::string_view p) {
+    if (equalsNoCase(p, "all")) return kAll;
+    for (size_t k = 0; k < kAnimated.size(); ++k) {
+        if (equalsNoCase(p, kAnimated[k].name)) return 1u << k;
+    }
+    return 0;
+}
+
+// transition: background-color 0.3s ease, color 0.3s. LVGL runs one transition per state, so the
+// properties of all the items go together, with the time, easing and delay of the first item that
+// has a time.
+bool transitionValue(std::string_view value, Transition& t) {
+    value = trimmed(value);
+    if (equalsNoCase(value, "none")) {
+        t = Transition{};
+        return true;
+    }
+    const P::Array<std::string_view> items = cssList(value);
+    if (items.empty()) return false;
+    Transition out;
+    bool timed = false;
+    for (std::string_view item : items) {
+        uint32_t props = 0, time = 0, delay = 0;
+        bool named = false, hasTime = false, hasDelay = false;
+        lv_anim_path_cb_t path = nullptr;
+        for (std::string_view p : cssParts(item)) {
+            uint32_t ms = 0;
+            lv_anim_path_cb_t cb = nullptr;
+            if (timeValue(p, ms)) {
+                if (!hasTime) time = ms, hasTime = true;
+                else if (!hasDelay) delay = ms, hasDelay = true;
+                else return false;
+            } else if (pathValue(p, cb)) {
+                path = cb;
+            } else if (!named) {
+                props = propBits(p);  // an unknown property animates nothing, as a browser does
+                named = true;
+            } else {
+                return false;
+            }
+        }
+        out.props |= named ? props : kAll;  // transition: 0.3s is all of them
+        if (hasTime && !timed) {
+            out.time = time;
+            out.delay = delay;
+            if (path) out.path = path;
+            timed = true;
+        }
+    }
+    t = out;
+    return true;
+}
+
+struct PooledTransition {
+    std::array<lv_style_prop_t, 32> props{};  // ends with LV_STYLE_PROP_INV
+    lv_style_transition_dsc_t dsc{};
+    Transition key;
+};
+
+// LVGL keeps a pointer to the descriptor and its list as long as the style lives: they stay, one
+// for each different transition
+const lv_style_transition_dsc_t* pooled(const Transition& t) {
+    static P::Array<P::Ptr<PooledTransition>> s_pool;
+    for (const auto& p : s_pool) {
+        if (p->key.props == t.props && p->key.time == t.time && p->key.delay == t.delay && p->key.path == t.path) {
+            return &p->dsc;
+        }
+    }
+    P::Ptr<PooledTransition> p = P::create<PooledTransition>();
+    if (!p) return nullptr;
+    size_t n = 0;
+    for (size_t k = 0; k < kAnimated.size(); ++k) {
+        if (!(t.props & (1u << k))) continue;
+        for (lv_style_prop_t prop : kAnimated[k].props) {
+            if (prop == LV_STYLE_PROP_INV || n + 1 >= p->props.size()) continue;
+            if (std::find(p->props.begin(), p->props.begin() + n, prop) == p->props.begin() + n) p->props[n++] = prop;
+        }
+    }
+    p->props[n] = LV_STYLE_PROP_INV;
+    p->key = t;
+    lv_style_transition_dsc_init(&p->dsc, p->props.data(), t.path, t.time, t.delay, nullptr);
+    s_pool.push_back(std::move(p));
+    return &s_pool.back()->dsc;
+}
+
+}  // namespace
+
+void applyCssTransform(lv_obj_t* o, const P::Array<CssDecl>& decls, float em, uint16_t state) {
+    if (!o) return;
+    Transform t;
+    for (const CssDecl& d : decls) {
+        if (d.name == "transform") transformValue(d.value, em, t);
+    }
+    if (!t.given) return;
+    const lv_style_selector_t sel = LV_PART_MAIN | state;
+    if (t.translate) {  // a transform without translate() keeps a position: relative shift
+        lv_obj_set_style_translate_x(o, t.x, sel);
+        lv_obj_set_style_translate_y(o, t.y, sel);
+    }
+    lv_obj_set_style_transform_scale_x(o, static_cast<int32_t>(std::lround(t.sx * 256)), sel);
+    lv_obj_set_style_transform_scale_y(o, static_cast<int32_t>(std::lround(t.sy * 256)), sel);
+    lv_obj_set_style_transform_rotation(o, static_cast<int32_t>(std::lround(t.deg * 10)), sel);
+    lv_obj_set_style_transform_pivot_x(o, lv_pct(50), sel);  // about the middle: transform-origin: center
+    lv_obj_set_style_transform_pivot_y(o, lv_pct(50), sel);
+}
+
+void applyCssTransitions(lv_obj_t* o, const P::Array<CssStateDecls>& groups) {
+    if (!o || groups.empty() || groups[0].state != 0) return;
+    Transition t;
+    bool any = false;
+    for (const CssDecl& d : groups[0].decls) {
+        const std::string_view name = d.name, value = d.value;
+        if (name == "transition") {
+            if (transitionValue(value, t)) any = true;
+        } else if (name == "transition-property") {
+            uint32_t props = 0;
+            for (std::string_view p : cssList(value)) props |= propBits(trimmed(p));
+            t.props = props;
+            any = true;
+        } else if (name == "transition-duration") {
+            const P::Array<std::string_view> l = cssList(value);
+            if (!l.empty() && timeValue(l[0], t.time)) any = true;
+        } else if (name == "transition-delay") {
+            const P::Array<std::string_view> l = cssList(value);
+            if (!l.empty()) timeValue(l[0], t.delay);
+        } else if (name == "transition-timing-function") {
+            const P::Array<std::string_view> l = cssList(value);
+            if (!l.empty()) pathValue(l[0], t.path);
+        }
+    }
+    if (!any || t.time == 0 || t.props == 0) return;
+    const lv_style_transition_dsc_t* dsc = pooled(t);
+    if (!dsc) return;
+    lv_obj_set_style_transition(o, dsc, LV_PART_MAIN);  // back from a state
+    for (const CssStateDecls& g : groups) {
+        if (g.state) lv_obj_set_style_transition(o, dsc, LV_PART_MAIN | g.state);  // into it
+    }
 }
 
 }  // namespace UI

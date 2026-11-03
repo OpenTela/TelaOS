@@ -11,6 +11,8 @@
 namespace UI {
 
 // The text properties among an element's winning declarations (cascade order); em is its font size
-void applyCssText(lv_obj_t* o, const P::Array<CssDecl>& decls, float em);
+// For a state (:active...) the decoration and the spacings go on that state; one line (nowrap,
+// ellipsis) belongs to the element itself (state 0)
+void applyCssText(lv_obj_t* o, const P::Array<CssDecl>& decls, float em, uint16_t state = 0);
 
 }  // namespace UI

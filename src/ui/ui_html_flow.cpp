@@ -16,6 +16,7 @@
 #include "ui/ui_html_flow.h"
 
 #include "core/core.h"
+#include "ui/css_box.h"
 #include "ui/css_parser.h"
 #include "ui/css_values.h"
 #include "ui/ui_coords.h"
@@ -620,6 +621,7 @@ lv_obj_t* newBox(lv_obj_t* parent, int gap = kGap) {
     lv_obj_set_height(b, LV_SIZE_CONTENT);
     lv_obj_set_flex_flow(b, LV_FLEX_FLOW_COLUMN);
     lv_obj_set_style_pad_row(b, gap, LV_PART_MAIN);
+    UI::letOverflow(b);  // what sticks out of an HTML block shows, as in a browser; overflow: hidden clips
     track(b);
     return b;
 }
@@ -1010,6 +1012,7 @@ void Seg::asWords() {
     lv_obj_set_flex_flow(row, LV_FLEX_FLOW_ROW_WRAP);
     lv_obj_set_flex_align(row, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_START);
     lv_obj_set_style_pad_row(row, 4, LV_PART_MAIN);
+    UI::letOverflow(row);  // a line box clips nothing either; before the element's CSS (overflow: hidden)
     decorate(row);
     alignWordsRow(row);
     int raise = 0, drop = 0;  // how far sup and sub leave the line: the row makes room for them
@@ -1331,6 +1334,7 @@ void listItem(const TagRef& li, lv_obj_t* parent, const Ctx& ctx, const P::Strin
     lv_obj_set_flex_flow(row, LV_FLEX_FLOW_ROW);
     lv_obj_set_flex_align(row, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_START);
     lv_obj_set_style_pad_column(row, 6, LV_PART_MAIN);
+    UI::letOverflow(row);
     lv_obj_t* m = lv_label_create(row);
     lv_label_set_text(m, marker.c_str());
     lv_obj_set_style_text_color(m, lv_color_hex(kDim), LV_PART_MAIN);
@@ -1493,7 +1497,15 @@ void onToggleChanged(lv_event_t* e) {
 
 void checkboxElement(const TagRef& t, lv_obj_t* parent, bool radio) {
     lv_obj_t* cb = lv_checkbox_create(parent);
-    lv_checkbox_set_text(cb, attr(t, "label").c_str());
+    const P::String label = attr(t, "label");
+    lv_checkbox_set_text(cb, label.c_str());
+    if (label.empty()) {
+        // The input is its box, as in HTML: the gap LVGL keeps for the text moves outside it, so the
+        // text after it stays where it was, and an outline or a border from CSS goes round the box
+        lv_obj_set_style_margin_right(cb, lv_obj_get_style_pad_column(cb, LV_PART_MAIN), LV_PART_MAIN);
+        lv_obj_set_style_pad_column(cb, 0, LV_PART_MAIN);
+    }
+    if (radio) lv_obj_set_style_radius(cb, LV_RADIUS_CIRCLE, LV_PART_MAIN);  // its ring is round too
     Toggle tg;
     tg.bind = attr(t, "bind");
     tg.onchange = attr(t, "onchange");
@@ -1761,6 +1773,7 @@ void detailsElement(const TagRef& t, lv_obj_t* box, const Ctx& ctx) {
     lv_obj_set_height(head, LV_SIZE_CONTENT);
     lv_obj_set_flex_flow(head, LV_FLEX_FLOW_ROW);
     lv_obj_set_style_pad_column(head, 8, LV_PART_MAIN);
+    UI::letOverflow(head);
     lv_obj_t* marker = lv_label_create(head);
     lv_label_set_text(marker, open ? "\xE2\x80\x93" : "+");
     lv_obj_set_style_text_color(marker, lv_color_hex(kAccent), LV_PART_MAIN);

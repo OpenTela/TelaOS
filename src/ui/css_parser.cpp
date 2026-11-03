@@ -252,7 +252,18 @@ bool parseAttrTest(std::string_view s, size_t& i, AttrTest& t) {
     return true;
 }
 
-// One compound selector at i: a type or *, then #id, .class and [attr] in any order
+// :active and the others: the LVGL state a widget is in while it matches; false for any other
+bool pseudoState(std::string_view name, uint16_t& state) {
+    if (equalsNoCase(name, "active")) state = LV_STATE_PRESSED;
+    else if (equalsNoCase(name, "focus") || equalsNoCase(name, "focus-visible")) state = LV_STATE_FOCUSED;
+    else if (equalsNoCase(name, "checked")) state = LV_STATE_CHECKED;
+    else if (equalsNoCase(name, "disabled")) state = LV_STATE_DISABLED;
+    else if (equalsNoCase(name, "hover")) state = LV_STATE_PRESSED;  // a touch screen has no hover: a tap, as on a phone
+    else return false;
+    return true;
+}
+
+// One compound selector at i: a type or *, then #id, .class, [attr] and pseudo-classes in any order
 bool parseCompound(std::string_view s, size_t& i, Compound& c) {
     const size_t start = i;
     const size_t n = s.size();
@@ -283,10 +294,16 @@ bool parseCompound(std::string_view s, size_t& i, Compound& c) {
             AttrTest t;
             if (!parseAttrTest(s, i, t)) return false;
             c.attrs.push_back(std::move(t));
-        } else if (ch == ':' && i + 5 <= n && equalsNoCase(s.substr(i + 1, 4), "root") &&
-                   (i + 5 == n || !isNameChar(s[i + 5]))) {
-            c.root = true;
-            i += 5;
+        } else if (ch == ':') {  // :root and the states; anything else (::before, :not()) is not supported
+            size_t j = i + 1;
+            while (j < n && isNameChar(s[j])) ++j;
+            const std::string_view pc = s.substr(i + 1, j - i - 1);
+            uint16_t state = 0;
+            if (equalsNoCase(pc, "root")) c.root = true;
+            else if (pseudoState(pc, state)) c.states = static_cast<uint16_t>(c.states | state);
+            else break;
+            ++c.pseudos;
+            i = j;
         } else {
             break;  // a combinator, the end, or something not supported (':' is checked by the caller)
         }
@@ -323,10 +340,13 @@ bool parseSelector(std::string_view s, Selector& out) {
         if (i >= n) return false;  // nothing after the combinator
         out.combinators += comb;
     }
+    for (size_t k = 0; k + 1 < out.parts.size(); ++k) {
+        if (out.parts[k].states) return false;  // button:active label: an ancestor's state is not an LVGL style
+    }
     unsigned ids = 0, classes = 0, types = 0;
     for (const Compound& c : out.parts) {
         ids += !c.id.empty();
-        classes += static_cast<unsigned>(c.classes.size()) + (c.root ? 1 : 0);  // :root is a pseudo-class
+        classes += static_cast<unsigned>(c.classes.size()) + c.pseudos;  // pseudo-classes count as classes
         for (const AttrTest& t : c.attrs) {
             if (t.name == "id" && t.op == '=') ++ids;  // #a#b
             else ++classes;
@@ -766,13 +786,19 @@ void Css::parse(std::string_view css) {
 
 // ============ Cascade ============
 
-P::Array<CssDecl> Css::cascade(const CssElement& el, std::string_view inlineStyle) const {
+P::Array<CssStateDecls> Css::cascadeStates(const CssElement& el, std::string_view inlineStyle) const {
     const P::Array<CssElement>& anc = CssScope::ancestors();
     // A paragraph's text is built inside its own scope (its widgets need it as their ancestor):
     // when it styles itself, it is not its own ancestor
     int top = static_cast<int>(anc.size()) - 1;
     if (top >= 0 && el.attrs.data() && sameElement(anc[static_cast<size_t>(top)], el)) --top;
     return cascadeIn(el, inlineStyle, anc, top, customStack(), true);
+}
+
+P::Array<CssDecl> Css::cascade(const CssElement& el, std::string_view inlineStyle) const {
+    P::Array<CssStateDecls> groups = cascadeStates(el, inlineStyle);
+    if (groups.empty() || groups[0].state != 0) return {};
+    return std::move(groups[0].decls);
 }
 
 P::Array<CssDecl> Css::customProperties(const CssElement& el) const {
@@ -794,73 +820,103 @@ const P::Array<CssDecl>& Css::rootCustom() const {
             root.root = true;
             static const P::Array<CssElement> kNoAncestors;
             static const P::Array<P::Array<CssDecl>> kNoCustom;
-            for (CssDecl& d : cascadeIn(root, {}, kNoAncestors, -1, kNoCustom, false)) {
-                if (isCustom(d.name)) m_rootCustom.push_back(std::move(d));
+            P::Array<CssStateDecls> groups = cascadeIn(root, {}, kNoAncestors, -1, kNoCustom, false);
+            if (!groups.empty() && groups[0].state == 0) {
+                for (CssDecl& d : groups[0].decls) {
+                    if (isCustom(d.name)) m_rootCustom.push_back(std::move(d));
+                }
             }
         }
     }
     return m_rootCustom;
 }
 
-P::Array<CssDecl> Css::cascadeIn(const CssElement& el, std::string_view inlineStyle, const P::Array<CssElement>& anc,
-                                 int top, const P::Array<P::Array<CssDecl>>& ancCustom, bool withRoot) const {
+P::Array<CssStateDecls> Css::cascadeIn(const CssElement& el, std::string_view inlineStyle,
+                                       const P::Array<CssElement>& anc, int top,
+                                       const P::Array<P::Array<CssDecl>>& ancCustom, bool withRoot) const {
     struct Hit {
         const CssDecl* decl;
-        uint8_t layer;  // 0 sheets, 1 style="", 2 sheets !important, 3 style="" !important
+        uint16_t state;  // 0, or the LVGL state of :active and the like
+        uint8_t layer;   // 0 sheets, 1 style="", 2 sheets !important, 3 style="" !important
         uint32_t specificity;
         uint32_t order;  // rule order, then the declaration's place in its rule
     };
     P::Array<Hit> hits;
     for (const Rule& r : m_rules) {
-        bool any = false;
-        uint32_t spec = 0;  // a list applies with its most specific matching selector
+        // A list applies with its most specific matching selector, for each state it names:
+        // .btn, .btn:active { } is a rule for the button as it is and for it pressed
+        std::array<std::pair<uint16_t, uint32_t>, 8> matched{};
+        size_t count = 0;
         for (const Selector& s : r.selectors) {
-            if (matchSelector(s, el, anc, top)) {
-                any = true;
-                spec = std::max(spec, s.specificity);
-            }
+            if (!matchSelector(s, el, anc, top)) continue;
+            const uint16_t state = s.parts.back().states;
+            size_t k = 0;
+            while (k < count && matched[k].first != state) ++k;
+            if (k < count) matched[k].second = std::max(matched[k].second, s.specificity);
+            else if (count < matched.size()) matched[count++] = {state, s.specificity};
         }
-        if (!any) continue;
-        for (size_t k = 0; k < r.decls.size(); ++k) {
-            const CssDecl& d = r.decls[k];
-            hits.push_back(Hit{&d, static_cast<uint8_t>(d.important ? 2 : 0), spec,
-                               (r.order << 8) | static_cast<uint32_t>(std::min<size_t>(k, 255))});
+        for (size_t m = 0; m < count; ++m) {
+            for (size_t k = 0; k < r.decls.size(); ++k) {
+                const CssDecl& d = r.decls[k];
+                hits.push_back(Hit{&d, matched[m].first, static_cast<uint8_t>(d.important ? 2 : 0), matched[m].second,
+                                   (r.order << 8) | static_cast<uint32_t>(std::min<size_t>(k, 255))});
+            }
         }
     }
     const P::Array<CssDecl> inlineDecls = parseDecls(inlineStyle);
     for (size_t k = 0; k < inlineDecls.size(); ++k) {
         const CssDecl& d = inlineDecls[k];
-        hits.push_back(Hit{&d, static_cast<uint8_t>(d.important ? 3 : 1), 0, static_cast<uint32_t>(k)});
+        hits.push_back(Hit{&d, 0, static_cast<uint8_t>(d.important ? 3 : 1), 0, static_cast<uint32_t>(k)});
     }
     std::stable_sort(hits.begin(), hits.end(), [](const Hit& a, const Hit& b) {
+        if (a.state != b.state) return a.state < b.state;
         if (a.layer != b.layer) return a.layer < b.layer;
         if (a.specificity != b.specificity) return a.specificity < b.specificity;
         return a.order < b.order;
     });
 
-    // One value per property: the last in cascade order; the result keeps that order
-    P::Array<const CssDecl*> winners;
-    for (const Hit& h : hits) {
-        for (auto& w : winners) {
-            if (w && w->name == h.decl->name) w = nullptr;
+    // For each state, one value per property: the last in cascade order; the result keeps that order
+    P::Array<CssStateDecls> groups;
+    for (size_t i = 0; i < hits.size();) {
+        const uint16_t state = hits[i].state;
+        P::Array<const CssDecl*> winners;
+        for (; i < hits.size() && hits[i].state == state; ++i) {
+            for (auto& w : winners) {
+                if (w && w->name == hits[i].decl->name) w = nullptr;
+            }
+            winners.push_back(hits[i].decl);
         }
-        winners.push_back(h.decl);
+        CssStateDecls g;
+        g.state = state;
+        for (const CssDecl* w : winners) {
+            if (w) g.decls.push_back(*w);
+        }
+        groups.push_back(std::move(g));
     }
-    P::Array<CssDecl> out;
-    bool vars = false;
-    for (const CssDecl* w : winners) {
-        if (!w) continue;
-        out.push_back(*w);
-        vars = vars || hasVar(w->value);
+
+    // var(): a state sees the element's own custom properties too (.btn { --c } .btn:active { color: var(--c) })
+    const P::Array<CssDecl>* root = nullptr;
+    for (CssStateDecls& g : groups) {
+        bool vars = false;
+        for (const CssDecl& d : g.decls) vars = vars || hasVar(d.value);
+        if (!vars) continue;
+        if (!root && withRoot) root = &rootCustom();
+        if (g.state != 0 && groups[0].state == 0) {
+            for (const CssDecl& d : groups[0].decls) {
+                if (isCustom(d.name) && !findDecl(g.decls, d.name)) g.decls.push_back(d);
+            }
+        }
+        resolveVars(g.decls, ancCustom, top, root);
     }
-    if (vars) resolveVars(out, ancCustom, top, withRoot ? &rootCustom() : nullptr);
-    return out;
+    return groups;
 }
 
 void Css::applyMatching(Widget& w, const CssElement& el, std::string_view inlineStyle) const {
     if (!w.handle) return;
     if (m_rules.empty() && inlineStyle.empty()) return;
-    applyProps(w, cascade(el, inlineStyle));
+    const P::Array<CssStateDecls> groups = cascadeStates(el, inlineStyle);
+    for (const CssStateDecls& g : groups) applyProps(w, g.decls, g.state);  // the element as it is first
+    applyCssTransitions(w.handle, groups);
 }
 
 void Css::applyMatching(Widget& w, const char* tag, const char* id, const char* classNames) const {
@@ -873,14 +929,19 @@ void Css::applyMatching(Widget& w, const char* tag, const char* id, const char* 
 
 // ============ Apply properties to widget ============
 
-void Css::applyProps(Widget& w, const P::Array<CssDecl>& decls) const {
+void Css::applyProps(Widget& w, const P::Array<CssDecl>& decls, uint16_t state) const {
     lv_obj_t* const o = w.handle;
     if (!o) return;
+    // A state (:active...) gets what LVGL can switch per state: colors, opacity, radius, the
+    // border, outline, shadow, transform, text lines; the element as it is (state 0) gets all
+    const bool base = state == 0;
+    const lv_style_selector_t sel = LV_PART_MAIN | state;
     // em is the element's font size: the one font-size gives it, or the one it has (font=, inherited);
     // in font-size itself, em is the parent's
     const float parentEm = fontPxOf(lv_obj_get_parent(o));
     int fontPx = 0;
     for (const CssDecl& d : decls) {
+        if (!base) break;
         int px = 0;
         if (d.name == "font-size") px = cssFontSize(d.value, parentEm);
         else if (d.name == "font") px = fontShorthandSize(d.value, parentEm);
@@ -901,17 +962,22 @@ void Css::applyProps(Widget& w, const P::Array<CssDecl>& decls) const {
         if (name == "color") {
             CssColor c;
             if (cssColor(value, c)) {
-                w.applyColor(c.rgb);
-                if (c.alpha < LV_OPA_COVER) lv_obj_set_style_text_opa(o, c.alpha, 0);
+                lv_obj_set_style_text_color(o, lv_color_hex(c.rgb), sel);
+                if (c.alpha < LV_OPA_COVER || !base) lv_obj_set_style_text_opa(o, c.alpha, sel);
             }
         } else if (name == "background" || name == "background-color" || name == "bgcolor") {
             CssColor c;
             if (backgroundColor(name, value, c)) {
-                w.applyBgColor(c.rgb);
-                if (c.alpha < LV_OPA_COVER) lv_obj_set_style_bg_opa(o, c.alpha, 0);
+                lv_obj_set_style_bg_color(o, lv_color_hex(c.rgb), sel);
+                lv_obj_set_style_bg_opa(o, c.alpha, sel);
             }
         } else if (name == "border-radius" || name == "radius") {
-            if (radiusValue(value, em, v)) w.applyRadius(v);
+            if (radiusValue(value, em, v)) lv_obj_set_style_radius(o, v, sel);
+        } else if (name == "opacity") {
+            uint8_t opa = 0;
+            if (opacityValue(value, opa)) lv_obj_set_style_opa(o, opa, sel);
+        } else if (!base) {
+            continue;  // the rest is the layout and the text flow of the element itself
         } else if (name == "z-index") {
             g_core.app().setZIndex(o, atoi(d.value.c_str()));
         } else if (name == "width" || name == "w") {
@@ -957,9 +1023,6 @@ void Css::applyProps(Widget& w, const P::Array<CssDecl>& decls) const {
             if (oneLength(value, em, v)) lv_obj_set_style_pad_row(o, v, 0);
         } else if (name == "column-gap") {
             if (oneLength(value, em, v)) lv_obj_set_style_pad_column(o, v, 0);
-        } else if (name == "opacity") {
-            uint8_t opa = 0;
-            if (opacityValue(value, opa)) lv_obj_set_style_opa(o, opa, 0);
         } else if (name == "display") {
             if (equalsNoCase(value, "none")) lv_obj_add_flag(o, LV_OBJ_FLAG_HIDDEN);
         } else if (name == "text-align") {
@@ -975,9 +1038,11 @@ void Css::applyProps(Widget& w, const P::Array<CssDecl>& decls) const {
             deferredTextValign.assign(value.data(), value.size());
         }
     }
-    applyCssBox(o, decls, em);     // margin, border, outline, box-shadow, gradients, overflow
-    applyCssLayout(o, decls, em);  // flex, position and left/top/right/bottom, visibility
-    applyCssText(o, decls, em);    // text-decoration, letter-spacing, line-height, one line
+    applyCssBox(o, decls, em, state);        // margin, border, outline, box-shadow, gradients, overflow
+    if (base) applyCssLayout(o, decls, em);  // flex, position and left/top/right/bottom, visibility
+    applyCssText(o, decls, em, state);       // text-decoration, letter-spacing, line-height, one line
+    applyCssTransform(o, decls, em, state);  // translate, scale, rotate
+    if (!base) return;
     if (fontPx > 0) w.applyFont(fontPx);
 
     // Apply text-valign AFTER height/font are set

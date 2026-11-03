@@ -1,7 +1,7 @@
 <app os="1.0" title="CSS" version="0.1" category="test">
   <!--
     Test fixture for CSS in TelaOS (docs/CSS.md): selectors and cascade; values (page "values");
-    the box (page "box"); layout (page "layout"); text (page "text").
+    the box (page "box"); layout (page "layout"); text (page "text"); states (page "states").
     Flashed by the simulator with --extra-data; driven by tests/tela_css.sim.
     Each line says which rule colors it; a line in white did not get its rule.
   -->
@@ -11,7 +11,7 @@
     .menu > li { color: #81C784; }
     ul li li { color: #FF8A65; }
     .card label { color: #CE93D8; }
-    a:hover, .ok { color: #E57373; }
+    a:not(.x), .ok { color: #E57373; }
     [data-tone="warn"] { color: #FFD54F; }
     a[href^="http"] { color: #AAAAAA; }
     #main .big { font-size: 32px; }
@@ -49,6 +49,11 @@
     .spaced { letter-spacing: 3px; }
     .airy { line-height: 1.8; }
     .tdots { width: 220px; white-space: nowrap; text-overflow: ellipsis; color: #FFD54F; }
+    .tick:checked { outline: 3px solid #81C784; }
+    .dimmed:disabled { opacity: 0.4; }
+    .press { background: #333333; transition: background-color 0.3s ease; }
+    .press:active { background: #4FC3F7; transform: scale(0.95); }
+    .tilted { transform: rotate(-6deg); color: #FFD54F; margin: 12px 0; }
   </style>
   <ui default="/main">
 
@@ -61,14 +66,14 @@
           <ul><li id="nested">ul li li: orange</ul>
       </ul>
       <div class="card"><label id="inCard">.card label: violet</label></div>
-      <p class="ok" id="ok">a:hover, .ok: red</p>
+      <p class="ok" id="ok">a:not(.x), .ok: red</p>
       <p data-tone="warn" id="warn">[data-tone=warn]: yellow</p>
       <p id="ext"><a href="https://example.com">a[href^=http]: grey</a></p>
       <p class="big" id="big">#main .big</p>
       <p class="note" id="note">p.note beats .note: green</p>
       <p class="must" id="strong">!important beats #id: blue</p>
       <p class="gone" id="gone">display: none</p>
-      <p><a href="/values">Values</a> <a href="/box">Box</a> <a href="/layout">Layout</a> <a href="/text">Text</a></p>
+      <p><a href="/values">Values</a> <a href="/box">Box</a> <a href="/layout">Layout</a> <a href="/text">Text</a> <a href="/states">States</a></p>
     </page>
 
     <page id="values">
@@ -115,6 +120,15 @@
       <p class="spaced" id="spaced">letter-spacing: 3px</p>
       <p class="airy" id="airy">line-height: 1.8 on a paragraph that is long enough to wrap onto a second line</p>
       <label class="tdots" id="tdots">text-overflow: ellipsis cuts this long line with dots</label>
+      <p><a href="/main">Back</a></p>
+    </page>
+
+    <page id="states">
+      <h2>States</h2>
+      <p><input type="checkbox" class="tick" id="tick"> :checked: a green ring</p>
+      <button class="dimmed" id="dimmed" disabled>:disabled: faded</button>
+      <button class="press" id="press">:active: blue while pressed</button>
+      <label class="tilted" id="tilted">transform: rotate(-6deg)</label>
       <p><a href="/main">Back</a></p>
     </page>
 

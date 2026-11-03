@@ -1,10 +1,15 @@
-# CSS v0.6
+# CSS v0.7
 
 CSS в TelaOS: что из CSS имеет смысл на экране часов, что уже работает и во что оно превращается
 в LVGL. Браузер без JS — всё остальное должно быть: HTML (`docs/HTML_TAGS.md`) и CSS.
 
 ## Changelog
 
+- **v0.7**: Живое. `:active`, `:focus`, `:checked`, `:disabled`, `:hover` — стили состояний LVGL;
+  `transform` (`translate`, `scale`, `rotate`); `transition` — переходы стилей LVGL. Блоки и строки
+  HTML больше не обрезают то, что выступает (обводку, тень, `transform`), а `overflow: visible`
+  показывает его и у `<div>` TelaOS; флажок и радио — это их квадрат и круг: обводка ложится
+  вокруг них, а не вокруг места под текст.
 - **v0.6**: Текст. `text-decoration` у блоков и виджетов, `letter-spacing`, `line-height`,
   `white-space: nowrap`, `text-overflow: ellipsis`.
 - **v0.5**: Раскладка. `display: flex`, `flex-direction`, `flex-wrap`, `flex-flow`, `justify-content`,
@@ -37,7 +42,7 @@ CSS в TelaOS: что из CSS имеет смысл на экране часо�
 - Движок: `src/ui/css_parser.cpp`. Предки элемента для селекторов — `UI::CssScope`: страница,
   `<div>`, таблицы, вкладки, `<label>` и `<button>` с HTML внутри и элементы HTML, пока строится их содержимое.
 
-## Работает: 45 из 65
+## Работает: 48 из 65
 
 Знаки: ✅ работает, ½ частично (не считается), — нет.
 
@@ -48,7 +53,7 @@ CSS в TelaOS: что из CSS имеет смысл на экране часо�
 | ✅ | `p`, `.class`, `#id` | |
 | ✅ | составные: `button.primary#ok[type]` | раньше только `tag.class` |
 | ✅ | `*` | |
-| ✅ | списки: `h1, h2, h3` | селектор, который движок не понимает (`a:hover`), выпадает, остальные в списке работают — как в браузере |
+| ✅ | списки: `h1, h2, h3` | селектор, который движок не понимает (`a:not(.x)`), выпадает, остальные в списке работают — как в браузере |
 | ✅ | потомок: `nav a` | предки — страница, `<div>`, таблицы, вкладки, `<label>` и `<button>`, блоки и строчные элементы HTML |
 | ✅ | дочерний: `ul > li` | |
 | ✅ | атрибуты: `[a]`, `[a=v]`, `[a~=v]`, `[a\|=v]`, `[a^=v]`, `[a$=v]`, `[a*=v]`, `[a=v i]` | |
@@ -59,7 +64,7 @@ CSS в TelaOS: что из CSS имеет смысл на экране часо�
 | ✅ | наследование цвета и шрифта | LVGL наследует `text_color`, `text_font` |
 | — | соседи: `a + b`, `a ~ b` | |
 | — | `:first-child`, `:last-child`, `:nth-child()` | |
-| — | `:active`, `:hover`, `:focus`, `:checked`, `:disabled` | состояния LVGL: `PRESSED`, `FOCUSED`, `CHECKED`, `DISABLED` |
+| ✅ | `:active`, `:hover`, `:focus`, `:checked`, `:disabled` | стили состояний LVGL `PRESSED`, `FOCUSED`, `CHECKED`, `DISABLED`: LVGL сам переключает их; `:hover` — нажатие, наведения у сенсорного экрана нет; `:focus-visible` — как `:focus` |
 | — | `:not()`, `:is()`, `::before`, `::after`, `::placeholder` | |
 
 ### Значения (8)
@@ -89,7 +94,7 @@ CSS в TelaOS: что из CSS имеет смысл на экране часо�
 | ✅ | `background`, `background-color` | цветом; из `background: url(x.png) #222` — цвет, `none` — без фона |
 | ½ | `linear-gradient()` | `bg_grad`: вдоль осей (`to right`, `90deg`), два цвета — первый и последний; под углом — нет |
 | ✅ | `opacity` | |
-| ✅ | `overflow`, `overflow-x`, `overflow-y` | `hidden` — обрезка без прокрутки, `auto`/`scroll` — прокрутка, `visible` — видно за краем |
+| ✅ | `overflow`, `overflow-x`, `overflow-y` | `hidden` — обрезка без прокрутки, `auto`/`scroll` — прокрутка, `visible` — видно за краем, на 24px |
 
 ### Отображение и положение (7)
 
@@ -134,8 +139,8 @@ CSS в TelaOS: что из CSS имеет смысл на экране часо�
 
 | | Что | Как |
 |---|-----|-----|
-| — | `transition` | переходы стилей LVGL |
-| — | `transform`: `translate`, `rotate`, `scale` | `transform_*`, `translate_*` |
+| ✅ | `transition` | переходы стилей LVGL: в состояние и обратно; время, кривая и задержка — одни на все свойства, у первого из списка |
+| ✅ | `transform`: `translate`, `rotate`, `scale` | `transform_*`, `translate_*`, вокруг середины элемента; `skew`, `matrix`, 3D — нет |
 | — | `@keyframes`, `animation` | анимации LVGL |
 
 ### At-правила (3)
@@ -193,6 +198,18 @@ CSS в TelaOS: что из CSS имеет смысл на экране часо�
 - `white-space: nowrap` и `text-overflow` действуют на одну надпись: у абзаца со ссылками или
   `sup`/`sub` (он строится по словам) их нет.
 - `text-transform` нет: значение `{var}` меняется после построения, и преобразованный текст его бы терял.
+- В состоянии (`:active` и другие) меняется вид: цвет, фон, прозрачность, радиус, рамка, обводка, тень,
+  `transform`, оформление текста. Размеры, отступы и раскладка остаются у элемента без состояния.
+- Состояние предка (`.menu:active a`) — нет: в LVGL стиль состояния есть только у самого виджета.
+- Когда состояний несколько сразу (флажок отмечен и нажат), LVGL берёт стиль старшего:
+  `:disabled`, затем `:active`, `:focus`, `:checked` — а не правило, что ниже в листе.
+  `.x:checked:active` задаёт вид для обоих сразу.
+- Что выступает за блок, строку или элемент списка HTML (обводка, тень, `transform`), видно
+  на 24px, дальше обрезается. `<div>` TelaOS обрезает по своему краю, пока ему не сказать
+  `overflow: visible`.
+- `transition` берётся у элемента без состояния: `transition` внутри `:active { }` не действует.
+- `transform` в LVGL — всегда сдвиг, масштаб, поворот, в каком бы порядке ни шли функции.
+  `transform` без `translate()` сохраняет сдвиг от `position: relative`, с ним — заменяет.
 
 ## Тесты
 
@@ -202,6 +219,7 @@ CSS в TelaOS: что из CSS имеет смысл на экране часо�
 - `ci/tests/ui/test_css_box.cpp` — блок: `margin`, `border`, `outline`, `box-shadow`, градиенты, `overflow`.
 - `ci/tests/ui/test_css_layout.cpp` — раскладка: flex, `position`, `visibility`.
 - `ci/tests/ui/test_css_text.cpp` — текст: `text-decoration`, `letter-spacing`, `line-height`, одна строка.
+- `ci/tests/ui/test_css_states.cpp` — состояния, `transform`, `transition`, что выступает за блок.
 - Симулятор (`docs/SIMULATOR.md`): приложение-образец `sim/tests/fixtures/apps/css_tags`,
   сценарий `sim/tests/tela_css.sim`. Цвет каждой строки на снимке говорит, сработало ли её правило;
-  страница `values` — значения, `box` — блок, `layout` — раскладка, `text` — текст.
+  страница `values` — значения, `box` — блок, `layout` — раскладка, `text` — текст, `states` — состояния.

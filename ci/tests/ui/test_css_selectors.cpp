@@ -21,7 +21,7 @@ static const char* APP = R"HTML(
     .menu > li { color: #333333; }
     ul li li { color: #EEEEEE; }
     .card label { color: #444444; }
-    a:hover, .ok { color: #555555; }
+    a:not(.x), .ok { color: #555555; }
     [data-tone="warn"] { color: #666666; }
     a[href^="http"] { color: #777777; }
     [lang|="en"] { color: #0B0B0B; }
@@ -154,7 +154,7 @@ int main() {
     expectTrue(".card label: not a label outside it", byId("outlbl") && byId("outlbl")->color != 0x444444);
     expectColor("div > label.direct: the child combinator on TelaOS", byId("direct"), 0xCCCCCC);
     expectColor(".uni > *: any child", byId("uni1"), 0x0A0A0A);
-    expectColor("a:hover, .ok: the readable part of a list stays", byId("ok"), 0x555555);
+    expectColor("a:not(.x), .ok: the readable part of a list stays", byId("ok"), 0x555555);
     expectColor("[data-tone=\"warn\"]", byId("warn"), 0x666666);
     expectColor("a[href^=\"http\"]: the external link", word(byId("ext"), "E"), 0x777777);
     expectTrue("a[href^=\"http\"]: not the local one", word(byId("ext"), "L") && word(byId("ext"), "L")->color != 0x777777);

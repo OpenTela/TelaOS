@@ -5,8 +5,9 @@
  *
  * Selectors: type (button, p), *, .class, #id, [attr], [attr=v] (also ~= |= ^= $= *=, and an
  * `i` flag), any compound of them (button.primary#ok[type]), lists (h1, h2), descendant (nav a)
- * and child (ul > li) combinators. A selector with anything else (:hover, ::before, a + b) is
- * left out, as a browser leaves out a selector it does not know.
+ * and child (ul > li) combinators, :root, and the states LVGL keeps for a widget: :active
+ * (pressed), :focus, :checked, :disabled, :hover. A selector with anything else (::before, a + b)
+ * is left out, as a browser leaves out a selector it does not know.
  *
  * Cascade, as in CSS: declarations go by specificity (ids; classes and attributes; types), then
  * by their order in the sheets; style="" comes after the sheets; !important after all of that,
@@ -55,6 +56,13 @@ struct CssDecl {
     bool important = false;
 };
 
+// What wins for one state of an element: 0 is the element as it is; LV_STATE_PRESSED (:active) and
+// the others are styles LVGL switches to by itself when the widget enters the state
+struct CssStateDecls {
+    uint16_t state = 0;
+    P::Array<CssDecl> decls;
+};
+
 // Parsed selectors and rules (internal to css_parser.cpp)
 namespace CssDetail {
 
@@ -70,7 +78,9 @@ struct Compound {     // button.primary#ok[type]
     P::String id;
     P::Array<P::String> classes;
     P::Array<AttrTest> attrs;
-    bool root = false;  // :root
+    bool root = false;    // :root
+    uint16_t states = 0;  // :active, :focus, :checked, :disabled, :hover as LV_STATE_* bits
+    uint8_t pseudos = 0;  // pseudo-classes, for specificity
 };
 
 struct Selector {
@@ -99,6 +109,10 @@ public:
     // as its style="": one declaration per property, the winning one, in cascade order, var()s in
     // the values put in
     P::Array<CssDecl> cascade(const CssElement& el, std::string_view inlineStyle = {}) const;
+
+    // The same for every state the sheets have rules for: [0] is the element as it is (if any
+    // rule applies to it), then each state (:active...) in LV_STATE_* order
+    P::Array<CssStateDecls> cascadeStates(const CssElement& el, std::string_view inlineStyle = {}) const;
 
     // The custom properties (--x) el declares, in its style="" too: what its content inherits
     P::Array<CssDecl> customProperties(const CssElement& el) const;
@@ -137,16 +151,16 @@ private:
 
     // cascade() with explicit ancestors and their custom properties; root: :root's custom
     // properties, nullptr while they are worked out
-    P::Array<CssDecl> cascadeIn(const CssElement& el, std::string_view inlineStyle,
-                                const P::Array<CssElement>& anc, int top,
-                                const P::Array<P::Array<CssDecl>>& ancCustom, bool withRoot) const;
+    P::Array<CssStateDecls> cascadeIn(const CssElement& el, std::string_view inlineStyle,
+                                      const P::Array<CssElement>& anc, int top,
+                                      const P::Array<P::Array<CssDecl>>& ancCustom, bool withRoot) const;
     const P::Array<CssDecl>& rootCustom() const;
 
     // The first rule that is just `.className` (legacy class-only API)
     const CssDetail::Rule* findClass(const P::String& className) const;
 
-    // Apply resolved declarations to a widget
-    void applyProps(Widget& w, const P::Array<CssDecl>& decls) const;
+    // Apply resolved declarations to a widget, as it is (state 0) or for a state
+    void applyProps(Widget& w, const P::Array<CssDecl>& decls, uint16_t state = 0) const;
 
     // Parsing helpers
     static uint32_t parseColorValue(std::string_view color);

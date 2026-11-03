@@ -29,6 +29,17 @@ typedef struct _lv_obj_t {
     #endif
 } lv_obj_t;
 
+// A style for a state goes to the mock's stateStyles, not over the element's own (lvgl_mock.h)
+inline bool mockState(lv_obj_t* obj, const char* prop, int sel, long long value) {
+    if ((sel & 0xFFFF) == 0) return false;
+#ifdef LVGL_MOCK_ENABLED
+    if (obj && obj->mock_widget) obj->mock_widget->stateStyles.push_back({prop, sel, value});
+#else
+    (void)obj; (void)prop; (void)value;
+#endif
+    return true;
+}
+
 typedef struct _lv_display_t {} lv_display_t;
 typedef struct _lv_indev_t {} lv_indev_t;
 typedef struct _lv_group_t {} lv_group_t;
@@ -48,9 +59,13 @@ inline void lv_anim_set_time(lv_anim_t*, uint32_t) {}
 inline void lv_anim_set_exec_cb(lv_anim_t*, lv_anim_exec_xcb_t) {}
 inline void lv_anim_set_completed_cb(lv_anim_t*, lv_anim_completed_cb_t) {}
 inline lv_anim_t* lv_anim_start(lv_anim_t*) { return nullptr; }
-typedef void (*lv_anim_path_cb_t)(lv_anim_t*);
+typedef int32_t (*lv_anim_path_cb_t)(const lv_anim_t*);
 inline void lv_anim_set_path_cb(lv_anim_t*, lv_anim_path_cb_t) {}
-inline void lv_anim_path_ease_out(lv_anim_t*) {}
+inline int32_t lv_anim_path_linear(const lv_anim_t*) { return 0; }
+inline int32_t lv_anim_path_ease_in(const lv_anim_t*) { return 0; }
+inline int32_t lv_anim_path_ease_out(const lv_anim_t*) { return 0; }
+inline int32_t lv_anim_path_ease_in_out(const lv_anim_t*) { return 0; }
+inline int32_t lv_anim_path_step(const lv_anim_t*) { return 0; }
 inline lv_obj_t* lv_display_get_default() { return nullptr; }
 inline uint32_t lv_display_get_inactive_time(lv_obj_t*) { return 0; }
 typedef struct _lv_font_t { int line_height; } lv_font_t;
@@ -116,16 +131,19 @@ typedef uint8_t lv_border_side_t;
 
 typedef enum { LV_GRAD_DIR_NONE, LV_GRAD_DIR_VER, LV_GRAD_DIR_HOR } lv_grad_dir_t;
 
-#define LV_STATE_DEFAULT  0
-#define LV_STATE_PRESSED  1
-#define LV_STATE_CHECKED  2
-#define LV_STATE_FOCUSED  4
-#define LV_STATE_DISABLED 0x80
+// As in LVGL 9: states in the low 16 bits, parts above them, so a selector tells them apart
+#define LV_STATE_DEFAULT  0x0000
+#define LV_STATE_CHECKED  0x0001
+#define LV_STATE_FOCUSED  0x0002
+#define LV_STATE_HOVERED  0x0010
+#define LV_STATE_PRESSED  0x0020
+#define LV_STATE_DISABLED 0x0080
 
-#define LV_PART_MAIN      0
-#define LV_PART_INDICATOR 1
-#define LV_PART_KNOB      2
-#define LV_PART_ITEMS     3
+typedef uint32_t lv_style_selector_t;  // a part | a state
+#define LV_PART_MAIN      0x000000
+#define LV_PART_INDICATOR 0x020000
+#define LV_PART_KNOB      0x030000
+#define LV_PART_ITEMS     0x050000
 
 #define LV_SIZE_CONTENT   (-1)
 #define LV_OPA_50         128
@@ -181,7 +199,8 @@ inline lv_base_dir_t lv_obj_get_style_base_dir(lv_obj_t* obj, int) {
     }
     return LV_BASE_DIR_LTR;
 }
-inline void lv_obj_set_style_translate_y(lv_obj_t* obj, int y, int) {
+inline void lv_obj_set_style_translate_y(lv_obj_t* obj, int y, int sel) {
+    if (mockState(obj, "translate_y", sel, y)) return;
     if (obj && obj->mock_widget) obj->mock_widget->translateY = y;
 }
 #else
@@ -205,6 +224,7 @@ typedef enum {
     LV_EVENT_PRESSING,
     LV_EVENT_CANCEL,
     LV_EVENT_DELETE,
+    LV_EVENT_REFR_EXT_DRAW_SIZE,
     LV_EVENT_ALL = 0xFF
 } lv_event_code_t;
 
@@ -287,7 +307,11 @@ inline lv_obj_t* lv_img_create(lv_obj_t* parent) { return alloc_obj("Image", par
 inline lv_obj_t* lv_keyboard_create(lv_obj_t* parent) { return alloc_obj("Keyboard", parent); }
 inline lv_obj_t* lv_bar_create(lv_obj_t* parent) { return alloc_obj("Bar", parent); }
 inline lv_obj_t* lv_arc_create(lv_obj_t* parent) { return alloc_obj("Arc", parent); }
-inline lv_obj_t* lv_checkbox_create(lv_obj_t* parent) { return alloc_obj("Checkbox", parent); }
+inline lv_obj_t* lv_checkbox_create(lv_obj_t* parent) {
+    lv_obj_t* o = alloc_obj("Checkbox", parent);
+    if (o->mock_widget) o->mock_widget->padColumn = 8;  // the theme's gap between the box and the text
+    return o;
+}
 inline lv_obj_t* lv_dropdown_create(lv_obj_t* parent) { return alloc_obj("Dropdown", parent); }
 
 // ===== List (LVGL 9.x) =====
@@ -410,11 +434,11 @@ inline void _set_onenter(lv_obj_t* obj, const char* fn) { if (obj && obj->mock_w
 inline void _set_onblur(lv_obj_t* obj, const char* fn) { if (obj && obj->mock_widget && fn) obj->mock_widget->onblur = fn; }
 inline void _set_href(lv_obj_t* obj, const char* href) { if (obj && obj->mock_widget && href) obj->mock_widget->href = href; }
 // Style capture
-inline void lv_obj_set_style_bg_color(lv_obj_t* obj, lv_color_t c, int) { if (obj && obj->mock_widget) { obj->mock_widget->bgcolor = c.full; obj->mock_widget->hasBgcolor = true; } }
-inline void lv_obj_set_style_text_color(lv_obj_t* obj, lv_color_t c, int) { if (obj && obj->mock_widget) { obj->mock_widget->color = c.full; obj->mock_widget->hasColor = true; } }
-inline void lv_obj_set_style_radius(lv_obj_t* obj, int r, int) { if (obj && obj->mock_widget) obj->mock_widget->radius = r; }
-inline void lv_obj_set_style_bg_opa(lv_obj_t* obj, int opa, int) { if (obj && obj->mock_widget) { obj->mock_widget->opacity = opa; obj->mock_widget->bgOpa = opa; } }
-inline void lv_obj_set_style_text_opa(lv_obj_t* obj, int opa, int) { if (obj && obj->mock_widget) obj->mock_widget->textOpa = opa; }
+inline void lv_obj_set_style_bg_color(lv_obj_t* obj, lv_color_t c, int sel) { if (mockState(obj, "bg_color", sel, c.full)) return; if (obj && obj->mock_widget) { obj->mock_widget->bgcolor = c.full; obj->mock_widget->hasBgcolor = true; } }
+inline void lv_obj_set_style_text_color(lv_obj_t* obj, lv_color_t c, int sel) { if (mockState(obj, "text_color", sel, c.full)) return; if (obj && obj->mock_widget) { obj->mock_widget->color = c.full; obj->mock_widget->hasColor = true; } }
+inline void lv_obj_set_style_radius(lv_obj_t* obj, int r, int sel) { if (mockState(obj, "radius", sel, r)) return; if (obj && obj->mock_widget) obj->mock_widget->radius = r; }
+inline void lv_obj_set_style_bg_opa(lv_obj_t* obj, int opa, int sel) { if (mockState(obj, "bg_opa", sel, opa)) return; if (obj && obj->mock_widget) { obj->mock_widget->opacity = opa; obj->mock_widget->bgOpa = opa; } }
+inline void lv_obj_set_style_text_opa(lv_obj_t* obj, int opa, int sel) { if (mockState(obj, "text_opa", sel, opa)) return; if (obj && obj->mock_widget) obj->mock_widget->textOpa = opa; }
 
 // Alignment capture
 inline void lv_obj_align(lv_obj_t* obj, lv_align_t align, int x_ofs, int y_ofs) {
@@ -653,6 +677,9 @@ inline void* lv_event_get_user_data(lv_event_t* e) { return e ? e->user_data : n
 inline lv_obj_t* lv_event_get_target(lv_event_t*) { return nullptr; }
 inline lv_event_code_t lv_event_get_code(lv_event_t*) { return LV_EVENT_CLICKED; }
 inline void lv_obj_add_event_cb(lv_obj_t*, lv_event_cb_t, int, void*) {}
+inline bool lv_obj_remove_event_cb(lv_obj_t*, lv_event_cb_t) { return false; }
+inline void lv_event_set_ext_draw_size(lv_event_t*, int32_t) {}
+inline void lv_obj_refresh_ext_draw_size(lv_obj_t*) {}
 inline void lv_obj_remove_event(lv_obj_t*, int) {}
 
 #ifdef LVGL_MOCK_ENABLED
@@ -708,19 +735,21 @@ inline void lv_obj_set_style_text_align(lv_obj_t*, lv_text_align_t, int) {}
 #else
 #define MOCK_SET(field, value) do { (void)obj; (void)(value); } while (0)
 #endif
-inline void lv_obj_set_style_border_width(lv_obj_t* obj, int v, int) { MOCK_SET(borderWidth, v); }
-inline void lv_obj_set_style_border_color(lv_obj_t* obj, lv_color_t c, int) { MOCK_SET(borderColor, c.full); }
-inline void lv_obj_set_style_border_opa(lv_obj_t* obj, int v, int) { MOCK_SET(borderOpa, v); }
-inline void lv_obj_set_style_border_side(lv_obj_t* obj, lv_border_side_t v, int) { MOCK_SET(borderSide, v); }
+// A style setter: a state's value goes apart (mockState), the element's own into the field
+#define MOCK_STYLE(prop, field, value) do { if (mockState(obj, prop, sel, (value))) return; MOCK_SET(field, value); } while (0)
+inline void lv_obj_set_style_border_width(lv_obj_t* obj, int v, int sel) { MOCK_STYLE("border_width", borderWidth, v); }
+inline void lv_obj_set_style_border_color(lv_obj_t* obj, lv_color_t c, int sel) { MOCK_STYLE("border_color", borderColor, c.full); }
+inline void lv_obj_set_style_border_opa(lv_obj_t* obj, int v, int sel) { MOCK_STYLE("border_opa", borderOpa, v); }
+inline void lv_obj_set_style_border_side(lv_obj_t* obj, lv_border_side_t v, int sel) { MOCK_STYLE("border_side", borderSide, v); }
 inline void lv_obj_set_style_margin_top(lv_obj_t* obj, int v, int) { MOCK_SET(marginTop, v); }
 inline void lv_obj_set_style_margin_right(lv_obj_t* obj, int v, int) { MOCK_SET(marginRight, v); }
 inline void lv_obj_set_style_margin_bottom(lv_obj_t* obj, int v, int) { MOCK_SET(marginBottom, v); }
 inline void lv_obj_set_style_margin_left(lv_obj_t* obj, int v, int) { MOCK_SET(marginLeft, v); }
-inline void lv_obj_set_style_outline_opa(lv_obj_t* obj, int v, int) { MOCK_SET(outlineOpa, v); }
-inline void lv_obj_set_style_outline_pad(lv_obj_t* obj, int v, int) { MOCK_SET(outlinePad, v); }
-inline void lv_obj_set_style_shadow_offset_x(lv_obj_t* obj, int v, int) { MOCK_SET(shadowX, v); }
-inline void lv_obj_set_style_shadow_offset_y(lv_obj_t* obj, int v, int) { MOCK_SET(shadowY, v); }
-inline void lv_obj_set_style_shadow_spread(lv_obj_t* obj, int v, int) { MOCK_SET(shadowSpread, v); }
+inline void lv_obj_set_style_outline_opa(lv_obj_t* obj, int v, int sel) { MOCK_STYLE("outline_opa", outlineOpa, v); }
+inline void lv_obj_set_style_outline_pad(lv_obj_t* obj, int v, int sel) { MOCK_STYLE("outline_pad", outlinePad, v); }
+inline void lv_obj_set_style_shadow_offset_x(lv_obj_t* obj, int v, int sel) { MOCK_STYLE("shadow_offset_x", shadowX, v); }
+inline void lv_obj_set_style_shadow_offset_y(lv_obj_t* obj, int v, int sel) { MOCK_STYLE("shadow_offset_y", shadowY, v); }
+inline void lv_obj_set_style_shadow_spread(lv_obj_t* obj, int v, int sel) { MOCK_STYLE("shadow_spread", shadowSpread, v); }
 inline void lv_obj_set_style_bg_grad_color(lv_obj_t* obj, lv_color_t c, int) { MOCK_SET(gradColor, c.full); }
 inline void lv_obj_set_style_bg_grad_dir(lv_obj_t* obj, lv_grad_dir_t v, int) { MOCK_SET(gradDir, static_cast<int>(v)); }
 inline void lv_obj_set_style_bg_main_stop(lv_obj_t* obj, int v, int) { MOCK_SET(mainStop, v); }
@@ -752,10 +781,54 @@ inline lv_flex_align_t lv_obj_get_style_flex_cross_place(lv_obj_t* obj, int) { r
 inline lv_flex_align_t lv_obj_get_style_flex_track_place(lv_obj_t* obj, int) { return static_cast<lv_flex_align_t>(MOCK_GET(flexTrackAlign, 0)); }
 inline int lv_obj_get_style_width(lv_obj_t* obj, int) { return MOCK_GET(w, 0); }
 inline int lv_obj_get_style_height(lv_obj_t* obj, int) { return MOCK_GET(h, 0); }
-inline void lv_obj_set_style_translate_x(lv_obj_t* obj, int v, int) { MOCK_SET(translateX, v); }
-inline void lv_obj_set_style_text_decor(lv_obj_t* obj, lv_text_decor_t v, int) { MOCK_SET(textDecor, static_cast<int>(v)); }
-inline void lv_obj_set_style_text_letter_space(lv_obj_t* obj, int v, int) { MOCK_SET(letterSpace, v); }
-inline void lv_obj_set_style_text_line_space(lv_obj_t* obj, int v, int) { MOCK_SET(lineSpace, v); }
+inline void lv_obj_set_style_translate_x(lv_obj_t* obj, int v, int sel) { MOCK_STYLE("translate_x", translateX, v); }
+inline void lv_obj_set_style_text_decor(lv_obj_t* obj, lv_text_decor_t v, int sel) { MOCK_STYLE("text_decor", textDecor, static_cast<int>(v)); }
+inline void lv_obj_set_style_transform_scale_x(lv_obj_t* obj, int v, int sel) { MOCK_STYLE("transform_scale_x", scaleX, v); }
+inline void lv_obj_set_style_transform_scale_y(lv_obj_t* obj, int v, int sel) { MOCK_STYLE("transform_scale_y", scaleY, v); }
+inline void lv_obj_set_style_transform_rotation(lv_obj_t* obj, int v, int sel) { MOCK_STYLE("transform_rotation", rotation, v); }
+inline void lv_obj_set_style_transform_pivot_x(lv_obj_t* obj, int v, int sel) { MOCK_STYLE("transform_pivot_x", pivotX, v); }
+inline void lv_obj_set_style_transform_pivot_y(lv_obj_t* obj, int v, int sel) { MOCK_STYLE("transform_pivot_y", pivotY, v); }
+
+// Style transitions
+typedef uint8_t lv_style_prop_t;
+enum {
+    LV_STYLE_PROP_INV = 0,
+    LV_STYLE_WIDTH, LV_STYLE_HEIGHT, LV_STYLE_TRANSLATE_X, LV_STYLE_TRANSLATE_Y,
+    LV_STYLE_TRANSFORM_SCALE_X, LV_STYLE_TRANSFORM_SCALE_Y, LV_STYLE_TRANSFORM_ROTATION,
+    LV_STYLE_BG_COLOR, LV_STYLE_BG_OPA, LV_STYLE_BG_GRAD_COLOR,
+    LV_STYLE_BORDER_COLOR, LV_STYLE_BORDER_OPA, LV_STYLE_BORDER_WIDTH,
+    LV_STYLE_OUTLINE_WIDTH, LV_STYLE_OUTLINE_COLOR, LV_STYLE_OUTLINE_OPA,
+    LV_STYLE_SHADOW_WIDTH, LV_STYLE_SHADOW_OFFSET_X, LV_STYLE_SHADOW_OFFSET_Y, LV_STYLE_SHADOW_SPREAD,
+    LV_STYLE_SHADOW_COLOR, LV_STYLE_SHADOW_OPA,
+    LV_STYLE_TEXT_COLOR, LV_STYLE_TEXT_OPA, LV_STYLE_OPA, LV_STYLE_RADIUS
+};
+typedef struct {
+    const lv_style_prop_t* props;
+    void* user_data;
+    lv_anim_path_cb_t path_xcb;
+    uint32_t time;
+    uint32_t delay;
+} lv_style_transition_dsc_t;
+inline void lv_style_transition_dsc_init(lv_style_transition_dsc_t* tr, const lv_style_prop_t props[],
+                                         lv_anim_path_cb_t path_cb, uint32_t time, uint32_t delay, void* user_data) {
+    tr->props = props;
+    tr->path_xcb = path_cb;
+    tr->time = time;
+    tr->delay = delay;
+    tr->user_data = user_data;
+}
+inline void lv_obj_set_style_transition(lv_obj_t* obj, const lv_style_transition_dsc_t* dsc, int sel) {
+#ifdef LVGL_MOCK_ENABLED
+    if (!obj || !obj->mock_widget || !dsc) return;
+    int n = 0;
+    while (dsc->props && dsc->props[n] != LV_STYLE_PROP_INV) ++n;
+    obj->mock_widget->transitions.push_back({sel, static_cast<int>(dsc->time), static_cast<int>(dsc->delay), n});
+#else
+    (void)obj; (void)dsc; (void)sel;
+#endif
+}
+inline void lv_obj_set_style_text_letter_space(lv_obj_t* obj, int v, int sel) { MOCK_STYLE("text_letter_space", letterSpace, v); }
+inline void lv_obj_set_style_text_line_space(lv_obj_t* obj, int v, int sel) { MOCK_STYLE("text_line_space", lineSpace, v); }
 
 // The text color an object has: its own or its parent's
 inline lv_color_t lv_obj_get_style_text_color(lv_obj_t* obj, int) {
@@ -790,13 +863,14 @@ inline void lv_obj_set_style_pad_column(lv_obj_t*, int, int) {}
 #ifndef lv_obj_set_style_pad_row
 inline void lv_obj_set_style_pad_row(lv_obj_t*, int, int) {}
 #endif
-inline void lv_obj_set_style_shadow_width(lv_obj_t* obj, int v, int) { MOCK_SET(shadowWidth, v); }
-inline void lv_obj_set_style_shadow_color(lv_obj_t* obj, lv_color_t c, int) { MOCK_SET(shadowColor, c.full); }
-inline void lv_obj_set_style_shadow_opa(lv_obj_t* obj, int v, int) { MOCK_SET(shadowOpa, v); }
-inline void lv_obj_set_style_outline_width(lv_obj_t* obj, int v, int) { MOCK_SET(outlineWidth, v); }
-inline void lv_obj_set_style_outline_color(lv_obj_t* obj, lv_color_t c, int) { MOCK_SET(outlineColor, c.full); }
+inline void lv_obj_set_style_shadow_width(lv_obj_t* obj, int v, int sel) { MOCK_STYLE("shadow_width", shadowWidth, v); }
+inline void lv_obj_set_style_shadow_color(lv_obj_t* obj, lv_color_t c, int sel) { MOCK_STYLE("shadow_color", shadowColor, c.full); }
+inline void lv_obj_set_style_shadow_opa(lv_obj_t* obj, int v, int sel) { MOCK_STYLE("shadow_opa", shadowOpa, v); }
+inline void lv_obj_set_style_outline_width(lv_obj_t* obj, int v, int sel) { MOCK_STYLE("outline_width", outlineWidth, v); }
+inline void lv_obj_set_style_outline_color(lv_obj_t* obj, lv_color_t c, int sel) { MOCK_STYLE("outline_color", outlineColor, c.full); }
 inline int lv_obj_get_style_pad_left(lv_obj_t* obj, int) { return (obj && obj->mock_widget) ? obj->mock_widget->padLeft : 0; }
 inline int lv_obj_get_style_pad_right(lv_obj_t* obj, int) { return (obj && obj->mock_widget) ? obj->mock_widget->padRight : 0; }
+inline int lv_obj_get_style_pad_column(lv_obj_t* obj, int) { return (obj && obj->mock_widget) ? obj->mock_widget->padColumn : 0; }
 inline const lv_font_t* lv_obj_get_style_text_font(lv_obj_t*, int) { return nullptr; }
 
 // Label
@@ -1090,7 +1164,8 @@ inline int lv_obj_get_style_pad_top(lv_obj_t* obj, int) { return (obj && obj->mo
 
 // lv_timer_handler alias
 inline uint32_t lv_timer_handler() { return 0; }
-inline void lv_obj_set_style_opa(lv_obj_t* obj, int opa, int) {
+inline void lv_obj_set_style_opa(lv_obj_t* obj, int opa, int sel) {
+    if (mockState(obj, "opa", sel, opa)) return;
 #ifdef LVGL_MOCK_ENABLED
     if (obj && obj->mock_widget) obj->mock_widget->opacity = opa;
 #endif
