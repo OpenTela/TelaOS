@@ -711,7 +711,9 @@ P::String applyGlobal(const TagRef& t, lv_obj_t* o, const char* tplText = nullpt
     P::String cls = attr(t, "class");
     P::String style = attr(t, "style");
     P::String vis = attr(t, "visible");
-    Widget{o}.applyCss(t.name, id.c_str(), cls.c_str(), rawAttrs(t), style);  // style sheets, then style=""
+    if (t.name[0] != '#') {  // a run of text ("#text") is not an element: no selector reaches it, not even *
+        Widget{o}.applyCss(t.name, id.c_str(), cls.c_str(), rawAttrs(t), style);  // style sheets, then style=""
+    }
     applyDir(o, attr(t, "dir").c_str());
     if (has(t, "hidden")) lv_obj_add_flag(o, LV_OBJ_FLAG_HIDDEN);
     if (!is(t.name, "a")) makeClickable(o, "", attr(t, "onclick"));

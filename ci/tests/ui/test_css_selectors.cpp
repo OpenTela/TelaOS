@@ -1,6 +1,6 @@
 /**
  * Test: CSS selectors and cascade — lists (h1, h2), descendant and child combinators, *,
- * attribute selectors, the page as an ancestor, specificity, !important and style="".
+ * attribute selectors, the page as an ancestor, specificity, !important and style="", a run of text.
  * The simple selectors and their old cascade are in test_css.cpp. See docs/CSS.md.
  */
 #include <cstdio>
@@ -40,7 +40,12 @@ static const char* APP = R"HTML(
     .nocolon { stray; color: #246801; }
     .imp { color: #345678 !important; }
     #inl { color: #FF0000; }
+    #runp { color: #0D0D0D; }
+    #runp * { color: #FF0000; }
   </style>
+  <state>
+    <int name="n" default="7"/>
+  </state>
   <ui default="/main">
     <page id="main">
       <h1 id="h1">One</h1>
@@ -67,6 +72,7 @@ static const char* APP = R"HTML(
       <p class="imp" id="imp" style="color: #FF0000">sheet !important</p>
       <p id="inl" style="color: #456789">inline</p>
       <p id="inlimp" class="must" style="color: #567890 !important">inline !important</p>
+      <p id="runp">n {n} <a href="/x">a</a> <a href="/y">b</a></p>
     </page>
     <page id="other">
       <p class="big" id="big2">big on other</p>
@@ -149,6 +155,14 @@ int main() {
     expectColor("!important in a sheet beats style=\"\"", byId("imp"), 0x345678);
     expectColor("style=\"... !important\" beats !important in a sheet", byId("inlimp"), 0x567890);
     expectTrue("display: none from a style sheet", byId("gone") && byId("gone")->hidden);
+    {  // a run of text is not an element: #runp * styles the links, not the live word {n}
+        const MW* plain = word(byId("runp"), "n ");
+        const MW* live = word(byId("runp"), "7 ");
+        expectTrue("#runp *: a live word has its paragraph's color, as the word before it",
+                   plain && live && live->hasColor == plain->hasColor && live->color == plain->color,
+                   live ? ("color " + (live->hasColor ? hex(live->color) : std::string("not set"))).c_str() : "no widget");
+    }
+    expectColor("#runp *: a link inside is an element", word(byId("runp"), "a"), 0xFF0000);
 
     printf("\nParsing:\n");
     expectColor("comments between rules and inside a block", byId("commented"), 0x123456);
