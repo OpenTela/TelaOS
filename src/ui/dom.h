@@ -6,7 +6,8 @@
  * of elements is recorded on the way. An element is entered and left while its content is built
  * (UI::CssScope), and it gets its object when it is styled (Widget::applyCss). It keeps its
  * attributes as they are written: reading one decodes it, writing one also does on the screen
- * what the attribute does in the markup (hidden, disabled, checked, value...).
+ * what the attribute does in the markup (hidden, disabled, checked, value...). When a class, an id
+ * or another attribute a selector looks at changes, CSS is applied again (classList).
  *
  * An element is a handle. A new build (the next app) makes new handles: the old ones find nothing.
  */
@@ -17,6 +18,9 @@
 #include <string_view>
 
 namespace UI {
+
+class CssUndo;
+
 namespace Dom {
 
 using Node = uint32_t;  // an element; 0: none
@@ -30,8 +34,12 @@ void clear();  // the app is gone: its elements too
 bool enter(std::string_view tag, std::string_view attrs);  // an element's content starts (false: not recorded)
 void leave();                                              // ...and ends (after an enter that was)
 // An element got its object. The same attributes (the same place in the text) tell that it is
-// the element just entered or left, not a new one
-void element(lv_obj_t* obj, std::string_view tag, std::string_view attrs);
+// the element just entered or left, not a new one. styled: CSS is applied to it now (with its
+// style="" if inlineStyle), and keep() takes what it changed. false: not recorded
+bool element(lv_obj_t* obj, std::string_view tag, std::string_view attrs, bool styled = false,
+             bool inlineStyle = false);
+// What CSS changed on the element just styled: put back when its rules change
+void keep(CssUndo&& undo);
 
 // The content of obj's element was replaced by text (ui.setText, textContent): the elements in it
 // are gone, with their objects
@@ -66,6 +74,14 @@ bool getAttribute(Node n, std::string_view name, P::String& value);  // false: i
 bool hasAttribute(Node n, std::string_view name);
 bool setAttribute(Node n, std::string_view name, std::string_view value);  // false: not an attribute name
 void removeAttribute(Node n, std::string_view name);
+
+// classList: the words of class="", CSS applied again after a change. false: a name is empty or
+// has a space in it
+bool hasClass(Node n, std::string_view name);
+bool addClasses(Node n, const P::Array<std::string_view>& names);
+bool removeClasses(Node n, const P::Array<std::string_view>& names);
+bool toggleClass(Node n, std::string_view name, int force, bool& now);  // force: -1 either way, 0 off, 1 on
+P::String className(Node n);
 
 }  // namespace Dom
 }  // namespace UI

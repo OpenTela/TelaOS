@@ -123,6 +123,7 @@ extern const lv_font_t lv_font_montserrat_16;
 #define LV_OBJ_FLAG_OVERFLOW_VISIBLE (1 << 20)
 #define LV_OBJ_FLAG_IGNORE_LAYOUT    (1 << 17)
 #define LV_OBJ_FLAG_FLOATING         (1 << 21)
+typedef uint32_t lv_obj_flag_t;
 
 typedef uint8_t lv_border_side_t;
 #define LV_BORDER_SIDE_NONE     0x00
@@ -387,7 +388,25 @@ inline void lv_obj_clean(lv_obj_t* obj) {
     if (obj && obj->mock_widget) obj->mock_widget->children.clear();
 }
 inline void lv_obj_invalidate(lv_obj_t*) {}
-inline bool lv_obj_has_flag(lv_obj_t*, int) { return false; }
+// The flags the mock keeps (the rest read as off)
+inline bool lv_obj_has_flag(lv_obj_t* obj, int flag) {
+#ifdef LVGL_MOCK_ENABLED
+    if (!obj || !obj->mock_widget) return false;
+    const LvglMock::Widget* w = obj->mock_widget;
+    switch (flag) {
+        case LV_OBJ_FLAG_HIDDEN: return w->hidden;
+        case LV_OBJ_FLAG_SCROLLABLE: return w->scrollable;
+        case LV_OBJ_FLAG_OVERFLOW_VISIBLE: return w->overflowVisible;
+        case LV_OBJ_FLAG_IGNORE_LAYOUT: return w->ignoreLayout;
+        case LV_OBJ_FLAG_FLOATING: return w->floating;
+        case LV_OBJ_FLAG_CLICKABLE: return w->clickable;
+        default: return false;
+    }
+#else
+    (void)obj; (void)flag;
+    return false;
+#endif
+}
 inline bool lv_obj_has_state(lv_obj_t*, int) { return false; }
 
 #ifdef LVGL_MOCK_ENABLED
@@ -808,7 +827,9 @@ enum {
     LV_STYLE_OUTLINE_WIDTH, LV_STYLE_OUTLINE_COLOR, LV_STYLE_OUTLINE_OPA,
     LV_STYLE_SHADOW_WIDTH, LV_STYLE_SHADOW_OFFSET_X, LV_STYLE_SHADOW_OFFSET_Y, LV_STYLE_SHADOW_SPREAD,
     LV_STYLE_SHADOW_COLOR, LV_STYLE_SHADOW_OPA,
-    LV_STYLE_TEXT_COLOR, LV_STYLE_TEXT_OPA, LV_STYLE_OPA, LV_STYLE_RADIUS
+    LV_STYLE_TEXT_COLOR, LV_STYLE_TEXT_OPA, LV_STYLE_OPA, LV_STYLE_RADIUS,
+    LV_STYLE_BORDER_SIDE, LV_STYLE_TEXT_DECOR, LV_STYLE_TEXT_LETTER_SPACE,
+    LV_STYLE_LAST_BUILT_IN_PROP = LV_STYLE_TEXT_LETTER_SPACE
 };
 typedef struct {
     const lv_style_prop_t* props;
@@ -884,6 +905,147 @@ inline const lv_font_t* lv_obj_get_style_text_font(lv_obj_t*, int) { return null
 // Label
 inline void lv_label_set_text_fmt(lv_obj_t*, const char*, ...) {}
 inline void lv_label_set_long_mode(lv_obj_t* obj, lv_label_long_mode_t m) { MOCK_SET(longMode, static_cast<int>(m)); }
+inline lv_label_long_mode_t lv_label_get_long_mode(lv_obj_t* obj) {
+#ifdef LVGL_MOCK_ENABLED
+    if (obj && obj->mock_widget && obj->mock_widget->longMode >= 0) return static_cast<lv_label_long_mode_t>(obj->mock_widget->longMode);
+#endif
+    (void)obj;
+    return LV_LABEL_LONG_WRAP;
+}
+inline lv_dir_t lv_obj_get_scroll_dir(lv_obj_t* obj) {
+#ifdef LVGL_MOCK_ENABLED
+    if (obj && obj->mock_widget && obj->mock_widget->scrollDir >= 0) return static_cast<lv_dir_t>(obj->mock_widget->scrollDir);
+#endif
+    (void)obj;
+    return LV_DIR_ALL;
+}
+
+// ===== Local style properties by number (CSS undoes what it set: css_undo.cpp) =====
+// The mock keeps a few of them, in its fields; a state's or a part's go to stateStyles
+typedef union {
+    int32_t num;
+    const void* ptr;
+    lv_color_t color;
+} lv_style_value_t;
+typedef enum { LV_STYLE_RES_NOT_FOUND, LV_STYLE_RES_FOUND } lv_style_res_t;
+
+inline const char* mockPropName(lv_style_prop_t prop) {
+    switch (prop) {
+        case LV_STYLE_TEXT_COLOR: return "text_color";
+        case LV_STYLE_TEXT_OPA: return "text_opa";
+        case LV_STYLE_BG_COLOR: return "bg_color";
+        case LV_STYLE_BG_OPA: return "bg_opa";
+        case LV_STYLE_BORDER_WIDTH: return "border_width";
+        case LV_STYLE_BORDER_COLOR: return "border_color";
+        case LV_STYLE_BORDER_OPA: return "border_opa";
+        case LV_STYLE_BORDER_SIDE: return "border_side";
+        case LV_STYLE_RADIUS: return "radius";
+        case LV_STYLE_TEXT_DECOR: return "text_decor";
+        case LV_STYLE_TEXT_LETTER_SPACE: return "text_letter_space";
+        default: return nullptr;
+    }
+}
+inline bool mockIsColor(lv_style_prop_t prop) {
+    return prop == LV_STYLE_TEXT_COLOR || prop == LV_STYLE_BG_COLOR || prop == LV_STYLE_BORDER_COLOR;
+}
+
+#ifdef LVGL_MOCK_ENABLED
+// The field of a property of the element as it is, and the value it has when nothing set it
+inline int* mockField(LvglMock::Widget* w, lv_style_prop_t prop, int& unset) {
+    switch (prop) {
+        case LV_STYLE_TEXT_OPA: unset = 255; return &w->textOpa;
+        case LV_STYLE_BG_OPA: unset = -1; return &w->bgOpa;
+        case LV_STYLE_BORDER_WIDTH: unset = 0; return &w->borderWidth;
+        case LV_STYLE_BORDER_OPA: unset = 255; return &w->borderOpa;
+        case LV_STYLE_BORDER_SIDE: unset = -1; return &w->borderSide;
+        case LV_STYLE_RADIUS: unset = 0; return &w->radius;
+        case LV_STYLE_TEXT_DECOR: unset = -1; return &w->textDecor;
+        case LV_STYLE_TEXT_LETTER_SPACE: unset = 0; return &w->letterSpace;
+        default: return nullptr;
+    }
+}
+#endif
+
+inline lv_style_res_t lv_obj_get_local_style_prop(lv_obj_t* obj, lv_style_prop_t prop, lv_style_value_t* v,
+                                                  lv_style_selector_t sel) {
+#ifdef LVGL_MOCK_ENABLED
+    if (!obj || !obj->mock_widget || !v) return LV_STYLE_RES_NOT_FOUND;
+    LvglMock::Widget* w = obj->mock_widget;
+    *v = lv_style_value_t{};
+    long long value = 0;
+    if (sel != LV_PART_MAIN) {
+        const char* name = mockPropName(prop);
+        const LvglMock::Widget::StateStyle* st = name ? w->stateStyle(name, static_cast<int>(sel)) : nullptr;
+        if (!st) return LV_STYLE_RES_NOT_FOUND;
+        value = st->value;
+    } else if (prop == LV_STYLE_TEXT_COLOR || prop == LV_STYLE_BG_COLOR) {
+        const bool set = prop == LV_STYLE_TEXT_COLOR ? w->hasColor : w->hasBgcolor;
+        if (!set) return LV_STYLE_RES_NOT_FOUND;
+        value = prop == LV_STYLE_TEXT_COLOR ? w->color : w->bgcolor;
+    } else if (prop == LV_STYLE_BORDER_COLOR) {
+        if (!w->borderColor) return LV_STYLE_RES_NOT_FOUND;
+        value = w->borderColor;
+    } else {
+        int unset = 0;
+        const int* f = mockField(w, prop, unset);
+        if (!f || *f == unset) return LV_STYLE_RES_NOT_FOUND;
+        value = *f;
+    }
+    if (mockIsColor(prop)) v->color.full = static_cast<uint32_t>(value);
+    else v->num = static_cast<int32_t>(value);
+    return LV_STYLE_RES_FOUND;
+#else
+    (void)obj; (void)prop; (void)v; (void)sel;
+    return LV_STYLE_RES_NOT_FOUND;
+#endif
+}
+
+inline bool lv_obj_remove_local_style_prop(lv_obj_t* obj, lv_style_prop_t prop, lv_style_selector_t sel) {
+#ifdef LVGL_MOCK_ENABLED
+    if (!obj || !obj->mock_widget) return false;
+    LvglMock::Widget* w = obj->mock_widget;
+    if (sel != LV_PART_MAIN) {
+        const char* name = mockPropName(prop);
+        if (!name) return false;
+        auto& ss = w->stateStyles;
+        const auto n = ss.size();
+        ss.erase(std::remove_if(ss.begin(), ss.end(),
+                                [&](const LvglMock::Widget::StateStyle& x) { return x.prop == name && x.selector == static_cast<int>(sel); }),
+                 ss.end());
+        return ss.size() != n;
+    }
+    if (prop == LV_STYLE_TEXT_COLOR) { w->hasColor = false; w->color = 0; return true; }
+    if (prop == LV_STYLE_BG_COLOR) { w->hasBgcolor = false; w->bgcolor = 0; return true; }
+    if (prop == LV_STYLE_BORDER_COLOR) { w->borderColor = 0; return true; }
+    int unset = 0;
+    int* f = mockField(w, prop, unset);
+    if (!f) return false;
+    *f = unset;
+    return true;
+#else
+    (void)obj; (void)prop; (void)sel;
+    return false;
+#endif
+}
+
+inline void lv_obj_set_local_style_prop(lv_obj_t* obj, lv_style_prop_t prop, lv_style_value_t v, lv_style_selector_t sel) {
+#ifdef LVGL_MOCK_ENABLED
+    if (!obj || !obj->mock_widget) return;
+    LvglMock::Widget* w = obj->mock_widget;
+    const long long value = mockIsColor(prop) ? static_cast<long long>(v.color.full) : static_cast<long long>(v.num);
+    if (sel != LV_PART_MAIN) {
+        if (const char* name = mockPropName(prop)) w->stateStyles.push_back({name, static_cast<int>(sel), value});
+        return;
+    }
+    if (prop == LV_STYLE_TEXT_COLOR) { w->hasColor = true; w->color = static_cast<uint32_t>(value); return; }
+    if (prop == LV_STYLE_BG_COLOR) { w->hasBgcolor = true; w->bgcolor = static_cast<uint32_t>(value); return; }
+    if (prop == LV_STYLE_BORDER_COLOR) { w->borderColor = static_cast<uint32_t>(value); return; }
+    int unset = 0;
+    if (int* f = mockField(w, prop, unset)) *f = static_cast<int>(value);
+#else
+    (void)obj; (void)prop; (void)v; (void)sel;
+#endif
+}
 inline const char* lv_label_get_text(lv_obj_t* obj) {
 #ifdef LVGL_MOCK_ENABLED
     if (obj && obj->mock_widget) return obj->mock_widget->text.c_str();
@@ -1117,6 +1279,13 @@ inline void lv_obj_set_ext_click_area(lv_obj_t*, int) {}
 #define LV_SCROLLBAR_MODE_ACTIVE 1
 #define LV_SCROLLBAR_MODE_ON 2
 #define LV_SCROLLBAR_MODE_AUTO 3
+inline int lv_obj_get_scrollbar_mode(lv_obj_t* obj) {
+#ifdef LVGL_MOCK_ENABLED
+    if (obj && obj->mock_widget && obj->mock_widget->scrollbarMode >= 0) return obj->mock_widget->scrollbarMode;
+#endif
+    (void)obj;
+    return LV_SCROLLBAR_MODE_AUTO;
+}
 inline void lv_obj_move_foreground(lv_obj_t* obj) {
 #ifdef LVGL_MOCK_ENABLED
     auto* w = obj ? obj->mock_widget : nullptr;

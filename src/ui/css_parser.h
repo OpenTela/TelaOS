@@ -31,6 +31,8 @@ struct Widget;
 
 namespace UI {
 
+class CssUndo;
+
 // An element as a selector sees it. Views into the page text (or the caller's strings): valid
 // while the element is being built.
 struct CssElement {
@@ -47,10 +49,19 @@ struct CssElement {
 // is built, so an element never is its own ancestor. content is the text its children are built
 // from: an element's place among them (li:first-child, h2 + p) is read there, found by where
 // its attributes are in that text.
+// An element child of a scope's element, as places and siblings read it (li:first-child, h2 + p)
+struct CssChild {
+    std::string_view tag;    // lower-case
+    std::string_view attrs;  // its attribute text: where it is tells it from the others
+};
+
 class CssScope {
 public:
     // id and class come from attrs
     CssScope(std::string_view tag, std::string_view attrs, std::string_view content = {});
+    // The same, its children given instead of read from its content: an element built earlier,
+    // whose text is gone (UI::Dom applies CSS again when a script changes a class)
+    CssScope(std::string_view tag, std::string_view attrs, const P::Array<CssChild>& children);
     ~CssScope();
     CssScope(const CssScope&) = delete;
     CssScope& operator=(const CssScope&) = delete;
@@ -172,8 +183,13 @@ public:
     // The custom properties (--x) el declares, in its style="" too: what its content inherits
     P::Array<CssDecl> customProperties(const CssElement& el) const;
 
-    // The cascade put on a widget
-    void applyMatching(Widget& w, const CssElement& el, std::string_view inlineStyle = {}) const;
+    // A selector of the sheets looks at attribute `name` (class and id too): changing it may
+    // change what applies
+    bool looksAt(std::string_view name) const;
+
+    // The cascade put on a widget; undo: keeps what it changed (css_undo.h)
+    void applyMatching(Widget& w, const CssElement& el, std::string_view inlineStyle = {},
+                       CssUndo* undo = nullptr) const;
     // The same for an element known by tag, id and class only
     void applyMatching(Widget& w, const char* tag, const char* id, const char* classNames) const;
 

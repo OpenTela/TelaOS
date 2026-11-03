@@ -1,4 +1,4 @@
-# DOM v0.1
+# DOM v0.2
 
 DOM в TelaOS: элементы приложения для его скрипта на Lua — так, как браузер даёт их JavaScript.
 Браузер без JS — всё остальное должно быть: HTML (`docs/HTML_TAGS.md`), CSS (`docs/CSS.md`)
@@ -6,6 +6,10 @@ DOM в TelaOS: элементы приложения для его скрипт�
 
 ## Changelog
 
+- **v0.2**: `classList`: `add`, `remove`, `toggle`, `contains`; к ним `el.className`. Смена класса,
+  `id` или атрибута, на который смотрит селектор, применяет CSS заново — к элементу, к тому, что
+  в нём, и к соседям после него. Свойства правил, которые перестали подходить, возвращаются
+  к тому, что было до них.
 - **v0.1**: Дерево элементов и первые методы: `document.getElementById`, `textContent`,
   `getAttribute`, `setAttribute`, `removeAttribute`; к ним `hasAttribute`, `id`, `tagName`.
   `setAttribute` делает то, что атрибут делает в разметке: `hidden`, `disabled`, `checked`, `value`…
@@ -39,7 +43,7 @@ if title:hasAttribute("hidden") then title:removeAttribute("hidden") end
 - Новое приложение — новое дерево: элемент прежнего ничего не находит (`textContent` пуст,
   `getAttribute` — `nil`).
 
-## Работает: 5 из 20
+## Работает: 9 из 20
 
 Знаки: ✅ работает, — нет.
 
@@ -60,10 +64,13 @@ if title:hasAttribute("hidden") then title:removeAttribute("hidden") end
 
 | | Что | Как |
 |---|-----|-----|
-| — | `classList.add()` | |
-| — | `classList.remove()` | |
-| — | `classList.toggle()` | |
-| — | `classList.contains()` | |
+| ✅ | `classList.add()` | одно имя или несколько: `el.classList:add("a", "b")` |
+| ✅ | `classList.remove()` | одно или несколько |
+| ✅ | `classList.toggle()` | `toggle(name)` — наоборот, `toggle(name, true\|false)` — включить или снять; возвращает, есть ли класс теперь |
+| ✅ | `classList.contains()` | |
+
+Методы `classList` — через двоеточие, как у элемента. Имя с пробелом или пустое — ошибка.
+Сверх списка: `el.className` (чтение и запись), `tostring(el.classList)`.
 
 ### Поиск по селекторам (2)
 
@@ -108,7 +115,8 @@ if title:hasAttribute("hidden") then title:removeAttribute("hidden") end
 | `open` у `<dialog>` | показывает диалог, снятый — прячет |
 | `id` | `getElementById` и `ui.*` находят элемент по новому |
 | `bgcolor`, `color`, `visible`, `x`, `y`, `w`, `h`, `z-index` | как `ui.setAttr()` |
-| остальные: `class`, `style`, `title`, `data-*`… | хранятся: `getAttribute` вернёт их. `class` и `style` заработают с `classList` и `style` |
+| `class` | CSS применяется заново (ниже) |
+| остальные: `style`, `title`, `data-*`… | хранятся: `getAttribute` вернёт их. Если на атрибут смотрит селектор (`[data-tone]`), CSS применяется заново |
 
 - Логический атрибут (`hidden`, `disabled`, `checked`, `open`) включён при любом значении, кроме
   `false` и `0` — как в разметке TelaOS: `setAttribute("hidden", "")` прячет,
@@ -116,6 +124,19 @@ if title:hasAttribute("hidden") then title:removeAttribute("hidden") end
 - `checked` и `value` из скрипта не вызывают `onchange` и не пишут в `bind=`: браузер тоже не
   шлёт событий, когда поле меняет скрипт.
 - Снятый атрибут TelaOS (`bgcolor`, `x`…) не возвращает прежний вид: остаётся последний.
+
+## Классы и CSS
+
+- Смена класса, `id` или атрибута, на который смотрит селектор (`[data-tone="hot"]`), применяет
+  CSS заново: к самому элементу, к тому, что в нём (`.dark p`), и к соседям после него
+  (`.lead + p`, `.a ~ li`). Места среди соседей (`li:first-child`) считаются по дереву.
+- Свойства правил, которые перестали подходить, возвращаются к тому, что было до них: цвет из
+  `color=`, вид элемента HTML, тема LVGL. Снятый `.hide { display: none }` снова показывает элемент —
+  если у него нет `hidden`.
+- Что после CSS поставили атрибут TelaOS, привязка или скрипт (`ui.setAttr`, `bgcolor="{c}"`),
+  остаётся: CSS его больше не трогает.
+- `class="{var}"`: `classList` видит слова, как они подставлены сейчас. После первой правки
+  класс — скрипта: `{var}` его больше не меняет.
 
 ## textContent
 
@@ -138,10 +159,19 @@ if title:hasAttribute("hidden") then title:removeAttribute("hidden") end
 - `getAttribute` — как в разметке: у `class="{theme}"` вернёт `{theme}`, без подстановки.
 - Текущие значения полей (`el.value`, `el.checked`) — пока нет: только атрибуты.
 - Строки `<list>` — не элементы: их строят данные, а не разметка.
+- CSS применяется заново только к тому, к чему его применило построение страницы: строчный
+  элемент в тексте свой вид не меняет (он — часть текста абзаца), а картинки, страницы и вкладки
+  CSS не берут и так.
+- Свойство, которое прежние правила не трогали, новое правило ставит и поверх атрибута TelaOS:
+  `bgcolor=` у кнопки без фона в CSS уступит классу с `background`.
+- `z-index` из класса заново не применяется.
 
 ## Тесты
 
 - `ci/tests/lua/test_lua_dom.cpp` — каждый вид элемента, что строят страницы, находится
   и читается; запись атрибутов и текста; элементы прежнего приложения.
+- `ci/tests/lua/test_lua_classlist.cpp` — `classList`; CSS заново: что возвращается, внутри,
+  соседи, место, `id` и атрибуты, что остаётся за скриптом.
 - Робот `sim/tests/tela_dom.sim` на `sim/tests/fixtures/apps/dom_tags` — то же на настоящем LVGL:
-  абзац из спанов, `{count}` после записи, блок, из которого ушла строка с `{count}`.
+  абзац из спанов, `{count}` после записи, блок, из которого ушла строка с `{count}`; страница
+  classes — классы прячут и показывают то, что внутри, соседа и первый пункт.

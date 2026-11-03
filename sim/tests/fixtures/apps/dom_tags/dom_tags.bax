@@ -1,13 +1,21 @@
 <app os="1.0" title="DOM" version="0.1" category="test">
   <!--
     Test fixture for the DOM in TelaOS (docs/DOM.md): document.getElementById, textContent,
-    getAttribute, setAttribute, removeAttribute. Flashed by the simulator with --extra-data;
-    driven by tests/tela_dom.sim. The script runs when the app starts: a line "read: ..." shows
-    what it read, the others show what it wrote.
+    getAttribute, setAttribute, removeAttribute (page "main"); classList (page "classes").
+    Flashed by the simulator with --extra-data; driven by tests/tela_dom.sim. The script runs
+    when the app starts: a line "read: ..." shows what it read, the others show what it wrote.
   -->
+  <style>
+    .on { color: #FFD54F; }
+    .boxed { border: 2px solid #4FC3F7; }
+    .collapsed .body { display: none; }
+    .lead + p { display: none; }
+    .short li:first-child { display: none; }
+  </style>
   <ui default="/main">
     <page id="main">
       <h2>DOM</h2>
+      <p id="toClasses"><a href="/classes">classList</a></p>
       <p id="fmt">Hello <b>bold</b> world</p>
       <p id="readFmt">-</p>
       <label id="rich">Name <i>(optional)</i></label>
@@ -25,6 +33,17 @@
       <button id="btn" onclick="tap">Tap</button>
       <p id="readTap">-</p>
       <button id="add" onclick="add">Add</button>
+    </page>
+
+    <page id="classes">
+      <h2>Classes</h2>
+      <label id="lamp" class="lamp">.on: yellow, .boxed: a frame</label>
+      <p id="readClass">-</p>
+      <div id="panel"><p id="panelBody" class="body">.collapsed .body: hidden</p></div>
+      <p id="leadP">the first line</p><p id="afterLead">.lead + p: hidden</p>
+      <ul id="steps"><li id="step1">.short li:first-child: hidden</li><li id="step2">the second item</li></ul>
+      <button id="toggle" onclick="toggleAll">Toggle</button>
+      <a href="/main">Back</a>
     </page>
   </ui>
   <state>
@@ -51,6 +70,16 @@ end
 
 function add()
   state.count = state.count + 1
+end
+
+function toggleAll()
+  local lamp = el("lamp")
+  lamp.classList:toggle("on")
+  lamp.classList:toggle("boxed")
+  el("panel").classList:toggle("collapsed")
+  el("leadP").classList:toggle("lead")
+  el("steps").classList:toggle("short")
+  el("readClass").textContent = "read: " .. lamp.className
 end
   </script>
 </app>

@@ -1,6 +1,7 @@
 # tela_dom.sim — the DOM for scripts on the real TelaOS engine (docs/DOM.md).
 # Fixture: sim/tests/fixtures/apps/dom_tags (flashed with --extra-data sim/tests/fixtures).
 # Its script reads and writes the page when it starts, a tap reads and writes a button.
+# Page "classes": one tap toggles classes, and what their rules show and hide follows.
 
 wait 300
 > app launch dom_tags
@@ -18,6 +19,7 @@ expect @fixed "fixed"
 expect @box "replaced"
 shot dom_01_start
 
+scroll @btn
 tap "Tap"
 wait 200
 expect @btn "Tapped"
@@ -32,6 +34,29 @@ expect @count "Count: 1"
 expect @fixed "fixed"
 expect @box "replaced"
 shot dom_02_after
+
+scroll @toClasses
+tap "classList"
+wait 300
+expect "Classes" :visible
+expect @panelBody :visible
+expect @afterLead :visible
+expect @step1 :visible
+tap "Toggle"
+wait 200
+expect @readClass "read: lamp on boxed"
+expect @panelBody :hidden
+expect @afterLead :hidden
+expect @step1 :hidden
+expect @step2 :visible
+shot dom_03_classes_on
+tap "Toggle"
+wait 200
+expect @readClass "read: lamp"
+expect @panelBody :visible
+expect @afterLead :visible
+expect @step1 :visible
+shot dom_04_classes_off
 
 expect mem.dram_failed 0
 expect mem.psram_failed 0
