@@ -390,6 +390,18 @@ TagRef refFrom(const char* tag, const char* astart, const char* aend, const char
 P::String attr(const TagRef& t, const char* name) { return getAttr(t.astart, t.aend, name); }
 bool has(const TagRef& t, const char* name) { return hasAttr(t.astart, t.aend, name); }
 
+// Raw attribute text of a start tag, for CSS. It points into the page even when empty: the
+// place tells one element from another (UI::CssScope)
+std::string_view rawAttrs(const TagRef& t) {
+    if (!t.astart) return {};
+    return std::string_view(t.astart, t.aend > t.astart ? static_cast<size_t>(t.aend - t.astart) : 0);
+}
+
+// While its content is built, t is an ancestor for CSS selectors (nav a, ul > li)
+struct Inside : UI::CssScope {
+    explicit Inside(const TagRef& t) : UI::CssScope(t.name, rawAttrs(t)) {}
+};
+
 // ============ Entities, whitespace ============
 
 void appendUtf8(P::String& out, uint32_t cp) {
@@ -528,24 +540,24 @@ Style derive(const Style& base, const TagRef& t, uint8_t look) {
         }
         default: break;
     }
-    // class / style="color:..." on inline elements: spans have no objects, take the color only
-    P::String cls = attr(t, "class");
-    if (!cls.empty()) {
-        P::String first = cls.substr(0, cls.find(' '));
-        if (UI::Css::instance().has(first)) {
-            const P::String& col = UI::Css::instance().prop(first, "color");
-            if (is_color(col.c_str())) s.color = parse_color(col.c_str());
-        }
-    }
-    P::String st = attr(t, "style");
-    size_t cp = st.find("color");
-    if (cp != P::String::npos && (cp == 0 || st[cp - 1] == ';' || st[cp - 1] == ' ')) {
-        size_t colon = st.find(':', cp);
-        if (colon != P::String::npos) {
-            size_t endv = st.find(';', colon);
-            P::String v = UI::Css::trim(std::string_view(st.c_str() + colon + 1,
-                                                         (endv == P::String::npos ? st.size() : endv) - colon - 1));
-            if (is_color(v.c_str())) s.color = parse_color(v.c_str());
+    // Style sheet rules for this element (nav a, .menu a, a.btn) and its style="". A run of text has
+    // no object of its own, so it takes what a run can show: color, font size, decoration.
+    UI::CssElement el;
+    el.tag = t.name;
+    el.attrs = rawAttrs(t);
+    UI::Css::findAttr(el.attrs, "id", el.id);
+    UI::Css::findAttr(el.attrs, "class", el.classes);
+    const P::String style = attr(t, "style");
+    for (const UI::CssDecl& d : UI::Css::instance().cascade(el, style)) {
+        if (d.name == "color") {
+            if (is_color(d.value.c_str())) s.color = parse_color(d.value.c_str());  // an invalid color is ignored
+        } else if (d.name == "font-size") {
+            if (const int px = atoi(d.value.c_str()); px > 0) s.font = px;
+        } else if (d.name == "text-decoration" || d.name == "text-decoration-line") {
+            const P::String v = lower(d.value);
+            if (v.find("none") != P::String::npos) s.decor = 0;
+            if (v.find("underline") != P::String::npos) s.decor |= kUnderline;
+            if (v.find("line-through") != P::String::npos) s.decor |= kStrike;
         }
     }
     return s;
@@ -695,27 +707,15 @@ bool rtlIn(const TagRef& t, lv_obj_t* parent) {
     return lv_obj_get_style_base_dir(parent, LV_PART_MAIN) == LV_BASE_DIR_RTL;
 }
 
-void inlineCss(lv_obj_t* o, const char* tag, const P::String& decls) {
-    UI::Css css;
-    P::String sheet = ".__inline{";
-    sheet += decls;
-    sheet += "}";
-    css.parse(std::string_view(sheet.c_str(), sheet.size()));
-    Widget w{o};
-    css.applyMatching(w, tag, "", "__inline");
-    P::String d = lower(decls);
-    if (d.find("display:none") != P::String::npos || d.find("display: none") != P::String::npos) {
-        lv_obj_add_flag(o, LV_OBJ_FLAG_HIDDEN);
-    }
-}
 
 P::String applyGlobal(const TagRef& t, lv_obj_t* o, const char* tplText = nullptr) {
     P::String id = attr(t, "id");
     P::String cls = attr(t, "class");
     P::String style = attr(t, "style");
     P::String vis = attr(t, "visible");
-    Widget{o}.applyCss(t.name, id.c_str(), cls.c_str());
-    if (!style.empty()) inlineCss(o, t.name, style);
+    if (t.name[0] != '#') {  // a run of text ("#text") is not an element: no selector reaches it, not even *
+        Widget{o}.applyCss(t.name, id.c_str(), cls.c_str(), rawAttrs(t), style);  // style sheets, then style=""
+    }
     applyDir(o, attr(t, "dir").c_str());
     if (has(t, "hidden")) lv_obj_add_flag(o, LV_OBJ_FLAG_HIDDEN);
     if (!is(t.name, "a")) makeClickable(o, "", attr(t, "onclick"));
@@ -1105,6 +1105,7 @@ void inlineTag(const TagRef& t, const TagInfo* ti, Seg& seg, const Style& st) {
     const uint8_t look = ti ? ti->look : L_PLAIN;
     if (look == L_SKIP) return;
     Style s = derive(st, t, look);
+    Inside in(t);
     if (is(t.name, "bdo") && lower(attr(t, "dir")) == "rtl") {
         bdoRtl(t, seg, s);
         return;
@@ -1146,6 +1147,7 @@ void handleTag(const TagRef& t, Seg& seg, const Style& st, bool inlineOnly) {
             Style s = derive(st, t, ti->look);
             makeClickable(b, s.href, s.onclick);
             applyGlobal(t, b);
+            Inside in(t);
             Seg inner(b, seg.ctx());
             walk(t.cstart, t.cend, inner, s, false);
             inner.flush();
@@ -1155,10 +1157,12 @@ void handleTag(const TagRef& t, Seg& seg, const Style& st, bool inlineOnly) {
         return;
     }
     if (!ti && !isTelaTag(n)) {  // unknown element: its content shows, as in a browser
+        Inside in(t);
         walk(t.cstart, t.cend, seg, st, inlineOnly);
         return;
     }
     if (inlineOnly) {  // a block inside inline content: keep its text in the line
+        Inside in(t);
         walk(t.cstart, t.cend, seg, st, true);
         return;
     }
@@ -1196,6 +1200,7 @@ void walk(const char* p, const char* end, Seg& seg, const Style& st, bool inline
 }
 
 void renderInto(const TagRef& t, lv_obj_t* box, const Ctx& ctx) {
+    Inside in(t);
     Seg seg(box, ctx);
     walk(t.cstart, t.cend, seg, Style{}, false);
     seg.flush();
@@ -1216,6 +1221,7 @@ void delegate(const TagRef& t, lv_obj_t* box) {  // a TelaOS tag inside HTML con
 void textElement(const TagRef& t, lv_obj_t* box, const Ctx& ctx) {
     const TextLook look = lookFor(t.name);
     if (!hasBlockOrAtom(t.cstart, t.cend)) {
+        Inside in(t);  // its runs and widgets are inside it; its own style ignores this (see CssScope)
         Seg seg(box, ctx, &t, look);
         walk(t.cstart, t.cend, seg, Style{}, true);
         if (seg.empty() && !attr(t, "id").empty()) {  // empty but addressable: keep a label for ui.setText
@@ -1353,6 +1359,7 @@ void listElement(const TagRef& t, lv_obj_t* box, const Ctx& ctx) {
     int n = static_cast<int>(attrNum(t.astart, t.aend, "start", reversed ? count : 1));
     // • – › : glyphs the Ubuntu fonts have (no ◦ or ▪ in flash)
     static const char* const kBullets[] = {"\xE2\x80\xA2", "\xE2\x80\x93", "\xE2\x80\xBA"};
+    Inside in(t);
     for (const auto& c : items) {
         if (!is(c.name, "li")) {  // a list nested straight in a list, or other content
             renderBlock(c, lb, ctx);
@@ -1407,6 +1414,7 @@ void preElement(const TagRef& t, lv_obj_t* box, const Ctx& ctx) {
     if (is(t.name, "pre") || is(t.name, "listing")) {  // <listing> = old <pre>
         Ctx pre = ctx;
         pre.pre = true;
+        Inside in(t);
         Seg seg(box, pre, &t, TextLook{});
         walk(s, t.cend, seg, Style{}, true);
         seg.flush();
@@ -1420,7 +1428,10 @@ void preElement(const TagRef& t, lv_obj_t* box, const Ctx& ctx) {
 
 void marqueeElement(const TagRef& t, lv_obj_t* box) {
     Seg tmp(nullptr, Ctx{});
-    walk(t.cstart, t.cend, tmp, Style{}, true);
+    {
+        Inside in(t);
+        walk(t.cstart, t.cend, tmp, Style{}, true);
+    }
     P::String text;
     for (const auto& it : tmp.items()) text += it.text;
     lv_obj_t* l = lv_label_create(box);
@@ -1743,9 +1754,11 @@ void detailsElement(const TagRef& t, lv_obj_t* box, const Ctx& ctx) {
     lv_obj_set_width(title, 0);
     lv_obj_set_flex_grow(title, 1);
 
+    Inside in(t);
     TagRef sum;
     const bool hasSummary = findChild(t, "summary", sum);
     if (hasSummary) {
+        Inside inSummary(sum);
         Seg seg(title, ctx, &sum, TextLook{});
         walk(sum.cstart, sum.cend, seg, Style{}, true);
         seg.flush();

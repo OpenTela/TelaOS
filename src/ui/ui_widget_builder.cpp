@@ -694,7 +694,7 @@ void create_label(const char *astart, const char *aend, const char *content, lv_
     // Apply CSS (tag, #id, .class cascade)
     {
         P::String renderedClass = attrs.hasDynamicClass ? render_template(attrs.cssClass.c_str()) : attrs.cssClass;
-        Widget{lbl}.applyCss("label", attrs.id.c_str(), renderedClass.c_str());
+        Widget{lbl}.applyCss("label", attrs.id.c_str(), renderedClass.c_str(), std::string_view(astart, static_cast<size_t>(aend - astart)));
     }
     
     // === ELEMENT POSITIONING (HTML-specific: align/valign + x/y combinations) ===
@@ -971,7 +971,7 @@ void create_button(const char *astart, const char *aend, const char *content, lv
     // 1. CSS cascade (tag < .class < tag.class < #id)
     {
         P::String renderedClass = attrs.hasDynamicClass ? render_template(attrs.cssClass.c_str()) : attrs.cssClass;
-        widget.applyCss("button", attrs.id.c_str(), renderedClass.c_str());
+        widget.applyCss("button", attrs.id.c_str(), renderedClass.c_str(), std::string_view(astart, static_cast<size_t>(aend - astart)));
     }
     
     // 2. Inline positioning (overrides CSS — HTML standard)
@@ -1098,7 +1098,7 @@ void create_switch(const char *astart, const char *aend, lv_obj_t *parent) {
     // CSS first, then inline overrides
     {
         P::String renderedClass = attrs.hasDynamicClass ? render_template(attrs.cssClass.c_str()) : attrs.cssClass;
-        Widget{sw}.applyCss("switch", attrs.id.c_str(), renderedClass.c_str());
+        Widget{sw}.applyCss("switch", attrs.id.c_str(), renderedClass.c_str(), std::string_view(astart, static_cast<size_t>(aend - astart)));
     }
     set_pos(sw, x, y);
     
@@ -1153,7 +1153,7 @@ void create_slider(const char *astart, const char *aend, lv_obj_t *parent) {
     // CSS first, then inline overrides
     {
         P::String renderedClass = attrs.hasDynamicClass ? render_template(attrs.cssClass.c_str()) : attrs.cssClass;
-        Widget{slider}.applyCss("slider", attrs.id.c_str(), renderedClass.c_str());
+        Widget{slider}.applyCss("slider", attrs.id.c_str(), renderedClass.c_str(), std::string_view(astart, static_cast<size_t>(aend - astart)));
     }
     set_pos(slider, x, y);
     
@@ -1238,7 +1238,7 @@ void create_input(const char *astart, const char *aend, const char *content, lv_
     // CSS first, then inline overrides
     {
         P::String renderedClass = attrs.hasDynamicClass ? render_template(attrs.cssClass.c_str()) : attrs.cssClass;
-        Widget{ta}.applyCss("input", attrs.id.c_str(), renderedClass.c_str());
+        Widget{ta}.applyCss("input", attrs.id.c_str(), renderedClass.c_str(), std::string_view(astart, static_cast<size_t>(aend - astart)));
     }
     set_pos(ta, x, y);
     set_size(ta, w, h);
@@ -1539,7 +1539,7 @@ void create_markdown(const char *astart, const char *aend, const char *content, 
     
     // CSS first, then inline overrides
     P::String renderedClass = attrs.hasDynamicClass ? render_template(attrs.cssClass.c_str()) : attrs.cssClass;
-    Widget{spangroup}.applyCss("markdown", attrs.id.c_str(), renderedClass.c_str());
+    Widget{spangroup}.applyCss("markdown", attrs.id.c_str(), renderedClass.c_str(), std::string_view(astart, static_cast<size_t>(aend - astart)));
     
     // Position (same logic as label)
     bool useAlign = !align.empty() || !valignPos.empty();
@@ -1816,7 +1816,7 @@ void create_select(const char *astart, const char *aend, const char *content, lv
         P::String cls = attrs.hasDynamicClass
             ? render_template(attrs.cssClass.c_str())
             : attrs.cssClass;
-        Widget{dd}.applyCss("select", attrs.id.c_str(), cls.c_str());
+        Widget{dd}.applyCss("select", attrs.id.c_str(), cls.c_str(), std::string_view(astart, static_cast<size_t>(aend - astart)));
     }
 
     // Inline visual overrides
@@ -2001,7 +2001,7 @@ void create_list(const char* astart, const char* aend, const char* content, lv_o
         P::String cls = attrs.hasDynamicClass
             ? render_template(attrs.cssClass.c_str())
             : attrs.cssClass;
-        Widget{list}.applyCss("list", attrs.id.c_str(), cls.c_str());
+        Widget{list}.applyCss("list", attrs.id.c_str(), cls.c_str(), std::string_view(astart, static_cast<size_t>(aend - astart)));
     }
 
     // Inline bg/color on the container; per-item styling stays LVGL default.

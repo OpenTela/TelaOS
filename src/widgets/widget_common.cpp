@@ -12,7 +12,13 @@ void Widget::applyStyle(const P::String& classNames) {
     UI::Css::instance().applyMatching(*this, nullptr, nullptr, classNames.c_str());
 }
 
-void Widget::applyCss(const char* tag, const char* id, const char* classNames) {
+void Widget::applyCss(const char* tag, const char* id, const char* classNames, std::string_view attrs,
+                      std::string_view inlineStyle) {
     if (!handle) return;
-    UI::Css::instance().applyMatching(*this, tag, id, classNames);
+    UI::CssElement el;
+    el.tag = tag ? tag : "";
+    el.id = id ? id : "";
+    el.classes = classNames ? classNames : "";
+    el.attrs = attrs;
+    UI::Css::instance().applyMatching(*this, el, inlineStyle);
 }
