@@ -110,6 +110,14 @@ expect @locked off
 scroll @fixed
 tap @fixed
 expect "q" :hidden
+# HTML inside <label> and <button>, and a tap on a label's text works the checkbox inside it
+scroll @remember
+expect @nick "Nickname (optional)"
+expect @richBtn "Save now"
+tap @remember:0.85,0.5
+expect @remcb on
+tap @remember:0.85,0.5
+expect @remcb off
 shot html_05_forms_attrs
 # typing opens the on-screen keyboard over the lower half: last on this page
 expect @who ""

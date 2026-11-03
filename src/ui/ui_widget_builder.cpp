@@ -664,18 +664,32 @@ void create_label(const char *astart, const char *aend, const char *content, lv_
     
     P::String rendered = isLiteral ? P::String(text) : render_template(text.c_str());
     
-    // Create via Label widget — handles LVGL creation + static visuals
-    Label widget = {
-        .text    = rendered.c_str(),
-        .font    = fontSize,
-        .color   = (!colorAttr.empty() && !hasDynamicColor) ? parse_color(colorAttr.c_str()) : NO_COLOR,
-        .bgcolor = (!bgcolorAttr.empty() && !hasDynamicBgcolor) ? parse_color(bgcolorAttr.c_str()) : NO_COLOR,
-        .radius  = radiusVal,
-    };
-    widget.create(parent);
-    auto *lbl = widget.handle;
-    // <label for="id">: a tap on the label works that control, as in a browser
+    // HTML inside (<label>Name <i>(optional)</i></label>, <label><input type="checkbox"> Remember</label>):
+    // the text is HTML, as in a browser; the label's own attributes and CSS still apply to it
+    const bool rich = !isLiteral && HtmlFlow::hasMarkup(text.c_str(), text.c_str() + text.size(), true);
+    lv_obj_t* lbl = rich ? HtmlFlow::richText(parent, text.c_str(), text.c_str() + text.size(), !hasW) : nullptr;
+    if (lbl) {
+        Widget look{lbl};  // what Label::create would give it
+        if (!colorAttr.empty() && !hasDynamicColor) look.applyColor(parse_color(colorAttr.c_str()));
+        if (!bgcolorAttr.empty() && !hasDynamicBgcolor) look.applyBgColor(parse_color(bgcolorAttr.c_str()));
+        if (fontSize > 0) look.applyFont(fontSize);
+        if (radiusVal > 0) look.applyRadius(radiusVal);
+    } else {
+        // Create via Label widget — handles LVGL creation + static visuals
+        Label widget = {
+            .text    = rendered.c_str(),
+            .font    = fontSize,
+            .color   = (!colorAttr.empty() && !hasDynamicColor) ? parse_color(colorAttr.c_str()) : NO_COLOR,
+            .bgcolor = (!bgcolorAttr.empty() && !hasDynamicBgcolor) ? parse_color(bgcolorAttr.c_str()) : NO_COLOR,
+            .radius  = radiusVal,
+        };
+        widget.create(parent);
+        lbl = widget.handle;
+    }
+    // <label for="id">: a tap on the label works that control, as in a browser; without for=,
+    // the control inside it (<label><input type="checkbox"> Remember</label>)
     if (const P::String target = getAttr(astart, aend, "for"); !target.empty()) HtmlFlow::labelFor(lbl, target.c_str());
+    else if (rich) HtmlFlow::labelControl(lbl, HtmlFlow::firstControl(lbl));
     
     // Apply CSS (tag, #id, .class cascade)
     {
@@ -713,7 +727,7 @@ void create_label(const char *astart, const char *aend, const char *content, lv_
     
     if (w != 0 || h != 0) {
         set_size(lbl, w, h);
-        if (w != 0) {
+        if (w != 0 && lv_obj_check_type(lbl, &lv_label_class)) {  // HTML inside is not one label
             auto overflow = getAttr(astart, aend, "overflow");
             if (overflow == "ellipsis" || overflow == "dot") {
                 lv_label_set_long_mode(lbl, LV_LABEL_LONG_DOT);
@@ -770,7 +784,7 @@ void create_label(const char *astart, const char *aend, const char *content, lv_
         ElementDesc d;
         d.id          = attrs.id.c_str();
         d.obj         = lbl;
-        d.tpl         = text.c_str();
+        d.tpl         = rich ? nullptr : text.c_str();  // HTML inside keeps its {var} live itself
         d.classTpl    = attrs.hasDynamicClass   ? attrs.cssClass.c_str() : nullptr;
         d.visibleBind = attrs.hasDynamicVisible  ? attrs.visible.c_str()  : nullptr;
         d.disabledBind = attrs.hasDynamicDisabled ? attrs.disabled.c_str() : nullptr;
@@ -790,6 +804,8 @@ struct FlatContent {
     int       font  = 0;       // extracted from nested label (0 = not set)
     P::String color;            // extracted from nested label
     P::String textAlign;        // extracted from nested label
+    P::String markup;           // HTML inside (<b>Save</b> now): rendered as HTML; text is its plain form
+    P::String imgSrc;           // <img src> inside: the button's icon
 };
 
 static FlatContent flattenButtonContent(const char* content) {
@@ -811,6 +827,21 @@ static FlatContent flattenButtonContent(const char* content) {
         scan++;
     }
     
+    // HTML inside (<b>Save</b> now, <img src="go.png"> Go): the first <img> is the icon, the rest
+    // is rendered as HTML. The plain text below still sizes the button and names it for ui.setText.
+    if (labelCount != 1 && HtmlFlow::hasMarkup(raw.c_str(), raw.c_str() + raw.size(), false)) {
+        P::String markup = raw;
+        const size_t img = markup.find("<img");
+        if (img != P::String::npos && img + 4 < markup.size() && !std::isalnum(static_cast<unsigned char>(markup[img + 4]))) {
+            const size_t gt = markup.find('>', img);
+            if (gt != P::String::npos) {
+                result.imgSrc = getAttr(markup.c_str() + img + 4, markup.c_str() + gt, "src");
+                markup.erase(img, gt + 1 - img);
+            }
+        }
+        if (HtmlFlow::hasMarkup(markup.c_str(), markup.c_str() + markup.size(), false)) result.markup = trimmed(markup);
+    }
+
     if (labelCount == 1) {
         // Single <label>: extract text content + font/color attributes
         const char* lstart = strstr(raw.c_str(), "<label");
@@ -864,6 +895,8 @@ void create_button(const char *astart, const char *aend, const char *content, lv
     
     // Flatten nested <label> inside button content
     auto flat = flattenButtonContent(content);
+    if (iconAttr.empty() && !flat.imgSrc.empty()) iconAttr = flat.imgSrc;  // <button><img src> Go</button>
+    const bool rich = !flat.markup.empty();
     auto text = flat.text;
     bool isLiteral = stripLiteral(text);
     bool hasDynamicText = !isLiteral && contains(text, '{');
@@ -911,16 +944,25 @@ void create_button(const char *astart, const char *aend, const char *content, lv
     // Create via Button widget struct (handles LVGL creation, icon+text flex, press transform)
     // NOTE: Don't pass bgcolor here - we apply CSS first, then local override
     Button widget = {
-        .text       = hasText ? renderedText.c_str() : "",
+        .text       = (hasText && !rich) ? renderedText.c_str() : "",
         .iconPath   = iconPath ? iconPath : "",
         .iconSize   = iconSize,
         .font       = fontSize,    // Apply font at creation, before CSS
         .bgcolor    = NO_COLOR,  // Will be set after CSS
         .radius     = radiusVal,
-        .forceLabel = hasDynamicText,  // ensure label exists for {binding} updates
+        .forceLabel = hasDynamicText && !rich,  // ensure label exists for {binding} updates
     };
     widget.create(parent);
     auto *btn = widget.handle;
+    if (rich) {  // HTML inside: rendered where the label would be, after the icon
+        widget.label.handle = HtmlFlow::richText(btn, flat.markup.c_str(), flat.markup.c_str() + flat.markup.size(), true);
+        if (widget.label.handle && hasIcon) {
+            lv_obj_set_flex_flow(btn, LV_FLEX_FLOW_ROW);
+            lv_obj_set_flex_align(btn, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
+        } else if (widget.label.handle) {
+            lv_obj_center(widget.label.handle);
+        }
+    }
     
     _unique_id(btn, attrs.id.c_str());  // For testing mock
     
@@ -982,7 +1024,7 @@ void create_button(const char *astart, const char *aend, const char *content, lv
     bd.obj         = storeObj;
     bd.href        = href.c_str();
     bd.onclick     = onclick.c_str();
-    bd.tpl         = (hasDynamicText && widget.label.handle) ? text.c_str() : nullptr;
+    bd.tpl         = (hasDynamicText && widget.label.handle && !rich) ? text.c_str() : nullptr;  // HTML keeps its own
     bd.classTpl    = attrs.hasDynamicClass   ? attrs.cssClass.c_str() : nullptr;
     bd.visibleBind = attrs.hasDynamicVisible  ? attrs.visible.c_str()  : nullptr;
     bd.disabledBind = attrs.hasDynamicDisabled ? attrs.disabled.c_str() : nullptr;
