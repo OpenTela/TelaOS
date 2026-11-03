@@ -20,6 +20,10 @@ bool cssNumber(std::string_view s, size_t& i, float& v);
 // "4px var(--a, 1px 2px)" has two parts
 P::Array<std::string_view> cssParts(std::string_view value);
 
+// The comma-separated items of a value, trimmed; parentheses and quotes keep an item whole:
+// "0 1px #000, 0 2px rgba(0, 0, 0, 0.5)" has two items
+P::Array<std::string_view> cssList(std::string_view value);
+
 // A length in pixels: a number (px), px, em (em px each), rem, vw and vh (1% of the screen).
 // false for anything else, % too: what % is of depends on the property.
 bool cssLength(std::string_view text, float em, int32_t& px);

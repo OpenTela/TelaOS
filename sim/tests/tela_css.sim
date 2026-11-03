@@ -34,3 +34,14 @@ shot css_03_values
 tap "Back"
 wait 200
 expect "Selectors" :visible
+
+tap "Box"
+wait 200
+expect @framed "border: 2px solid blue"
+expect @lifted "box-shadow: lifted"
+expect @sky "linear-gradient: to right"
+expect "overflow: hidden, first line" :visible
+shot css_04_box
+tap "Back"
+wait 200
+expect "Selectors" :visible

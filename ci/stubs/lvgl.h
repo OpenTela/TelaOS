@@ -102,6 +102,17 @@ extern const lv_font_t lv_font_montserrat_16;
 #define LV_OBJ_FLAG_PRESS_LOCK     (1 << 13)
 #define LV_OBJ_FLAG_GESTURE_BUBBLE (1 << 18)
 #define LV_OBJ_FLAG_EVENT_BUBBLE   (1 << 19)
+#define LV_OBJ_FLAG_OVERFLOW_VISIBLE (1 << 20)
+
+typedef uint8_t lv_border_side_t;
+#define LV_BORDER_SIDE_NONE     0x00
+#define LV_BORDER_SIDE_BOTTOM   0x01
+#define LV_BORDER_SIDE_TOP      0x02
+#define LV_BORDER_SIDE_LEFT     0x04
+#define LV_BORDER_SIDE_RIGHT    0x08
+#define LV_BORDER_SIDE_FULL     0x0F
+
+typedef enum { LV_GRAD_DIR_NONE, LV_GRAD_DIR_VER, LV_GRAD_DIR_HOR } lv_grad_dir_t;
 
 #define LV_STATE_DEFAULT  0
 #define LV_STATE_PRESSED  1
@@ -341,10 +352,12 @@ inline bool lv_obj_has_state(lv_obj_t*, int) { return false; }
 inline void lv_obj_add_flag(lv_obj_t* obj, int flag) {
     if (obj && obj->mock_widget && flag == LV_OBJ_FLAG_HIDDEN) obj->mock_widget->hidden = true;
     if (obj && obj->mock_widget && flag == LV_OBJ_FLAG_SCROLLABLE) obj->mock_widget->scrollable = true;
+    if (obj && obj->mock_widget && flag == LV_OBJ_FLAG_OVERFLOW_VISIBLE) obj->mock_widget->overflowVisible = true;
 }
 inline void lv_obj_clear_flag(lv_obj_t* obj, int flag) {
     if (obj && obj->mock_widget && flag == LV_OBJ_FLAG_HIDDEN) obj->mock_widget->hidden = false;
     if (obj && obj->mock_widget && flag == LV_OBJ_FLAG_SCROLLABLE) obj->mock_widget->scrollable = false;
+    if (obj && obj->mock_widget && flag == LV_OBJ_FLAG_OVERFLOW_VISIBLE) obj->mock_widget->overflowVisible = false;
 }
 inline void lv_obj_remove_flag(lv_obj_t* obj, int flag) {
     lv_obj_clear_flag(obj, flag);
@@ -589,8 +602,18 @@ inline void lv_obj_set_align(lv_obj_t*, lv_align_t) {}
 #ifndef lv_obj_align
 inline void lv_obj_align(lv_obj_t*, lv_align_t, int, int) {}
 #endif
-inline void lv_obj_set_scroll_dir(lv_obj_t*, lv_dir_t) {}
-inline void lv_obj_set_scrollbar_mode(lv_obj_t*, int) {}
+inline void lv_obj_set_scroll_dir(lv_obj_t* obj, lv_dir_t d) {
+#ifdef LVGL_MOCK_ENABLED
+    if (obj && obj->mock_widget) obj->mock_widget->scrollDir = static_cast<int>(d);
+#endif
+    (void)obj; (void)d;
+}
+inline void lv_obj_set_scrollbar_mode(lv_obj_t* obj, int m) {
+#ifdef LVGL_MOCK_ENABLED
+    if (obj && obj->mock_widget) obj->mock_widget->scrollbarMode = m;
+#endif
+    (void)obj; (void)m;
+}
 inline void lv_obj_scroll_to_view(lv_obj_t*, int) {}
 inline void lv_obj_scroll_to_view_recursive(lv_obj_t*, int) {}
 inline void lv_obj_set_tile_id(lv_obj_t*, int, int, int) {}
@@ -661,8 +684,43 @@ inline void lv_obj_set_style_text_font(lv_obj_t* obj, const lv_font_t* font, int
 #ifndef lv_obj_set_style_text_align
 inline void lv_obj_set_style_text_align(lv_obj_t*, lv_text_align_t, int) {}
 #endif
-inline void lv_obj_set_style_border_width(lv_obj_t*, int, int) {}
-inline void lv_obj_set_style_border_color(lv_obj_t*, lv_color_t, int) {}
+// Box styles: the mock keeps them for CSS tests
+#ifdef LVGL_MOCK_ENABLED
+#define MOCK_SET(field, value) do { if (obj && obj->mock_widget) obj->mock_widget->field = (value); } while (0)
+#else
+#define MOCK_SET(field, value) do { (void)obj; (void)(value); } while (0)
+#endif
+inline void lv_obj_set_style_border_width(lv_obj_t* obj, int v, int) { MOCK_SET(borderWidth, v); }
+inline void lv_obj_set_style_border_color(lv_obj_t* obj, lv_color_t c, int) { MOCK_SET(borderColor, c.full); }
+inline void lv_obj_set_style_border_opa(lv_obj_t* obj, int v, int) { MOCK_SET(borderOpa, v); }
+inline void lv_obj_set_style_border_side(lv_obj_t* obj, lv_border_side_t v, int) { MOCK_SET(borderSide, v); }
+inline void lv_obj_set_style_margin_top(lv_obj_t* obj, int v, int) { MOCK_SET(marginTop, v); }
+inline void lv_obj_set_style_margin_right(lv_obj_t* obj, int v, int) { MOCK_SET(marginRight, v); }
+inline void lv_obj_set_style_margin_bottom(lv_obj_t* obj, int v, int) { MOCK_SET(marginBottom, v); }
+inline void lv_obj_set_style_margin_left(lv_obj_t* obj, int v, int) { MOCK_SET(marginLeft, v); }
+inline void lv_obj_set_style_outline_opa(lv_obj_t* obj, int v, int) { MOCK_SET(outlineOpa, v); }
+inline void lv_obj_set_style_outline_pad(lv_obj_t* obj, int v, int) { MOCK_SET(outlinePad, v); }
+inline void lv_obj_set_style_shadow_offset_x(lv_obj_t* obj, int v, int) { MOCK_SET(shadowX, v); }
+inline void lv_obj_set_style_shadow_offset_y(lv_obj_t* obj, int v, int) { MOCK_SET(shadowY, v); }
+inline void lv_obj_set_style_shadow_spread(lv_obj_t* obj, int v, int) { MOCK_SET(shadowSpread, v); }
+inline void lv_obj_set_style_bg_grad_color(lv_obj_t* obj, lv_color_t c, int) { MOCK_SET(gradColor, c.full); }
+inline void lv_obj_set_style_bg_grad_dir(lv_obj_t* obj, lv_grad_dir_t v, int) { MOCK_SET(gradDir, static_cast<int>(v)); }
+inline void lv_obj_set_style_bg_main_stop(lv_obj_t* obj, int v, int) { MOCK_SET(mainStop, v); }
+inline void lv_obj_set_style_bg_grad_stop(lv_obj_t* obj, int v, int) { MOCK_SET(gradStop, v); }
+inline void lv_obj_set_style_bg_main_opa(lv_obj_t* obj, int v, int) { MOCK_SET(mainOpa, v); }
+inline void lv_obj_set_style_bg_grad_opa(lv_obj_t* obj, int v, int) { MOCK_SET(gradOpa, v); }
+// The text color an object has: its own or its parent's
+inline lv_color_t lv_obj_get_style_text_color(lv_obj_t* obj, int) {
+#ifdef LVGL_MOCK_ENABLED
+    for (const LvglMock::Widget* w = obj ? obj->mock_widget : nullptr; w; w = w->parent) {
+        if (w->hasColor) return lv_color_hex(w->color);
+    }
+#endif
+    (void)obj;
+    return lv_color_hex(0xFFFFFF);
+}
+inline int lv_obj_get_style_text_opa(lv_obj_t*, int) { return 255; }
+inline uint32_t lv_color_to_u32(lv_color_t c) { return 0xFF000000u | c.full; }
 #ifndef lv_obj_set_style_pad_all
 inline void lv_obj_set_style_pad_all(lv_obj_t*, int, int) {}
 #endif
@@ -684,11 +742,11 @@ inline void lv_obj_set_style_pad_column(lv_obj_t*, int, int) {}
 #ifndef lv_obj_set_style_pad_row
 inline void lv_obj_set_style_pad_row(lv_obj_t*, int, int) {}
 #endif
-inline void lv_obj_set_style_shadow_width(lv_obj_t*, int, int) {}
-inline void lv_obj_set_style_shadow_color(lv_obj_t*, lv_color_t, int) {}
-inline void lv_obj_set_style_shadow_opa(lv_obj_t*, int, int) {}
-inline void lv_obj_set_style_outline_width(lv_obj_t*, int, int) {}
-inline void lv_obj_set_style_outline_color(lv_obj_t*, lv_color_t, int) {}
+inline void lv_obj_set_style_shadow_width(lv_obj_t* obj, int v, int) { MOCK_SET(shadowWidth, v); }
+inline void lv_obj_set_style_shadow_color(lv_obj_t* obj, lv_color_t c, int) { MOCK_SET(shadowColor, c.full); }
+inline void lv_obj_set_style_shadow_opa(lv_obj_t* obj, int v, int) { MOCK_SET(shadowOpa, v); }
+inline void lv_obj_set_style_outline_width(lv_obj_t* obj, int v, int) { MOCK_SET(outlineWidth, v); }
+inline void lv_obj_set_style_outline_color(lv_obj_t* obj, lv_color_t c, int) { MOCK_SET(outlineColor, c.full); }
 inline int lv_obj_get_style_pad_left(lv_obj_t* obj, int) { return (obj && obj->mock_widget) ? obj->mock_widget->padLeft : 0; }
 inline int lv_obj_get_style_pad_right(lv_obj_t* obj, int) { return (obj && obj->mock_widget) ? obj->mock_widget->padRight : 0; }
 inline const lv_font_t* lv_obj_get_style_text_font(lv_obj_t*, int) { return nullptr; }
@@ -927,6 +985,8 @@ inline void lv_mem_monitor(lv_mem_monitor_t*) {}
 inline lv_obj_t* lv_keyboard_get_textarea(lv_obj_t*) { return nullptr; }
 inline void lv_obj_set_ext_click_area(lv_obj_t*, int) {}
 #define LV_SCROLLBAR_MODE_ACTIVE 1
+#define LV_SCROLLBAR_MODE_ON 2
+#define LV_SCROLLBAR_MODE_AUTO 3
 inline void lv_obj_move_foreground(lv_obj_t* obj) {
 #ifdef LVGL_MOCK_ENABLED
     auto* w = obj ? obj->mock_widget : nullptr;

@@ -8,6 +8,7 @@
  */
 
 #include "ui/css_parser.h"
+#include "ui/css_box.h"
 #include "ui/css_values.h"
 #include "ui/ui_coords.h"
 #include "ui/ui_html_internal.h"
@@ -994,6 +995,7 @@ void Css::applyProps(Widget& w, const P::Array<CssDecl>& decls) const {
             deferredTextValign.assign(value.data(), value.size());
         }
     }
+    applyCssBox(o, decls, em);  // margin, border, outline, box-shadow, gradients, overflow
     if (fontPx > 0) w.applyFont(fontPx);
 
     // Apply text-valign AFTER height/font are set

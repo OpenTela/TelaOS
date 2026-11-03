@@ -26,6 +26,26 @@ struct Widget {
     int opacity = 255;       // 0-255 (lv_obj_set_style_opa, and bg_opa as well)
     int bgOpa = -1;          // lv_obj_set_style_bg_opa; -1: not set
     int textOpa = 255;       // lv_obj_set_style_text_opa
+
+    // Box (CSS margin, border, outline, box-shadow, gradient, overflow)
+    int marginTop = 0, marginRight = 0, marginBottom = 0, marginLeft = 0;
+    int borderWidth = 0;
+    uint32_t borderColor = 0;
+    int borderOpa = 255;
+    int borderSide = -1;     // lv_border_side_t; -1: not set
+    int outlineWidth = 0;
+    uint32_t outlineColor = 0;
+    int outlineOpa = 255;
+    int outlinePad = 0;
+    int shadowWidth = 0, shadowX = 0, shadowY = 0, shadowSpread = 0;
+    uint32_t shadowColor = 0;
+    int shadowOpa = 255;
+    int gradDir = 0;         // lv_grad_dir_t: 0 none
+    uint32_t gradColor = 0;
+    int mainStop = 0, gradStop = 255, mainOpa = 255, gradOpa = 255;
+    bool overflowVisible = false;
+    int scrollDir = -1;      // lv_obj_set_scroll_dir; -1: not set
+    int scrollbarMode = -1;
     int padAll = -1;         // padding (from lv_obj_set_style_pad_all)
     int padLeft = 0;
     int padRight = 0;
