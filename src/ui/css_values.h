@@ -28,6 +28,12 @@ P::Array<std::string_view> cssList(std::string_view value);
 // false for anything else, % too: what % is of depends on the property.
 bool cssLength(std::string_view text, float em, int32_t& px);
 
+// A percentage: "50%" → 50
+bool cssPercent(std::string_view text, float& v);
+
+// A coordinate: a length, or a percentage of the screen (screen px), as TelaOS x= and y= take it
+bool cssCoord(std::string_view text, float em, int32_t screen, int32_t& px);
+
 // A font size in pixels: a length or a percentage, both of the parent's font size (parentPx), as
 // font-size takes them; 0 if it does not read or is not positive
 int cssFontSize(std::string_view text, float parentPx);

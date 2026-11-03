@@ -45,3 +45,14 @@ shot css_04_box
 tap "Back"
 wait 200
 expect "Selectors" :visible
+
+tap "Layout"
+wait 200
+expect @bar "left middle right"
+expect @stack "1 2 3"
+expect "absolute: bottom right" :visible
+expect @after "after the hidden line"
+shot css_05_layout
+tap "Back"
+wait 200
+expect "Selectors" :visible

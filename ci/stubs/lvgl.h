@@ -103,6 +103,8 @@ extern const lv_font_t lv_font_montserrat_16;
 #define LV_OBJ_FLAG_GESTURE_BUBBLE (1 << 18)
 #define LV_OBJ_FLAG_EVENT_BUBBLE   (1 << 19)
 #define LV_OBJ_FLAG_OVERFLOW_VISIBLE (1 << 20)
+#define LV_OBJ_FLAG_IGNORE_LAYOUT    (1 << 17)
+#define LV_OBJ_FLAG_FLOATING         (1 << 21)
 
 typedef uint8_t lv_border_side_t;
 #define LV_BORDER_SIDE_NONE     0x00
@@ -220,8 +222,13 @@ typedef enum {
     LV_FLEX_FLOW_ROW_WRAP,
     LV_FLEX_FLOW_COLUMN_WRAP,
     LV_FLEX_FLOW_ROW_REVERSE,
-    LV_FLEX_FLOW_COLUMN_REVERSE
+    LV_FLEX_FLOW_COLUMN_REVERSE,
+    LV_FLEX_FLOW_ROW_WRAP_REVERSE,
+    LV_FLEX_FLOW_COLUMN_WRAP_REVERSE
 } lv_flex_flow_t;
+
+#define LV_LAYOUT_NONE 0
+#define LV_LAYOUT_FLEX 1
 
 typedef enum {
     LV_FLEX_ALIGN_START = 0,
@@ -353,11 +360,17 @@ inline void lv_obj_add_flag(lv_obj_t* obj, int flag) {
     if (obj && obj->mock_widget && flag == LV_OBJ_FLAG_HIDDEN) obj->mock_widget->hidden = true;
     if (obj && obj->mock_widget && flag == LV_OBJ_FLAG_SCROLLABLE) obj->mock_widget->scrollable = true;
     if (obj && obj->mock_widget && flag == LV_OBJ_FLAG_OVERFLOW_VISIBLE) obj->mock_widget->overflowVisible = true;
+    if (obj && obj->mock_widget && flag == LV_OBJ_FLAG_IGNORE_LAYOUT) obj->mock_widget->ignoreLayout = true;
+    if (obj && obj->mock_widget && flag == LV_OBJ_FLAG_FLOATING) obj->mock_widget->floating = true;
+    if (obj && obj->mock_widget && flag == LV_OBJ_FLAG_CLICKABLE) obj->mock_widget->clickable = true;
 }
 inline void lv_obj_clear_flag(lv_obj_t* obj, int flag) {
     if (obj && obj->mock_widget && flag == LV_OBJ_FLAG_HIDDEN) obj->mock_widget->hidden = false;
     if (obj && obj->mock_widget && flag == LV_OBJ_FLAG_SCROLLABLE) obj->mock_widget->scrollable = false;
     if (obj && obj->mock_widget && flag == LV_OBJ_FLAG_OVERFLOW_VISIBLE) obj->mock_widget->overflowVisible = false;
+    if (obj && obj->mock_widget && flag == LV_OBJ_FLAG_IGNORE_LAYOUT) obj->mock_widget->ignoreLayout = false;
+    if (obj && obj->mock_widget && flag == LV_OBJ_FLAG_FLOATING) obj->mock_widget->floating = false;
+    if (obj && obj->mock_widget && flag == LV_OBJ_FLAG_CLICKABLE) obj->mock_widget->clickable = false;
 }
 inline void lv_obj_remove_flag(lv_obj_t* obj, int flag) {
     lv_obj_clear_flag(obj, flag);
@@ -709,6 +722,33 @@ inline void lv_obj_set_style_bg_main_stop(lv_obj_t* obj, int v, int) { MOCK_SET(
 inline void lv_obj_set_style_bg_grad_stop(lv_obj_t* obj, int v, int) { MOCK_SET(gradStop, v); }
 inline void lv_obj_set_style_bg_main_opa(lv_obj_t* obj, int v, int) { MOCK_SET(mainOpa, v); }
 inline void lv_obj_set_style_bg_grad_opa(lv_obj_t* obj, int v, int) { MOCK_SET(gradOpa, v); }
+// Layout getters: what the mock was told
+inline int lv_obj_get_style_layout(lv_obj_t* obj, int) {
+#ifdef LVGL_MOCK_ENABLED
+    if (obj && obj->mock_widget && obj->mock_widget->flexFlow >= 0) return LV_LAYOUT_FLEX;
+#endif
+    (void)obj;
+    return LV_LAYOUT_NONE;
+}
+inline lv_flex_flow_t lv_obj_get_style_flex_flow(lv_obj_t* obj, int) {
+#ifdef LVGL_MOCK_ENABLED
+    if (obj && obj->mock_widget && obj->mock_widget->flexFlow >= 0) return static_cast<lv_flex_flow_t>(obj->mock_widget->flexFlow);
+#endif
+    (void)obj;
+    return LV_FLEX_FLOW_ROW;
+}
+#ifdef LVGL_MOCK_ENABLED
+#define MOCK_GET(field, def) ((obj && obj->mock_widget) ? obj->mock_widget->field : (def))
+#else
+#define MOCK_GET(field, def) ((void)obj, (def))
+#endif
+inline lv_flex_align_t lv_obj_get_style_flex_main_place(lv_obj_t* obj, int) { return static_cast<lv_flex_align_t>(MOCK_GET(flexMainAlign, 0)); }
+inline lv_flex_align_t lv_obj_get_style_flex_cross_place(lv_obj_t* obj, int) { return static_cast<lv_flex_align_t>(MOCK_GET(flexCrossAlign, 0)); }
+inline lv_flex_align_t lv_obj_get_style_flex_track_place(lv_obj_t* obj, int) { return static_cast<lv_flex_align_t>(MOCK_GET(flexTrackAlign, 0)); }
+inline int lv_obj_get_style_width(lv_obj_t* obj, int) { return MOCK_GET(w, 0); }
+inline int lv_obj_get_style_height(lv_obj_t* obj, int) { return MOCK_GET(h, 0); }
+inline void lv_obj_set_style_translate_x(lv_obj_t* obj, int v, int) { MOCK_SET(translateX, v); }
+
 // The text color an object has: its own or its parent's
 inline lv_color_t lv_obj_get_style_text_color(lv_obj_t* obj, int) {
 #ifdef LVGL_MOCK_ENABLED

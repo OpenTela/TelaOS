@@ -278,6 +278,21 @@ bool cssLength(std::string_view text, float em, int32_t& px) {
     return true;
 }
 
+bool cssPercent(std::string_view text, float& v) {
+    text = trimmed(text);
+    size_t i = 0;
+    return !text.empty() && text.back() == '%' && cssNumber(text, i, v) && i == text.size() - 1;
+}
+
+bool cssCoord(std::string_view text, float em, int32_t screen, int32_t& px) {
+    float v = 0;
+    if (cssPercent(text, v)) {
+        px = static_cast<int32_t>(std::lround(v * static_cast<float>(screen) / 100));
+        return true;
+    }
+    return cssLength(text, em, px);
+}
+
 int cssFontSize(std::string_view text, float parentPx) {
     text = trimmed(text);
     float v = 0;

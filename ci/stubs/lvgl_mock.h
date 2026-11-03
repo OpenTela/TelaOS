@@ -46,6 +46,12 @@ struct Widget {
     bool overflowVisible = false;
     int scrollDir = -1;      // lv_obj_set_scroll_dir; -1: not set
     int scrollbarMode = -1;
+
+    // Layout (CSS position, visibility)
+    int translateX = 0;
+    bool ignoreLayout = false;
+    bool floating = false;
+    bool clickable = false;
     int padAll = -1;         // padding (from lv_obj_set_style_pad_all)
     int padLeft = 0;
     int padRight = 0;

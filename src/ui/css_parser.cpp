@@ -9,11 +9,11 @@
 
 #include "ui/css_parser.h"
 #include "ui/css_box.h"
+#include "ui/css_layout.h"
 #include "ui/css_values.h"
 #include "ui/ui_coords.h"
 #include "ui/ui_html_internal.h"
 #include "core/core.h"
-#include "ui_layout.h"  // SCREEN_WIDTH, SCREEN_HEIGHT
 
 #include "widgets/widget_common.h"
 #include "utils/font.h"
@@ -574,32 +574,15 @@ bool oneLength(std::string_view value, float em, int32_t& px) {
     return true;
 }
 
-// A percentage: 50% → 50
-bool percent(std::string_view value, float& v) {
-    value = trimmed(value);
-    size_t i = 0;
-    return !value.empty() && value.back() == '%' && cssNumber(value, i, v) && i == value.size() - 1;
-}
-
 // width: 50% (of the parent, at layout time), 10em, 120px
 bool sizeValue(std::string_view value, float em, int32_t& out) {
     float v = 0;
-    if (percent(value, v)) {
+    if (cssPercent(value, v)) {
         if (v < 0) return false;
         out = lv_pct(static_cast<int32_t>(std::lround(v)));
         return true;
     }
     return cssLength(value, em, out) && out >= 0;
-}
-
-// left: 10% (of the screen, as TelaOS x= is), 10px
-bool coordValue(std::string_view value, float em, int32_t screen, int32_t& out) {
-    float v = 0;
-    if (percent(value, v)) {
-        out = static_cast<int32_t>(std::lround(v * static_cast<float>(screen) / 100));
-        return true;
-    }
-    return cssLength(value, em, out);
 }
 
 // border-radius: 8px, 50% (a circle); LVGL has one radius for all corners, so the first value
@@ -608,7 +591,7 @@ bool radiusValue(std::string_view value, float em, int32_t& out) {
     if (parts.empty()) return false;
     const std::string_view first = parts[0].substr(0, parts[0].find('/'));  // 8px/4px: elliptical
     float v = 0;
-    if (percent(first, v)) {  // the box's size is not known yet: only a circle reads
+    if (cssPercent(first, v)) {  // the box's size is not known yet: only a circle reads
         if (v < 50) return false;
         out = LV_RADIUS_CIRCLE;
         return true;
@@ -942,10 +925,6 @@ void Css::applyProps(Widget& w, const P::Array<CssDecl>& decls) const {
             if (sizeValue(value, em, v)) lv_obj_set_style_min_width(o, v, 0);
         } else if (name == "max-width") {
             if (sizeValue(value, em, v)) lv_obj_set_style_max_width(o, v, 0);
-        } else if (name == "left") {
-            if (coordValue(value, em, SCREEN_WIDTH, v)) lv_obj_set_x(o, v);
-        } else if (name == "top") {
-            if (coordValue(value, em, SCREEN_HEIGHT, v)) lv_obj_set_y(o, v);
         } else if (name == "padding") {  // top right bottom left; a missing side takes the opposite one
             if (lengthList(value, em, 4, list, n)) {
                 if (n == 1) {
@@ -995,7 +974,8 @@ void Css::applyProps(Widget& w, const P::Array<CssDecl>& decls) const {
             deferredTextValign.assign(value.data(), value.size());
         }
     }
-    applyCssBox(o, decls, em);  // margin, border, outline, box-shadow, gradients, overflow
+    applyCssBox(o, decls, em);     // margin, border, outline, box-shadow, gradients, overflow
+    applyCssLayout(o, decls, em);  // flex, position and left/top/right/bottom, visibility
     if (fontPx > 0) w.applyFont(fontPx);
 
     // Apply text-valign AFTER height/font are set
