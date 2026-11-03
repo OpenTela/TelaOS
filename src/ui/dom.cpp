@@ -10,7 +10,7 @@
  *
  * CSS is applied again from the tree: its ancestors are opened as CSS scopes, outermost first,
  * with their children given for places among siblings. What the old rules set goes back first
- * (CssUndo).
+ * (CssUndo). querySelector walks the tree in the page order with the scopes open the same way.
  */
 #include "ui/dom.h"
 
@@ -347,23 +347,48 @@ std::string_view cssTag(uint32_t i) {
     return node(i).tag;
 }
 
+// The tag CSS sees for i: the one CSS saw when the page was built (css), or the one scripts see
+std::string_view tagFor(uint32_t i, bool css) { return css ? cssTag(i) : std::string_view(node(i).tag); }
+
 P::Array<CssChild> childrenOf(uint32_t i) {
     P::Array<CssChild> kids;
     for (uint32_t c = node(i).first; c; c = node(c).next) kids.push_back(CssChild{node(c).tag, node(c).attrs});
     return kids;
 }
 
+P::Array<uint32_t> ancestorsOf(uint32_t i) {  // outermost first
+    P::Array<uint32_t> chain;
+    for (uint32_t p = node(i).parent; p; p = node(p).parent) chain.push_back(p);
+    std::reverse(chain.begin(), chain.end());
+    return chain;
+}
+
 // f() with the CSS scopes of chain[k..] open, outermost first
 template <typename F>
-void inScopes(const P::Array<uint32_t>& chain, size_t k, F& f) {
+void inScopes(const P::Array<uint32_t>& chain, size_t k, bool css, F& f) {
     if (k == chain.size()) {
         f();
         return;
     }
     const uint32_t a = chain[k];
     const P::Array<CssChild> kids = childrenOf(a);
-    CssScope scope(cssTag(a), node(a).attrs, kids);
-    inScopes(chain, k + 1, f);
+    CssScope scope(tagFor(a, css), node(a).attrs, kids);
+    inScopes(chain, k + 1, css, f);
+}
+
+// i as a selector sees it. rendered: room for its class="{var}" as the builder rendered it
+CssElement cssElement(uint32_t i, bool css, P::String& rendered) {
+    const Entry& e = node(i);
+    CssElement el;
+    el.tag = tagFor(i, css);
+    el.attrs = e.attrs;
+    Css::findAttr(e.attrs, "id", el.id);
+    Css::findAttr(e.attrs, "class", el.classes);
+    if (el.classes.find('{') != std::string_view::npos) {
+        rendered = render_template(P::String(el.classes).c_str());
+        el.classes = rendered;
+    }
+    return el;
 }
 
 // CSS on i again: what the old rules set goes back, the rules that apply now are put on, and what
@@ -373,18 +398,8 @@ void restyleOne(uint32_t i) {
     if (!(e.flags & kStyled) || (e.flags & kGone) || !e.obj) return;
     CssUndo kept;
     if (e.undo) e.undo->undo(e.obj, kept);
-    CssElement el;
-    el.tag = cssTag(i);
-    el.attrs = e.attrs;
-    Css::findAttr(e.attrs, "id", el.id);
-    std::string_view cls;
-    Css::findAttr(e.attrs, "class", cls);
     P::String rendered;
-    if (cls.find('{') != std::string_view::npos) {  // class="{var}", as the builder rendered it
-        rendered = render_template(P::String(cls).c_str());
-        cls = rendered;
-    }
-    el.classes = cls;
+    const CssElement el = cssElement(i, true, rendered);
     std::string_view inlineStyle;
     if (e.flags & kInline) Css::findAttr(e.attrs, "style", inlineStyle);
     CssUndo undo;
@@ -408,13 +423,10 @@ void restyleTree(uint32_t i) {
 // i changed: what its rules may see changes for i, what is in it, the siblings after it
 // (h2 + p, .a ~ li) and what is in them
 void restyleFrom(uint32_t i) {
-    P::Array<uint32_t> chain;
-    for (uint32_t p = node(i).parent; p; p = node(p).parent) chain.push_back(p);
-    std::reverse(chain.begin(), chain.end());
     auto all = [i] {
         for (uint32_t s = i; s; s = node(s).next) restyleTree(s);
     };
-    inScopes(chain, 0, all);
+    inScopes(ancestorsOf(i), 0, true, all);
 }
 
 // After attribute `name` of i changed
@@ -460,6 +472,51 @@ void setWords(Node n, const P::Array<P::String>& words) {
         v += w;
     }
     setAttribute(n, "class", v);
+}
+
+// ---- Selectors ----
+
+// The states a selector names (:active, :focus, :checked, :disabled) that obj is in now
+uint16_t statesOf(lv_obj_t* obj) {
+    uint16_t states = 0;
+    if (!obj) return states;
+    for (const uint16_t s : {LV_STATE_PRESSED, LV_STATE_FOCUSED, LV_STATE_CHECKED, LV_STATE_DISABLED}) {
+        if (lv_obj_has_state(obj, s)) states = static_cast<uint16_t>(states | s);
+    }
+    return states;
+}
+
+bool matches(uint32_t i, const CssQuery& q) {
+    P::String rendered;
+    return q.matches(cssElement(i, false, rendered), statesOf(node(i).obj));
+}
+
+// What q matches in i, in the page order, until `limit` are found; the scopes above i are open
+void collect(uint32_t i, const CssQuery& q, size_t limit, P::Array<Node>& found) {
+    if (!node(i).first || found.size() >= limit) return;
+    const P::Array<CssChild> kids = childrenOf(i);
+    CssScope scope(node(i).tag, node(i).attrs, kids);
+    for (uint32_t c = node(i).first; c && found.size() < limit; c = node(c).next) {
+        if (matches(c, q)) found.push_back(handle(c));
+        collect(c, q, limit, found);
+    }
+}
+
+bool query(Node inside, std::string_view selectors, size_t limit, P::Array<Node>& found) {
+    const CssQuery q(selectors);
+    if (!q.ok()) return false;
+    if (inside) {
+        const uint32_t i = indexOf(inside);
+        auto in = [&] { collect(i, q, limit, found); };
+        if (i) inScopes(ancestorsOf(i), 0, false, in);  // its ancestors count: .menu a
+        return true;
+    }
+    for (uint32_t i = 1; i <= nodes().size() && found.size() < limit; ++i) {
+        if (node(i).parent || (node(i).flags & kGone)) continue;  // the pages, then what is in them
+        if (matches(i, q)) found.push_back(handle(i));
+        collect(i, q, limit, found);
+    }
+    return true;
 }
 
 }  // namespace
@@ -693,6 +750,18 @@ P::String className(Node n) {
     P::String v;
     getAttribute(n, "class", v);
     return v;
+}
+
+bool querySelector(Node inside, std::string_view selectors, Node& found) {
+    P::Array<Node> one;
+    const bool ok = query(inside, selectors, 1, one);
+    found = one.empty() ? 0 : one[0];
+    return ok;
+}
+
+bool querySelectorAll(Node inside, std::string_view selectors, P::Array<Node>& found) {
+    found.clear();
+    return query(inside, selectors, SIZE_MAX, found);
 }
 
 }  // namespace Dom

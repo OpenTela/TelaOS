@@ -1,7 +1,8 @@
 <app os="1.0" title="DOM" version="0.1" category="test">
   <!--
     Test fixture for the DOM in TelaOS (docs/DOM.md): document.getElementById, textContent,
-    getAttribute, setAttribute, removeAttribute (page "main"); classList (page "classes").
+    getAttribute, setAttribute, removeAttribute (page "main"); classList (page "classes");
+    querySelector and querySelectorAll (page "query").
     Flashed by the simulator with --extra-data; driven by tests/tela_dom.sim. The script runs
     when the app starts: a line "read: ..." shows what it read, the others show what it wrote.
   -->
@@ -11,6 +12,7 @@
     .collapsed .body { display: none; }
     .lead + p { display: none; }
     .short li:first-child { display: none; }
+    .off { display: none; }
   </style>
   <ui default="/main">
     <page id="main">
@@ -43,6 +45,18 @@
       <p id="leadP">the first line</p><p id="afterLead">.lead + p: hidden</p>
       <ul id="steps"><li id="step1">.short li:first-child: hidden</li><li id="step2">the second item</li></ul>
       <button id="toggle" onclick="toggleAll">Toggle</button>
+      <p id="toQuery"><a href="/query">querySelector</a></p>
+      <a href="/main">Back</a>
+    </page>
+
+    <page id="query">
+      <h2>Query</h2>
+      <input type="checkbox" id="q1" label="One" checked>
+      <input type="checkbox" id="q2" label="Two">
+      <input type="checkbox" id="q3" label="Three">
+      <ul id="qlist"><li id="qi1">the first</li><li id="qi2">the second</li><li id="qi3">the third</li></ul>
+      <button id="find" onclick="findChecked">Find</button>
+      <p id="readQuery">-</p>
       <a href="/main">Back</a>
     </page>
   </ui>
@@ -80,6 +94,15 @@ function toggleAll()
   el("leadP").classList:toggle("lead")
   el("steps").classList:toggle("short")
   el("readClass").textContent = "read: " .. lamp.className
+end
+
+-- The boxes checked now, then the odd rows hidden with a class
+function findChecked()
+  local ids = {}
+  for _, c in ipairs(document:querySelectorAll("#query input:checked")) do ids[#ids + 1] = c.id end
+  for _, li in ipairs(document:querySelectorAll("#qlist li:nth-child(odd)")) do li.classList:add("off") end
+  local shown = document.getElementById("qlist"):querySelector("li:not(.off)")
+  el("readQuery").textContent = "read: " .. table.concat(ids, " ") .. " / " .. shown.id
 end
   </script>
 </app>

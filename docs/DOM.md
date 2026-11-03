@@ -1,4 +1,4 @@
-# DOM v0.2
+# DOM v0.3
 
 DOM в TelaOS: элементы приложения для его скрипта на Lua — так, как браузер даёт их JavaScript.
 Браузер без JS — всё остальное должно быть: HTML (`docs/HTML_TAGS.md`), CSS (`docs/CSS.md`)
@@ -6,6 +6,8 @@ DOM в TelaOS: элементы приложения для его скрипт�
 
 ## Changelog
 
+- **v0.3**: `querySelector` и `querySelectorAll` — у `document` и у элемента. Селекторы — те же,
+  что читает CSS TelaOS; состояние (`:checked`, `:disabled`) — то, в каком элемент сейчас.
 - **v0.2**: `classList`: `add`, `remove`, `toggle`, `contains`; к ним `el.className`. Смена класса,
   `id` или атрибута, на который смотрит селектор, применяет CSS заново — к элементу, к тому, что
   в нём, и к соседям после него. Свойства правил, которые перестали подходить, возвращаются
@@ -43,7 +45,7 @@ if title:hasAttribute("hidden") then title:removeAttribute("hidden") end
 - Новое приложение — новое дерево: элемент прежнего ничего не находит (`textContent` пуст,
   `getAttribute` — `nil`).
 
-## Работает: 9 из 20
+## Работает: 11 из 20
 
 Знаки: ✅ работает, — нет.
 
@@ -76,8 +78,10 @@ if title:hasAttribute("hidden") then title:removeAttribute("hidden") end
 
 | | Что | Как |
 |---|-----|-----|
-| — | `querySelector()` | |
-| — | `querySelectorAll()` | |
+| ✅ | `querySelector(s)` | первый в порядке страницы; `nil`, если такого нет |
+| ✅ | `querySelectorAll(s)` | все в порядке страницы — таблицей Lua: `#list`, `list[1]`, `ipairs` |
+
+У `document` — во всём приложении, у элемента — в нём (ниже).
 
 ### Стиль (1)
 
@@ -138,6 +142,29 @@ if title:hasAttribute("hidden") then title:removeAttribute("hidden") end
 - `class="{var}"`: `classList` видит слова, как они подставлены сейчас. После первой правки
   класс — скрипта: `{var}` его больше не меняет.
 
+## Поиск по селекторам
+
+```lua
+for _, box in ipairs(document:querySelectorAll("#settings input:checked")) do
+  print(box.id)
+end
+local open = document.getElementById("todo"):querySelector("li:not(.done)")
+```
+
+- `document:querySelector(s)` ищет на всех страницах приложения, скрытых тоже.
+  `el:querySelector(s)` — только в элементе, без него самого. Предки элемента при этом считаются,
+  как в браузере: у `#sub` внутри `.menu` найдётся `.menu .item`.
+- Селекторы — те же, что читает CSS (`docs/CSS.md`): тип, `.class`, `#id`, `[attr]`, комбинаторы,
+  место среди соседей, `:not()`, `:is()`, `:where()`. Тип — без учёта регистра.
+- В списке через запятую (`h2, .note`) каждый элемент находится один раз и в порядке страницы,
+  а не списка.
+- Состояние — то, в каком элемент сейчас. `:checked` — отмеченный флажок или выбранное радио,
+  даже если его отметил палец, а не атрибут; `[checked]` — сам атрибут. `:disabled` — выключенный,
+  `:focus` — поле в фокусе, `:active` и `:hover` — нажатый.
+- Селектор, который CSS не читает, — ошибка, как `SyntaxError` в браузере: `""`, `a[`,
+  `p::before`. Если такой есть в списке, ошибка — весь список.
+- Метод элемента — через двоеточие: `el.querySelector(s)` с точкой — ошибка.
+
 ## textContent
 
 - Чтение — текст, как его видно: у надписи и абзаца — весь их текст, с `<b>`, `<a>` внутри;
@@ -165,6 +192,9 @@ if title:hasAttribute("hidden") then title:removeAttribute("hidden") end
 - Свойство, которое прежние правила не трогали, новое правило ставит и поверх атрибута TelaOS:
   `bgcolor=` у кнопки без фона в CSS уступит классу с `background`.
 - `z-index` из класса заново не применяется.
+- Состояние в селекторе — только у самого элемента, как и в CSS: `:checked + label`,
+  `li:active a` и `input:not(:checked)` — ошибка. Нет и `:scope`, `:has()`, `:empty`.
+- `::placeholder` ничего не находит: это не элемент. `:root` — тоже: у приложения нет `<html>`.
 
 ## Тесты
 
@@ -172,6 +202,9 @@ if title:hasAttribute("hidden") then title:removeAttribute("hidden") end
   и читается; запись атрибутов и текста; элементы прежнего приложения.
 - `ci/tests/lua/test_lua_classlist.cpp` — `classList`; CSS заново: что возвращается, внутри,
   соседи, место, `id` и атрибуты, что остаётся за скриптом.
+- `ci/tests/lua/test_lua_query.cpp` — `querySelector`, `querySelectorAll`: селекторы, порядок,
+  поиск в элементе, состояния, что поменял скрипт, ошибки, элементы прежнего приложения.
 - Робот `sim/tests/tela_dom.sim` на `sim/tests/fixtures/apps/dom_tags` — то же на настоящем LVGL:
   абзац из спанов, `{count}` после записи, блок, из которого ушла строка с `{count}`; страница
-  classes — классы прячут и показывают то, что внутри, соседа и первый пункт.
+  classes — классы прячут и показывают то, что внутри, соседа и первый пункт; страница query —
+  `:checked` находит флажок, отмеченный касанием.

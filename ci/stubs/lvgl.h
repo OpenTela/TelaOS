@@ -407,7 +407,18 @@ inline bool lv_obj_has_flag(lv_obj_t* obj, int flag) {
     return false;
 #endif
 }
-inline bool lv_obj_has_state(lv_obj_t*, int) { return false; }
+// The states the mock keeps (the rest read as off)
+inline bool lv_obj_has_state(lv_obj_t* obj, int state) {
+#ifdef LVGL_MOCK_ENABLED
+    if (!obj || !obj->mock_widget) return false;
+    if (state == LV_STATE_CHECKED) return obj->mock_widget->checked;
+    if (state == LV_STATE_DISABLED) return obj->mock_widget->disabled;
+    return false;
+#else
+    (void)obj; (void)state;
+    return false;
+#endif
+}
 
 #ifdef LVGL_MOCK_ENABLED
 // Flag capture (for visibility)

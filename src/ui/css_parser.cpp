@@ -1040,6 +1040,28 @@ CssScope::~CssScope() {
 
 const P::Array<CssElement>& CssScope::ancestors() { return scopeStack(); }
 
+CssQuery::CssQuery(std::string_view selectors) {
+    for (std::string_view item : selectorList(selectors)) {
+        Selector one;
+        if (!parseSelector(item, one)) {  // "", a[, ::before: the whole list is wrong
+            list_.clear();
+            return;
+        }
+        list_.push_back(std::move(one));
+    }
+}
+
+bool CssQuery::matches(const CssElement& el, uint16_t states) const {
+    const P::Array<CssElement>& anc = scopeStack();
+    for (const Selector& s : list_) {
+        const Compound& last = s.parts.back();
+        if (last.pseudo != Pseudo::None) continue;  // ::placeholder is no element
+        if ((states & last.states) != last.states) continue;
+        if (matchSelector(s, el, anc, static_cast<int>(anc.size()) - 1)) return true;
+    }
+    return false;
+}
+
 CssScopeText::CssScopeText(std::string_view original, std::string_view text) {
     P::Array<CssElement>& st = scopeStack();
     if (st.empty() || text.data() == original.data()) return;

@@ -89,6 +89,38 @@ int hasAttribute(lua_State* L) {
     return 1;
 }
 
+// ---- querySelector ----
+
+int badSelector(lua_State* L, const char* what, int at) {
+    return luaL_error(L, "%s: '%s' is not a selector TelaOS reads", what, lua_tostring(L, at));
+}
+
+// The first element the selectors (argument at) match in `in` (0: the whole app); nil if none
+int findFirst(lua_State* L, UI::Dom::Node in, int at) {
+    UI::Dom::Node found = 0;
+    if (!UI::Dom::querySelector(in, arg(L, at), found)) return badSelector(L, "querySelector", at);
+    push(L, found);
+    return 1;
+}
+
+// All of them, in the page order: a Lua array (#list, list[1], ipairs)
+int findAll(lua_State* L, UI::Dom::Node in, int at) {
+    P::Array<UI::Dom::Node> found;
+    if (!UI::Dom::querySelectorAll(in, arg(L, at), found)) return badSelector(L, "querySelectorAll", at);
+    lua_createtable(L, static_cast<int>(found.size()), 0);
+    for (size_t k = 0; k < found.size(); ++k) {
+        push(L, found[k]);
+        lua_rawseti(L, -2, static_cast<lua_Integer>(k + 1));
+    }
+    return 1;
+}
+
+// document.querySelector(s) and document:querySelector(s); el:querySelector(s) looks in el
+int docQuerySelector(lua_State* L) { return findFirst(L, 0, lua_istable(L, 1) ? 2 : 1); }
+int docQuerySelectorAll(lua_State* L) { return findAll(L, 0, lua_istable(L, 1) ? 2 : 1); }
+int querySelector(lua_State* L) { return findFirst(L, self(L), 2); }
+int querySelectorAll(lua_State* L) { return findAll(L, self(L), 2); }
+
 // ---- classList ----
 
 UI::Dom::Node listOf(lua_State* L) { return static_cast<Ref*>(luaL_checkudata(L, 1, kClassList))->node; }
@@ -153,6 +185,8 @@ const luaL_Reg kMethods[] = {
     {"setAttribute", setAttribute},
     {"removeAttribute", removeAttribute},
     {"hasAttribute", hasAttribute},
+    {"querySelector", querySelector},
+    {"querySelectorAll", querySelectorAll},
     {nullptr, nullptr},
 };
 
@@ -238,6 +272,10 @@ void registerAll(lua_State* L) {
     lua_newtable(L);
     lua_pushcfunction(L, getElementById);
     lua_setfield(L, -2, "getElementById");
+    lua_pushcfunction(L, docQuerySelector);
+    lua_setfield(L, -2, "querySelector");
+    lua_pushcfunction(L, docQuerySelectorAll);
+    lua_setfield(L, -2, "querySelectorAll");
     lua_setglobal(L, "document");
 }
 

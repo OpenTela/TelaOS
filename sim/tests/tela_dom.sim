@@ -2,6 +2,7 @@
 # Fixture: sim/tests/fixtures/apps/dom_tags (flashed with --extra-data sim/tests/fixtures).
 # Its script reads and writes the page when it starts, a tap reads and writes a button.
 # Page "classes": one tap toggles classes, and what their rules show and hide follows.
+# Page "query": querySelectorAll finds the boxes checked now, and hides the odd rows.
 
 wait 300
 > app launch dom_tags
@@ -57,6 +58,24 @@ expect @panelBody :visible
 expect @afterLead :visible
 expect @step1 :visible
 shot dom_04_classes_off
+
+scroll @toQuery
+tap "querySelector"
+wait 300
+expect "Query" :visible
+expect @q1 on
+expect @q2 off
+tap @q2
+wait 200
+expect @q2 on
+scroll @find
+tap "Find"
+wait 200
+expect @readQuery "read: q1 q2 / qi2"
+expect @qi1 :hidden
+expect @qi2 :visible
+expect @qi3 :hidden
+shot dom_05_query
 
 expect mem.dram_failed 0
 expect mem.psram_failed 0

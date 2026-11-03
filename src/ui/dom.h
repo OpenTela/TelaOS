@@ -7,7 +7,8 @@
  * (UI::CssScope), and it gets its object when it is styled (Widget::applyCss). It keeps its
  * attributes as they are written: reading one decodes it, writing one also does on the screen
  * what the attribute does in the markup (hidden, disabled, checked, value...). When a class, an id
- * or another attribute a selector looks at changes, CSS is applied again (classList).
+ * or another attribute a selector looks at changes, CSS is applied again (classList). Scripts find
+ * elements by the selectors of CSS (querySelector).
  *
  * An element is a handle. A new build (the next app) makes new handles: the old ones find nothing.
  */
@@ -82,6 +83,12 @@ bool addClasses(Node n, const P::Array<std::string_view>& names);
 bool removeClasses(Node n, const P::Array<std::string_view>& names);
 bool toggleClass(Node n, std::string_view name, int force, bool& now);  // force: -1 either way, 0 off, 1 on
 P::String className(Node n);
+
+// The elements selectors match, read as CSS reads them (a state, :checked, is the one the widget
+// is in now), in the page order: in the whole app (inside 0) or in `inside`, whose ancestors
+// count (.menu a). false: the selectors do not read
+bool querySelector(Node inside, std::string_view selectors, Node& found);  // the first; 0: none
+bool querySelectorAll(Node inside, std::string_view selectors, P::Array<Node>& found);
 
 }  // namespace Dom
 }  // namespace UI

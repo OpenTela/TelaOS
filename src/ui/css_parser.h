@@ -163,6 +163,20 @@ struct Rule {
 
 }  // namespace CssDetail
 
+// Selectors a script finds elements by (querySelector, UI::Dom): read as the sheets read them, but
+// one that does not read makes the whole list wrong, as in a browser. An element matches with
+// CssScope::ancestors() as its ancestors; a state (:checked) is the one its widget is in now
+class CssQuery {
+public:
+    explicit CssQuery(std::string_view selectors);
+    bool ok() const { return !list_.empty(); }
+    // states: the LV_STATE_* bits el's widget is in
+    bool matches(const CssElement& el, uint16_t states) const;
+
+private:
+    P::Array<CssDetail::Selector> list_;  // empty: the selectors do not read
+};
+
 class Css {
 public:
     // Parse a style sheet (<style> content); its rules come after the ones parsed before
