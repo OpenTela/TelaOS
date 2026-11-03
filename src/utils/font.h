@@ -26,6 +26,8 @@ public:
     static int nearest(int requested);
     static const lv_font_t* get(int size = SMALL);
     static const lv_font_t* defaultFont();
+    // The size of a font get() gives (16, 32, 48, 72); SMALL for any other font or none
+    static int sizeOf(const lv_font_t* font);
 
 private:
     Font() = delete;

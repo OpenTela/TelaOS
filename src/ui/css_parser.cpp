@@ -8,15 +8,19 @@
  */
 
 #include "ui/css_parser.h"
-#include "ui/css_colors.h"
+#include "ui/css_values.h"
 #include "ui/ui_coords.h"
 #include "ui/ui_html_internal.h"
 #include "core/core.h"
+#include "ui_layout.h"  // SCREEN_WIDTH, SCREEN_HEIGHT
 
 #include "widgets/widget_common.h"
+#include "utils/font.h"
 #include "utils/log_config.h"
 #include <algorithm>
+#include <array>
 #include <cctype>
+#include <cmath>
 #include <cstdlib>
 #include <cstring>
 
@@ -50,6 +54,15 @@ P::String lowered(std::string_view s) {
     for (char& c : out) c = lowerAscii(c);
     return out;
 }
+
+std::string_view trimmed(std::string_view s) {
+    while (!s.empty() && isSpace(s.front())) s.remove_prefix(1);
+    while (!s.empty() && isSpace(s.back())) s.remove_suffix(1);
+    return s;
+}
+
+// A custom property: --accent
+bool isCustom(std::string_view name) { return name.size() > 2 && name[0] == '-' && name[1] == '-'; }
 
 // Name characters of CSS identifiers: letters, digits, '-', '_', and anything non-ASCII
 bool isNameChar(char c) {
@@ -268,6 +281,10 @@ bool parseCompound(std::string_view s, size_t& i, Compound& c) {
             AttrTest t;
             if (!parseAttrTest(s, i, t)) return false;
             c.attrs.push_back(std::move(t));
+        } else if (ch == ':' && i + 5 <= n && equalsNoCase(s.substr(i + 1, 4), "root") &&
+                   (i + 5 == n || !isNameChar(s[i + 5]))) {
+            c.root = true;
+            i += 5;
         } else {
             break;  // a combinator, the end, or something not supported (':' is checked by the caller)
         }
@@ -307,7 +324,7 @@ bool parseSelector(std::string_view s, Selector& out) {
     unsigned ids = 0, classes = 0, types = 0;
     for (const Compound& c : out.parts) {
         ids += !c.id.empty();
-        classes += static_cast<unsigned>(c.classes.size());
+        classes += static_cast<unsigned>(c.classes.size()) + (c.root ? 1 : 0);  // :root is a pseudo-class
         for (const AttrTest& t : c.attrs) {
             if (t.name == "id" && t.op == '=') ++ids;  // #a#b
             else ++classes;
@@ -353,6 +370,7 @@ bool matchAttr(const AttrTest& t, std::string_view attrs) {
 }
 
 bool matchCompound(const Compound& c, const CssElement& el) {
+    if (c.root && !el.root) return false;  // :root; the root itself (tag html) also takes html {} and * {}
     if (!c.tag.empty() && el.tag != std::string_view(c.tag)) return false;
     if (!c.id.empty() && el.id != std::string_view(c.id)) return false;
     for (const P::String& cls : c.classes) {
@@ -405,6 +423,224 @@ P::Array<CssElement>& scopeStack() {
     return s_stack;
 }
 
+// The custom properties each scope's element declares, var()s put in: one entry per scopeStack() entry
+P::Array<P::Array<CssDecl>>& customStack() {
+    static P::Array<P::Array<CssDecl>> s_stack;
+    return s_stack;
+}
+
+// ============ var() ============
+
+constexpr int kMaxVarDepth = 8;  // --a: var(--b) chains; a cycle ends here
+
+// Where var( starts, at i or after it, in any case and not as the end of a longer name; npos if nowhere
+size_t findVar(std::string_view v, size_t i) {
+    for (; i + 4 <= v.size(); ++i) {
+        if (v[i + 3] == '(' && equalsNoCase(v.substr(i, 3), "var") && (i == 0 || !isNameChar(v[i - 1]))) return i;
+    }
+    return std::string_view::npos;
+}
+
+bool hasVar(std::string_view v) { return findVar(v, 0) != std::string_view::npos; }
+
+const P::String* findDecl(const P::Array<CssDecl>& decls, std::string_view name) {
+    for (const CssDecl& d : decls) {
+        if (std::string_view(d.name) == name) return &d.value;
+    }
+    return nullptr;
+}
+
+// Puts values into var(--name, fallback): the element's own custom property first, then its
+// ancestors' (the nearest first), then :root's
+struct VarResolver {
+    P::Array<CssDecl>& own;                        // the element's winning declarations
+    const P::Array<P::Array<CssDecl>>& inherited;  // per ancestor, the outermost first
+    int top;                                       // the nearest ancestor's index in inherited
+    const P::Array<CssDecl>* root;                 // nullptr while :root's own are worked out
+
+    // The value of custom property `name`, its own var()s put in; nullptr if it has none
+    const P::String* find(std::string_view name, int depth) {
+        for (CssDecl& d : own) {
+            if (std::string_view(d.name) != name) continue;
+            if (hasVar(d.value)) {
+                const P::String source = d.value;  // a copy: a cycle may reach d again further down
+                P::String done;
+                if (depth >= kMaxVarDepth || !substitute(source, done, depth + 1)) return nullptr;
+                d.value = std::move(done);
+            }
+            return &d.value;
+        }
+        for (int k = top; k >= 0; --k) {
+            if (const P::String* v = findDecl(inherited[static_cast<size_t>(k)], name)) return v;
+        }
+        return root ? findDecl(*root, name) : nullptr;
+    }
+
+    // value with each var() put in; false if one has neither a value nor a fallback
+    bool substitute(std::string_view value, P::String& out, int depth) {
+        out.clear();
+        size_t i = 0;
+        while (true) {
+            const size_t at = findVar(value, i);
+            if (at == std::string_view::npos) {
+                out.append(value.data() + i, value.size() - i);
+                return true;
+            }
+            out.append(value.data() + i, at - i);
+            size_t close = at + 4;
+            for (int open = 1; close < value.size(); ++close) {
+                if (value[close] == '(') ++open;
+                else if (value[close] == ')' && --open == 0) break;
+            }
+            if (close >= value.size()) return false;  // var( without its ')'
+            const std::string_view args = value.substr(at + 4, close - at - 4);
+            const size_t comma = args.find(',');
+            const std::string_view name = trimmed(args.substr(0, comma));
+            if (!isCustom(name)) return false;
+            if (const P::String* v = find(name, depth)) {
+                out += *v;
+            } else if (comma != std::string_view::npos) {
+                P::String fallback;
+                if (depth >= kMaxVarDepth || !substitute(trimmed(args.substr(comma + 1)), fallback, depth + 1)) {
+                    return false;
+                }
+                out += fallback;
+            } else {
+                return false;
+            }
+            i = close + 1;
+        }
+    }
+};
+
+// var() in an element's winning declarations. A declaration whose var() has no value is left out:
+// it is invalid, as in CSS (it then works as if it were not there: the property is inherited or initial).
+void resolveVars(P::Array<CssDecl>& decls, const P::Array<P::Array<CssDecl>>& inherited, int top,
+                 const P::Array<CssDecl>* root) {
+    VarResolver r{decls, inherited, top, root};
+    for (CssDecl& d : decls) {
+        if (!hasVar(d.value)) continue;
+        if (isCustom(d.name)) {
+            r.find(d.name, 0);  // puts its value in place, if it has one
+            continue;
+        }
+        const P::String source = d.value;
+        P::String done;
+        if (r.substitute(source, done, 0)) d.value = std::move(done);
+        else d.name.clear();
+    }
+    decls.erase(std::remove_if(decls.begin(), decls.end(),
+                               [](const CssDecl& d) { return d.name.empty() || (isCustom(d.name) && hasVar(d.value)); }),
+                decls.end());
+}
+
+// ============ Values of the properties ============
+
+// The size of the font an object's text has (its own or its parent's): one of the firmware's
+float fontPxOf(lv_obj_t* o) {
+    return static_cast<float>(o ? UI::Font::sizeOf(lv_obj_get_style_text_font(o, LV_PART_MAIN)) : kCssRemPx);
+}
+
+// font: 32 (TelaOS) or font: bold 12px/1.5 Arial (CSS): its size in px, 0 if it has none. A bare
+// number among several parts is a weight (700), not a size.
+int fontShorthandSize(std::string_view value, float parentPx) {
+    const P::Array<std::string_view> parts = cssParts(value);
+    if (parts.size() == 1) return cssFontSize(parts[0], parentPx);
+    for (std::string_view p : parts) {
+        p = p.substr(0, p.find('/'));  // 12px/1.5: the size, then the line height
+        if (p.empty() || std::isdigit(static_cast<unsigned char>(p.back())) || p.back() == '.') continue;
+        if (const int px = cssFontSize(p, parentPx)) return px;
+    }
+    return 0;
+}
+
+// 1 to maxCount lengths, none negative: padding: 4px 8px. false if one does not read.
+bool lengthList(std::string_view value, float em, size_t maxCount, std::array<int32_t, 4>& v, size_t& count) {
+    const P::Array<std::string_view> parts = cssParts(value);
+    if (parts.empty() || parts.size() > maxCount) return false;
+    for (size_t k = 0; k < parts.size(); ++k) {
+        if (!cssLength(parts[k], em, v[k]) || v[k] < 0) return false;
+    }
+    count = parts.size();
+    return true;
+}
+
+bool oneLength(std::string_view value, float em, int32_t& px) {
+    std::array<int32_t, 4> v{};
+    size_t n = 0;
+    if (!lengthList(value, em, 1, v, n)) return false;
+    px = v[0];
+    return true;
+}
+
+// A percentage: 50% → 50
+bool percent(std::string_view value, float& v) {
+    value = trimmed(value);
+    size_t i = 0;
+    return !value.empty() && value.back() == '%' && cssNumber(value, i, v) && i == value.size() - 1;
+}
+
+// width: 50% (of the parent, at layout time), 10em, 120px
+bool sizeValue(std::string_view value, float em, int32_t& out) {
+    float v = 0;
+    if (percent(value, v)) {
+        if (v < 0) return false;
+        out = lv_pct(static_cast<int32_t>(std::lround(v)));
+        return true;
+    }
+    return cssLength(value, em, out) && out >= 0;
+}
+
+// left: 10% (of the screen, as TelaOS x= is), 10px
+bool coordValue(std::string_view value, float em, int32_t screen, int32_t& out) {
+    float v = 0;
+    if (percent(value, v)) {
+        out = static_cast<int32_t>(std::lround(v * static_cast<float>(screen) / 100));
+        return true;
+    }
+    return cssLength(value, em, out);
+}
+
+// border-radius: 8px, 50% (a circle); LVGL has one radius for all corners, so the first value
+bool radiusValue(std::string_view value, float em, int32_t& out) {
+    const P::Array<std::string_view> parts = cssParts(value);
+    if (parts.empty()) return false;
+    const std::string_view first = parts[0].substr(0, parts[0].find('/'));  // 8px/4px: elliptical
+    float v = 0;
+    if (percent(first, v)) {  // the box's size is not known yet: only a circle reads
+        if (v < 50) return false;
+        out = LV_RADIUS_CIRCLE;
+        return true;
+    }
+    return cssLength(first, em, out) && out >= 0;
+}
+
+// opacity: 0.5 or 50%
+bool opacityValue(std::string_view value, uint8_t& out) {
+    value = trimmed(value);
+    size_t i = 0;
+    float a = 0;
+    if (!cssNumber(value, i, a)) return false;
+    if (value.substr(i) == "%") a /= 100;
+    else if (i != value.size()) return false;
+    out = static_cast<uint8_t>(std::lround(std::min(std::max(a, 0.0f), 1.0f) * 255));
+    return true;
+}
+
+// background: the color in it (background: url(x.png) #222 → #222), none → transparent;
+// background-color: a color
+bool backgroundColor(const P::String& name, std::string_view value, CssColor& c) {
+    if (name != "background") return cssColor(value, c);
+    for (std::string_view p : cssParts(value)) {
+        if (cssColor(p, c)) return true;
+    }
+    if (equalsNoCase(trimmed(value), "none")) {
+        c = CssColor{0x000000, 0};
+        return true;
+    }
+    return false;
+}
+
 // ============ Text vertical alignment via padding-top ============
 
 void applyTextValignCSS(lv_obj_t* obj, const P::String& valign) {
@@ -437,6 +673,9 @@ Css& Css::instance() {
 void Css::clear() {
     m_rules.clear();
     m_nextOrder = 0;
+    m_hasCustom = false;
+    m_rootCustom.clear();
+    m_rootReady = false;
 }
 
 P::String Css::trim(std::string_view s) {
@@ -464,10 +703,14 @@ CssScope::CssScope(std::string_view tag, std::string_view attrs) {
     el.attrs = attrs;
     Css::findAttr(attrs, "id", el.id);
     Css::findAttr(attrs, "class", el.classes);
+    customStack().push_back(Css::instance().customProperties(el));  // before el is its own ancestor
     scopeStack().push_back(el);
 }
 
-CssScope::~CssScope() { scopeStack().pop_back(); }
+CssScope::~CssScope() {
+    scopeStack().pop_back();
+    customStack().pop_back();
+}
 
 const P::Array<CssElement>& CssScope::ancestors() { return scopeStack(); }
 
@@ -524,6 +767,10 @@ void Css::parse(std::string_view css) {
             s = comma + 1;
         }
         if (rule.selectors.empty()) continue;
+        for (const CssDecl& d : decls) {
+            if (isCustom(d.name)) m_hasCustom = true;
+        }
+        m_rootReady = false;  // :root's custom properties may have changed
         rule.decls = std::move(decls);
         rule.order = m_nextOrder++;
 
@@ -535,6 +782,43 @@ void Css::parse(std::string_view css) {
 // ============ Cascade ============
 
 P::Array<CssDecl> Css::cascade(const CssElement& el, std::string_view inlineStyle) const {
+    const P::Array<CssElement>& anc = CssScope::ancestors();
+    // A paragraph's text is built inside its own scope (its widgets need it as their ancestor):
+    // when it styles itself, it is not its own ancestor
+    int top = static_cast<int>(anc.size()) - 1;
+    if (top >= 0 && el.attrs.data() && sameElement(anc[static_cast<size_t>(top)], el)) --top;
+    return cascadeIn(el, inlineStyle, anc, top, customStack(), true);
+}
+
+P::Array<CssDecl> Css::customProperties(const CssElement& el) const {
+    if (!m_hasCustom && el.attrs.find("--") == std::string_view::npos) return {};  // most pages
+    std::string_view style;
+    findAttr(el.attrs, "style", style);
+    P::Array<CssDecl> own = cascade(el, style);
+    own.erase(std::remove_if(own.begin(), own.end(), [](const CssDecl& d) { return !isCustom(d.name); }), own.end());
+    return own;
+}
+
+const P::Array<CssDecl>& Css::rootCustom() const {
+    if (!m_rootReady) {
+        m_rootReady = true;
+        m_rootCustom.clear();
+        if (m_hasCustom) {
+            CssElement root;
+            root.tag = "html";
+            root.root = true;
+            static const P::Array<CssElement> kNoAncestors;
+            static const P::Array<P::Array<CssDecl>> kNoCustom;
+            for (CssDecl& d : cascadeIn(root, {}, kNoAncestors, -1, kNoCustom, false)) {
+                if (isCustom(d.name)) m_rootCustom.push_back(std::move(d));
+            }
+        }
+    }
+    return m_rootCustom;
+}
+
+P::Array<CssDecl> Css::cascadeIn(const CssElement& el, std::string_view inlineStyle, const P::Array<CssElement>& anc,
+                                 int top, const P::Array<P::Array<CssDecl>>& ancCustom, bool withRoot) const {
     struct Hit {
         const CssDecl* decl;
         uint8_t layer;  // 0 sheets, 1 style="", 2 sheets !important, 3 style="" !important
@@ -542,11 +826,6 @@ P::Array<CssDecl> Css::cascade(const CssElement& el, std::string_view inlineStyl
         uint32_t order;  // rule order, then the declaration's place in its rule
     };
     P::Array<Hit> hits;
-    const P::Array<CssElement>& anc = CssScope::ancestors();
-    // A paragraph's text is built inside its own scope (its widgets need it as their ancestor):
-    // when it styles itself, it is not its own ancestor
-    int top = static_cast<int>(anc.size()) - 1;
-    if (top >= 0 && el.attrs.data() && sameElement(anc[static_cast<size_t>(top)], el)) --top;
     for (const Rule& r : m_rules) {
         bool any = false;
         uint32_t spec = 0;  // a list applies with its most specific matching selector
@@ -583,9 +862,13 @@ P::Array<CssDecl> Css::cascade(const CssElement& el, std::string_view inlineStyl
         winners.push_back(h.decl);
     }
     P::Array<CssDecl> out;
+    bool vars = false;
     for (const CssDecl* w : winners) {
-        if (w) out.push_back(*w);
+        if (!w) continue;
+        out.push_back(*w);
+        vars = vars || hasVar(w->value);
     }
+    if (vars) resolveVars(out, ancCustom, top, withRoot ? &rootCustom() : nullptr);
     return out;
 }
 
@@ -606,81 +889,118 @@ void Css::applyMatching(Widget& w, const char* tag, const char* id, const char* 
 // ============ Apply properties to widget ============
 
 void Css::applyProps(Widget& w, const P::Array<CssDecl>& decls) const {
+    lv_obj_t* const o = w.handle;
+    if (!o) return;
+    // em is the element's font size: the one font-size gives it, or the one it has (font=, inherited);
+    // in font-size itself, em is the parent's
+    const float parentEm = fontPxOf(lv_obj_get_parent(o));
+    int fontPx = 0;
+    for (const CssDecl& d : decls) {
+        int px = 0;
+        if (d.name == "font-size") px = cssFontSize(d.value, parentEm);
+        else if (d.name == "font") px = fontShorthandSize(d.value, parentEm);
+        if (px > 0) fontPx = px;  // the later one wins; one that does not read is left out
+    }
+    const float em = fontPx > 0 ? static_cast<float>(UI::Font::nearest(fontPx)) : fontPxOf(o);
+
     // Deferred text-valign — needs height to be set first
     P::String deferredTextValign;
     P::String deferredTextAlignV;  // vertical part of compound "center center"
 
     for (const CssDecl& d : decls) {
         const P::String& name = d.name;
-        const P::String& value = d.value;
+        const std::string_view value = d.value;
+        int32_t v = 0;
+        std::array<int32_t, 4> list{};
+        size_t n = 0;
         if (name == "color") {
-            w.applyColor(parseColorValue(value));
-        } else if (name == "background" || name == "background-color" || name == "bgcolor") {
-            w.applyBgColor(parseColorValue(value));
-        } else if (name == "font-size" || name == "font") {
-            w.applyFont(parseSizeValue(value));
-        } else if (name == "border-radius" || name == "radius") {
-            w.applyRadius(parseSizeValue(value));
-        } else if (name == "z-index") {
-            if (!w.handle) continue;
-            g_core.app().setZIndex(w.handle, atoi(value.c_str()));
-        } else if (name == "width" || name == "w") {
-            int v = parse_size(value.c_str()); if (v != 0) lv_obj_set_width(w.handle, v);
-        } else if (name == "height" || name == "h") {
-            int v = parse_size(value.c_str()); if (v != 0) lv_obj_set_height(w.handle, v);
-        } else if (name == "min-height") {
-            int v = parse_size(value.c_str()); if (v != 0) lv_obj_set_style_min_height(w.handle, v, 0);
-        } else if (name == "max-height") {
-            int v = parse_size(value.c_str()); if (v != 0) lv_obj_set_style_max_height(w.handle, v, 0);
-        } else if (name == "min-width") {
-            int v = parse_size(value.c_str()); if (v != 0) lv_obj_set_style_min_width(w.handle, v, 0);
-        } else if (name == "max-width") {
-            int v = parse_size(value.c_str()); if (v != 0) lv_obj_set_style_max_width(w.handle, v, 0);
-        } else if (name == "left") {
-            int v = parse_coord_w(value.c_str()); if (v >= 0) lv_obj_set_x(w.handle, v);
-        } else if (name == "top") {
-            int v = parse_coord_h(value.c_str()); if (v >= 0) lv_obj_set_y(w.handle, v);
-        } else if (name == "padding") {
-            int v = parseSizeValue(value); if (v >= 0) lv_obj_set_style_pad_all(w.handle, v, 0);
-        } else if (name == "padding-left") {
-            int v = parseSizeValue(value); if (v >= 0) lv_obj_set_style_pad_left(w.handle, v, 0);
-        } else if (name == "padding-right") {
-            int v = parseSizeValue(value); if (v >= 0) lv_obj_set_style_pad_right(w.handle, v, 0);
-        } else if (name == "padding-top") {
-            int v = parseSizeValue(value); if (v >= 0) lv_obj_set_style_pad_top(w.handle, v, 0);
-        } else if (name == "padding-bottom") {
-            int v = parseSizeValue(value); if (v >= 0) lv_obj_set_style_pad_bottom(w.handle, v, 0);
-        } else if (name == "gap" || name == "border-spacing") {
-            int v = parseSizeValue(value);
-            if (v >= 0) {
-                lv_obj_set_style_pad_row(w.handle, v, 0);
-                lv_obj_set_style_pad_column(w.handle, v, 0);
+            CssColor c;
+            if (cssColor(value, c)) {
+                w.applyColor(c.rgb);
+                if (c.alpha < LV_OPA_COVER) lv_obj_set_style_text_opa(o, c.alpha, 0);
             }
+        } else if (name == "background" || name == "background-color" || name == "bgcolor") {
+            CssColor c;
+            if (backgroundColor(name, value, c)) {
+                w.applyBgColor(c.rgb);
+                if (c.alpha < LV_OPA_COVER) lv_obj_set_style_bg_opa(o, c.alpha, 0);
+            }
+        } else if (name == "border-radius" || name == "radius") {
+            if (radiusValue(value, em, v)) w.applyRadius(v);
+        } else if (name == "z-index") {
+            g_core.app().setZIndex(o, atoi(d.value.c_str()));
+        } else if (name == "width" || name == "w") {
+            if (sizeValue(value, em, v)) lv_obj_set_width(o, v);
+        } else if (name == "height" || name == "h") {
+            if (sizeValue(value, em, v)) lv_obj_set_height(o, v);
+        } else if (name == "min-height") {
+            if (sizeValue(value, em, v)) lv_obj_set_style_min_height(o, v, 0);
+        } else if (name == "max-height") {
+            if (sizeValue(value, em, v)) lv_obj_set_style_max_height(o, v, 0);
+        } else if (name == "min-width") {
+            if (sizeValue(value, em, v)) lv_obj_set_style_min_width(o, v, 0);
+        } else if (name == "max-width") {
+            if (sizeValue(value, em, v)) lv_obj_set_style_max_width(o, v, 0);
+        } else if (name == "left") {
+            if (coordValue(value, em, SCREEN_WIDTH, v)) lv_obj_set_x(o, v);
+        } else if (name == "top") {
+            if (coordValue(value, em, SCREEN_HEIGHT, v)) lv_obj_set_y(o, v);
+        } else if (name == "padding") {  // top right bottom left; a missing side takes the opposite one
+            if (lengthList(value, em, 4, list, n)) {
+                if (n == 1) {
+                    lv_obj_set_style_pad_all(o, list[0], 0);
+                } else {
+                    lv_obj_set_style_pad_top(o, list[0], 0);
+                    lv_obj_set_style_pad_right(o, list[1], 0);
+                    lv_obj_set_style_pad_bottom(o, n > 2 ? list[2] : list[0], 0);
+                    lv_obj_set_style_pad_left(o, n > 3 ? list[3] : list[1], 0);
+                }
+            }
+        } else if (name == "padding-left") {
+            if (oneLength(value, em, v)) lv_obj_set_style_pad_left(o, v, 0);
+        } else if (name == "padding-right") {
+            if (oneLength(value, em, v)) lv_obj_set_style_pad_right(o, v, 0);
+        } else if (name == "padding-top") {
+            if (oneLength(value, em, v)) lv_obj_set_style_pad_top(o, v, 0);
+        } else if (name == "padding-bottom") {
+            if (oneLength(value, em, v)) lv_obj_set_style_pad_bottom(o, v, 0);
+        } else if (name == "gap" || name == "border-spacing") {
+            // gap: rows, then columns; border-spacing: horizontal, then vertical
+            if (lengthList(value, em, 2, list, n)) {
+                const int32_t second = n > 1 ? list[1] : list[0];
+                const bool gap = name == "gap";
+                lv_obj_set_style_pad_row(o, gap ? list[0] : second, 0);
+                lv_obj_set_style_pad_column(o, gap ? second : list[0], 0);
+            }
+        } else if (name == "row-gap") {
+            if (oneLength(value, em, v)) lv_obj_set_style_pad_row(o, v, 0);
+        } else if (name == "column-gap") {
+            if (oneLength(value, em, v)) lv_obj_set_style_pad_column(o, v, 0);
         } else if (name == "opacity") {
-            int opa = (int)(std::atof(value.c_str()) * 255);
-            if (opa < 0) opa = 0; if (opa > 255) opa = 255;
-            lv_obj_set_style_opa(w.handle, opa, 0);
+            uint8_t opa = 0;
+            if (opacityValue(value, opa)) lv_obj_set_style_opa(o, opa, 0);
         } else if (name == "display") {
-            if (equalsNoCase(value, "none")) lv_obj_add_flag(w.handle, LV_OBJ_FLAG_HIDDEN);
+            if (equalsNoCase(value, "none")) lv_obj_add_flag(o, LV_OBJ_FLAG_HIDDEN);
         } else if (name == "text-align") {
             P::String val(value.data(), value.size());
             auto space = val.find(' ');
             P::String hPart = (space != P::String::npos) ? val.substr(0, space) : val;
-            if (hPart == "center")     lv_obj_set_style_text_align(w.handle, LV_TEXT_ALIGN_CENTER, 0);
-            else if (hPart == "right") lv_obj_set_style_text_align(w.handle, LV_TEXT_ALIGN_RIGHT, 0);
-            else                       lv_obj_set_style_text_align(w.handle, LV_TEXT_ALIGN_LEFT, 0);
+            if (hPart == "center")     lv_obj_set_style_text_align(o, LV_TEXT_ALIGN_CENTER, 0);
+            else if (hPart == "right") lv_obj_set_style_text_align(o, LV_TEXT_ALIGN_RIGHT, 0);
+            else                       lv_obj_set_style_text_align(o, LV_TEXT_ALIGN_LEFT, 0);
             if (space != P::String::npos)
                 deferredTextAlignV = val.substr(space + 1);
         } else if (name == "text-valign") {
             deferredTextValign.assign(value.data(), value.size());
         }
     }
+    if (fontPx > 0) w.applyFont(fontPx);
 
     // Apply text-valign AFTER height/font are set
     if (!deferredTextValign.empty())
-        applyTextValignCSS(w.handle, deferredTextValign);
+        applyTextValignCSS(o, deferredTextValign);
     else if (!deferredTextAlignV.empty())
-        applyTextValignCSS(w.handle, deferredTextAlignV);
+        applyTextValignCSS(o, deferredTextAlignV);
 }
 
 // ============ Legacy class-only API ============
@@ -726,41 +1046,14 @@ uint32_t Css::getColor(const P::String& className, const P::String& property, ui
 // ============ Color/size parsing ============
 
 uint32_t Css::parseColorValue(std::string_view color) {
-    if (color.empty()) return 0x000000;
-    while (!color.empty() && std::isspace(static_cast<unsigned char>(color.front()))) color = color.substr(1);
-    while (!color.empty() && std::isspace(static_cast<unsigned char>(color.back()))) color = color.substr(0, color.size() - 1);
-    if (!color.empty() && color[0] == '#') color = color.substr(1);
-
-    uint32_t named;
-    if (cssNamedColor(color, named)) return named;  // all 148 CSS names (css_colors.h)
-    if (color == "transparent") return 0x000000;
-
-    char buf[8];
-    if (color.size() == 6) {
-        memcpy(buf, color.data(), 6); buf[6] = '\0';
-        return static_cast<uint32_t>(std::strtoul(buf, nullptr, 16));
-    }
-    if (color.size() == 3) {
-        buf[1] = '\0';
-        buf[0] = color[0]; uint32_t r = static_cast<uint32_t>(std::strtoul(buf, nullptr, 16));
-        buf[0] = color[1]; uint32_t g = static_cast<uint32_t>(std::strtoul(buf, nullptr, 16));
-        buf[0] = color[2]; uint32_t b = static_cast<uint32_t>(std::strtoul(buf, nullptr, 16));
-        return (r << 20) | (r << 16) | (g << 12) | (g << 8) | (b << 4) | b;
-    }
-    return 0x000000;
+    CssColor c;
+    return cssColor(color, c) ? c.rgb : 0x000000;
 }
 
 int Css::parseSizeValue(std::string_view size) {
-    if (size.empty()) return 0;
-    char buf[16];
-    size_t i = 0;
-    for (char c : size) {
-        if (i >= 15) break;
-        if (std::isdigit(static_cast<unsigned char>(c)) || c == '-') buf[i++] = c;
-        else if (c != ' ') break;
-    }
-    buf[i] = '\0';
-    return i == 0 ? 0 : std::atoi(buf);
+    const P::Array<std::string_view> parts = cssParts(size);
+    int32_t px = 0;
+    return !parts.empty() && cssLength(parts[0], kCssRemPx, px) ? px : 0;
 }
 
 void Css::dump() const {

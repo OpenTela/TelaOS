@@ -1,6 +1,6 @@
 <app os="1.0" title="CSS" version="0.1" category="test">
   <!--
-    Test fixture for CSS in TelaOS (docs/CSS.md): selectors and cascade.
+    Test fixture for CSS in TelaOS (docs/CSS.md): selectors and cascade; values (page "values").
     Flashed by the simulator with --extra-data; driven by tests/tela_css.sim.
     Each line says which rule colors it; a line in white did not get its rule.
   -->
@@ -19,6 +19,16 @@
     .must { color: #4FC3F7 !important; }
     #strong { color: #E57373; }
     .gone { display: none; }
+    :root { --accent: #FFD54F; }
+    .half { color: rgba(255, 255, 255, 0.5); }
+    .hsl { color: hsl(200, 80%, 60%); }
+    .accent { color: var(--accent); }
+    .fallback { color: var(--none, #81C784); }
+    .pad { padding: 4px 24px; background: #333333; }
+    .tint { background: #4FC3F780; }
+    .wide { width: 50vw; background: #333333; }
+    .gap { gap: 8px 24px; }
+    .dot { width: 2.5rem; height: 2.5rem; background: #E57373; border-radius: 50%; }
   </style>
   <ui default="/main">
 
@@ -38,6 +48,21 @@
       <p class="note" id="note">p.note beats .note: green</p>
       <p class="must" id="strong">!important beats #id: blue</p>
       <p class="gone" id="gone">display: none</p>
+      <p><a href="/values">Values</a></p>
+    </page>
+
+    <page id="values">
+      <h2>Values</h2>
+      <p class="half" id="half">rgba(): half white</p>
+      <p class="hsl" id="hsl">hsl(): sky blue</p>
+      <p class="accent" id="accent">var(--accent): yellow</p>
+      <p class="fallback" id="fallback">var(--none, green): green</p>
+      <p class="pad" id="pad">padding: 4px 24px</p>
+      <p class="tint" id="tint">#4FC3F780: see-through blue</p>
+      <div class="wide" id="wide"><label>width: 50vw</label></div>
+      <div flex="row" class="gap" id="gap"><label>gap</label><label>8px</label><label>24px</label></div>
+      <div class="dot" id="dot"></div>
+      <p><a href="/main">Back</a></p>
     </page>
 
     <page id="more">

@@ -11,6 +11,10 @@
  * Cascade, as in CSS: declarations go by specificity (ids; classes and attributes; types), then
  * by their order in the sheets; style="" comes after the sheets; !important after all of that,
  * in the same order, and style="" !important last.
+ *
+ * Values (css_values.h): lengths in px, em, rem, vw, vh; colors with alpha; 1 to 4 values in
+ * padding; custom properties (--x), inherited, and var(--x, fallback). A value that does not read
+ * leaves its declaration out, as in a browser.
  */
 
 #include "utils/psram_alloc.h"
@@ -29,6 +33,7 @@ struct CssElement {
     std::string_view id;
     std::string_view classes;  // as in class="": names separated by spaces
     std::string_view attrs;    // raw attributes of the start tag, for [attr] selectors
+    bool root = false;         // the root above every page: :root { --x: ... }
 };
 
 // The elements the page walkers are inside of, outermost first: descendant and child
@@ -65,6 +70,7 @@ struct Compound {     // button.primary#ok[type]
     P::String id;
     P::Array<P::String> classes;
     P::Array<AttrTest> attrs;
+    bool root = false;  // :root
 };
 
 struct Selector {
@@ -90,8 +96,12 @@ public:
     void clear();
 
     // What applies to an element, with CssScope::ancestors() as its ancestors and inlineStyle
-    // as its style="": one declaration per property, the winning one, in cascade order
+    // as its style="": one declaration per property, the winning one, in cascade order, var()s in
+    // the values put in
     P::Array<CssDecl> cascade(const CssElement& el, std::string_view inlineStyle = {}) const;
+
+    // The custom properties (--x) el declares, in its style="" too: what its content inherits
+    P::Array<CssDecl> customProperties(const CssElement& el) const;
 
     // The cascade put on a widget
     void applyMatching(Widget& w, const CssElement& el, std::string_view inlineStyle = {}) const;
@@ -120,7 +130,17 @@ public:
 private:
     P::Array<CssDetail::Rule> m_rules;
     uint32_t m_nextOrder = 0;
+    bool m_hasCustom = false;                  // a sheet declares a custom property
+    mutable P::Array<CssDecl> m_rootCustom;    // :root's custom properties, worked out once
+    mutable bool m_rootReady = false;
     static const P::String s_emptyStr;
+
+    // cascade() with explicit ancestors and their custom properties; root: :root's custom
+    // properties, nullptr while they are worked out
+    P::Array<CssDecl> cascadeIn(const CssElement& el, std::string_view inlineStyle,
+                                const P::Array<CssElement>& anc, int top,
+                                const P::Array<P::Array<CssDecl>>& ancCustom, bool withRoot) const;
+    const P::Array<CssDecl>& rootCustom() const;
 
     // The first rule that is just `.className` (legacy class-only API)
     const CssDetail::Rule* findClass(const P::String& className) const;
