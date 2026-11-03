@@ -667,7 +667,11 @@ void create_label(const char *astart, const char *aend, const char *content, lv_
     // HTML inside (<label>Name <i>(optional)</i></label>, <label><input type="checkbox"> Remember</label>):
     // the text is HTML, as in a browser; the label's own attributes and CSS still apply to it
     const bool rich = !isLiteral && HtmlFlow::hasMarkup(text.c_str(), text.c_str() + text.size(), true);
-    lv_obj_t* lbl = rich ? HtmlFlow::richText(parent, text.c_str(), text.c_str() + text.size(), !hasW) : nullptr;
+    lv_obj_t* lbl = nullptr;
+    if (rich) {
+        UI::CssScope inside("label", std::string_view(astart, static_cast<size_t>(aend - astart)));  // .x i {} sees it
+        lbl = HtmlFlow::richText(parent, text.c_str(), text.c_str() + text.size(), !hasW);
+    }
     if (lbl) {
         Widget look{lbl};  // what Label::create would give it
         if (!colorAttr.empty() && !hasDynamicColor) look.applyColor(parse_color(colorAttr.c_str()));
@@ -955,6 +959,7 @@ void create_button(const char *astart, const char *aend, const char *content, lv
     widget.create(parent);
     auto *btn = widget.handle;
     if (rich) {  // HTML inside: rendered where the label would be, after the icon
+        UI::CssScope inside("button", std::string_view(astart, static_cast<size_t>(aend - astart)));  // .x b {} sees it
         widget.label.handle = HtmlFlow::richText(btn, flat.markup.c_str(), flat.markup.c_str() + flat.markup.size(), true);
         if (widget.label.handle && hasIcon) {
             lv_obj_set_flex_flow(btn, LV_FLEX_FLOW_ROW);
