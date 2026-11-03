@@ -4,6 +4,7 @@
 
 #include "widgets/widget_common.h"
 #include "ui/css_parser.h"
+#include "ui/css_undo.h"
 #include "ui/dom.h"
 #include <cctype>
 
@@ -16,11 +17,14 @@ void Widget::applyStyle(const P::String& classNames) {
 void Widget::applyCss(const char* tag, const char* id, const char* classNames, std::string_view attrs,
                       std::string_view inlineStyle) {
     if (!handle) return;
-    UI::Dom::element(handle, tag ? tag : "", attrs);  // the element scripts find (docs/DOM.md)
+    // the element scripts find (docs/DOM.md); what CSS changes on it is kept for a class change
+    const bool dom = UI::Dom::element(handle, tag ? tag : "", attrs, true, !inlineStyle.empty());
     UI::CssElement el;
     el.tag = tag ? tag : "";
     el.id = id ? id : "";
     el.classes = classNames ? classNames : "";
     el.attrs = attrs;
-    UI::Css::instance().applyMatching(*this, el, inlineStyle);
+    UI::CssUndo undo;
+    UI::Css::instance().applyMatching(*this, el, inlineStyle, dom ? &undo : nullptr);
+    if (dom) UI::Dom::keep(std::move(undo));
 }
