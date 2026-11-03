@@ -382,7 +382,8 @@ inline void _set_href(lv_obj_t* obj, const char* href) { if (obj && obj->mock_wi
 inline void lv_obj_set_style_bg_color(lv_obj_t* obj, lv_color_t c, int) { if (obj && obj->mock_widget) { obj->mock_widget->bgcolor = c.full; obj->mock_widget->hasBgcolor = true; } }
 inline void lv_obj_set_style_text_color(lv_obj_t* obj, lv_color_t c, int) { if (obj && obj->mock_widget) { obj->mock_widget->color = c.full; obj->mock_widget->hasColor = true; } }
 inline void lv_obj_set_style_radius(lv_obj_t* obj, int r, int) { if (obj && obj->mock_widget) obj->mock_widget->radius = r; }
-inline void lv_obj_set_style_bg_opa(lv_obj_t* obj, int opa, int) { if (obj && obj->mock_widget) obj->mock_widget->opacity = opa; }
+inline void lv_obj_set_style_bg_opa(lv_obj_t* obj, int opa, int) { if (obj && obj->mock_widget) { obj->mock_widget->opacity = opa; obj->mock_widget->bgOpa = opa; } }
+inline void lv_obj_set_style_text_opa(lv_obj_t* obj, int opa, int) { if (obj && obj->mock_widget) obj->mock_widget->textOpa = opa; }
 
 // Alignment capture
 inline void lv_obj_align(lv_obj_t* obj, lv_align_t align, int x_ofs, int y_ofs) {
@@ -466,6 +467,7 @@ inline void lv_textarea_set_max_length(lv_obj_t* obj, uint32_t n) {
 #define lv_obj_set_style_text_color lv_obj_set_style_text_color
 #define lv_obj_set_style_radius lv_obj_set_style_radius
 #define lv_obj_set_style_bg_opa lv_obj_set_style_bg_opa
+#define lv_obj_set_style_text_opa lv_obj_set_style_text_opa
 #define lv_obj_set_style_text_align lv_obj_set_style_text_align
 #define lv_obj_align lv_obj_align
 #define lv_obj_set_align lv_obj_set_align
@@ -645,6 +647,9 @@ inline void lv_obj_set_style_radius(lv_obj_t*, int, int) {}
 #endif
 #ifndef lv_obj_set_style_bg_opa
 inline void lv_obj_set_style_bg_opa(lv_obj_t*, int, int) {}
+#endif
+#ifndef lv_obj_set_style_text_opa
+inline void lv_obj_set_style_text_opa(lv_obj_t*, int, int) {}
 #endif
 inline void lv_obj_set_style_text_font(lv_obj_t* obj, const lv_font_t* font, int) {
 #ifdef LVGL_MOCK_ENABLED

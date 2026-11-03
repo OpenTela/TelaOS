@@ -23,7 +23,9 @@ struct Widget {
     uint32_t bgcolor = 0;    // background color
     int fontSize = 0;
     int radius = 0;
-    int opacity = 255;       // 0-255
+    int opacity = 255;       // 0-255 (lv_obj_set_style_opa, and bg_opa as well)
+    int bgOpa = -1;          // lv_obj_set_style_bg_opa; -1: not set
+    int textOpa = 255;       // lv_obj_set_style_text_opa
     int padAll = -1;         // padding (from lv_obj_set_style_pad_all)
     int padLeft = 0;
     int padRight = 0;

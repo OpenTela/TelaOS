@@ -17,6 +17,7 @@
 
 #include "core/core.h"
 #include "ui/css_parser.h"
+#include "ui/css_values.h"
 #include "ui/ui_coords.h"
 #include "ui/ui_html_internal.h"
 #include "ui/ui_tag_reader.h"
@@ -464,16 +465,19 @@ const char* decodeEntity(const char* p, const char* end, P::String& out) {
 
 struct Style {  // inline run style
     uint32_t color = kInherit;
+    uint8_t opa = LV_OPA_COVER;  // the color's alpha: rgba(), #RRGGBBAA
     int font = 0;
     uint8_t decor = 0;
     int8_t shift = 0;  // sup: -1 (raised), sub: +1 (lowered)
     P::String href;
     P::String onclick;
     bool same(const Style& o) const {
-        return color == o.color && font == o.font && decor == o.decor && shift == o.shift && href == o.href &&
-               onclick == o.onclick;
+        return color == o.color && opa == o.opa && font == o.font && decor == o.decor && shift == o.shift &&
+               href == o.href && onclick == o.onclick;
     }
-    bool plain() const { return color == kInherit && !font && !decor && !shift && href.empty() && onclick.empty(); }
+    bool plain() const {
+        return color == kInherit && opa == LV_OPA_COVER && !font && !decor && !shift && href.empty() && onclick.empty();
+    }
     bool link() const { return !href.empty() || !onclick.empty(); }
 };
 
@@ -511,7 +515,8 @@ int fontForHtmlSize(const P::String& size) {  // <font size="1..7">
     return UI::Font::XLARGE;
 }
 
-Style derive(const Style& base, const TagRef& t, uint8_t look) {
+// blockFont: the font size of the text the run is in (h1: 48), 0 for the default
+Style derive(const Style& base, const TagRef& t, uint8_t look, int blockFont) {
     Style s = base;
     switch (look) {
         case L_STRONG: s.color = kAccent; break;
@@ -548,11 +553,17 @@ Style derive(const Style& base, const TagRef& t, uint8_t look) {
     UI::Css::findAttr(el.attrs, "id", el.id);
     UI::Css::findAttr(el.attrs, "class", el.classes);
     const P::String style = attr(t, "style");
+    // em and % in font-size: of the font the run is in
+    const float parentPx = static_cast<float>(base.font > 0 ? base.font : blockFont > 0 ? blockFont : UI::Font::SMALL);
     for (const UI::CssDecl& d : UI::Css::instance().cascade(el, style)) {
         if (d.name == "color") {
-            if (is_color(d.value.c_str())) s.color = parse_color(d.value.c_str());  // an invalid color is ignored
+            UI::CssColor c;
+            if (UI::cssColor(d.value, c)) {  // an invalid color is ignored
+                s.color = c.rgb;
+                s.opa = c.alpha;
+            }
         } else if (d.name == "font-size") {
-            if (const int px = atoi(d.value.c_str()); px > 0) s.font = px;
+            if (const int px = UI::cssFontSize(d.value, parentPx); px > 0) s.font = px;
         } else if (d.name == "text-decoration" || d.name == "text-decoration-line") {
             const P::String v = lower(d.value);
             if (v.find("none") != P::String::npos) s.decor = 0;
@@ -765,6 +776,7 @@ public:
 
     lv_obj_t* box() const { return box_; }
     const Ctx& ctx() const { return ctx_; }
+    const TextLook& look() const { return look_; }
     bool empty() const { return items_.empty(); }
     P::Array<Item>& items() { return items_; }
 
@@ -918,6 +930,7 @@ void fillSpans(lv_obj_t* sg, const P::Array<Seg::Item>& items) {
         lv_span_set_text(span, it.text.c_str());
         lv_style_t* s = lv_span_get_style(span);
         if (it.st.color != kInherit) lv_style_set_text_color(s, lv_color_hex(it.st.color));
+        if (it.st.opa < LV_OPA_COVER) lv_style_set_text_opa(s, it.st.opa);
         if (it.st.font) lv_style_set_text_font(s, Font::get(it.st.font));
         if (it.st.decor) {
             lv_style_set_text_decor(s, static_cast<lv_text_decor_t>(
@@ -1019,6 +1032,7 @@ void Seg::asWords() {
             lv_obj_t* w = lv_label_create(row);  // a lone " " too: the gap between two links
             lv_label_set_text(w, live ? render_template(word.c_str()).c_str() : word.c_str());
             if (it.st.color != kInherit) lv_obj_set_style_text_color(w, lv_color_hex(it.st.color), LV_PART_MAIN);
+            if (it.st.opa < LV_OPA_COVER) lv_obj_set_style_text_opa(w, it.st.opa, LV_PART_MAIN);
             if (it.st.font) lv_obj_set_style_text_font(w, Font::get(it.st.font), LV_PART_MAIN);
 #if !defined(LVGL_MOCK_ENABLED)
             if (it.st.decor) {
@@ -1104,7 +1118,7 @@ void bdoRtl(const TagRef& t, Seg& seg, const Style& st) {
 void inlineTag(const TagRef& t, const TagInfo* ti, Seg& seg, const Style& st) {
     const uint8_t look = ti ? ti->look : L_PLAIN;
     if (look == L_SKIP) return;
-    Style s = derive(st, t, look);
+    Style s = derive(st, t, look, seg.look().font);
     Inside in(t);
     if (is(t.name, "bdo") && lower(attr(t, "dir")) == "rtl") {
         bdoRtl(t, seg, s);
@@ -1144,7 +1158,7 @@ void handleTag(const TagRef& t, Seg& seg, const Style& st, bool inlineOnly) {
         if (!inlineOnly && hasBlockOrAtom(t.cstart, t.cend)) {
             seg.flush();
             lv_obj_t* b = newBox(seg.box(), kGap);
-            Style s = derive(st, t, ti->look);
+            Style s = derive(st, t, ti->look, seg.look().font);
             makeClickable(b, s.href, s.onclick);
             applyGlobal(t, b);
             Inside in(t);

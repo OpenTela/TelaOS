@@ -22,3 +22,15 @@ shot css_02_other_page
 tap "Back"
 wait 200
 expect "Selectors" :visible
+
+tap "Values"
+wait 200
+expect "rgba(): half white" :visible
+expect @accent "var(--accent): yellow"
+expect @fallback "var(--none, green): green"
+expect @gap "gap 8px 24px"
+expect @dot :visible
+shot css_03_values
+tap "Back"
+wait 200
+expect "Selectors" :visible

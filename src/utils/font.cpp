@@ -23,4 +23,11 @@ const lv_font_t* Font::defaultFont() {
     return get(SMALL);
 }
 
+int Font::sizeOf(const lv_font_t* font) {
+    if (font == &Ubuntu_32px) return MEDIUM;
+    if (font == &Ubuntu_48px) return LARGE;
+    if (font == &Ubuntu_72px) return XLARGE;
+    return SMALL;
+}
+
 } // namespace UI
