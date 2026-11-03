@@ -89,3 +89,13 @@ shot css_08_structure
 tap "Back"
 wait 200
 expect "Selectors" :visible
+
+tap "Pseudo"
+wait 200
+expect @hot ".tag:is(.hot, .new): red"
+expect @plaintag ".tag:not(:is(.hot, .new)): grey"
+expect @lastsep contains "the last: no line"
+shot css_09_pseudo
+tap "Back"
+wait 200
+expect "Selectors" :visible

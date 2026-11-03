@@ -15,4 +15,8 @@ namespace UI {
 // ellipsis) belongs to the element itself (state 0)
 void applyCssText(lv_obj_t* o, const P::Array<CssDecl>& decls, float em, uint16_t state = 0);
 
+// ::placeholder: color (with its alpha), opacity, letter-spacing and text-decoration of the hint a
+// text field shows while it is empty (LV_PART_TEXTAREA_PLACEHOLDER)
+void applyCssPlaceholder(lv_obj_t* o, const P::Array<CssDecl>& decls, float em);
+
 }  // namespace UI

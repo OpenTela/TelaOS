@@ -10,6 +10,7 @@
 #include "ui/css_values.h"
 #include "utils/font.h"
 
+#include <algorithm>
 #include <cmath>
 
 namespace UI {
@@ -122,6 +123,42 @@ void applyCssText(lv_obj_t* o, const P::Array<CssDecl>& decls, float em, uint16_
     }
     lv_label_set_long_mode(o, ellipsis ? LV_LABEL_LONG_DOT : LV_LABEL_LONG_CLIP);
     lv_obj_set_height(o, lv_font_get_line_height(UI::Font::get(static_cast<int>(em))));
+}
+
+void applyCssPlaceholder(lv_obj_t* o, const P::Array<CssDecl>& decls, float em) {
+    if (!o) return;
+    const lv_style_selector_t sel = LV_PART_TEXTAREA_PLACEHOLDER;
+    int alpha = LV_OPA_COVER, opacity = LV_OPA_COVER;
+    bool fade = false;
+    for (const CssDecl& d : decls) {
+        const std::string_view name = d.name, value = d.value;
+        if (name == "color") {
+            CssColor c;
+            if (cssColor(value, c)) {
+                lv_obj_set_style_text_color(o, lv_color_hex(c.rgb), sel);
+                alpha = c.alpha;
+                fade = true;
+            }
+        } else if (name == "opacity") {
+            float v = 0;
+            size_t i = 0;
+            const std::string_view t = trimmed(value);
+            if (cssPercent(t, v)) v /= 100;
+            else if (!cssNumber(t, i, v) || i != t.size()) continue;
+            opacity = static_cast<int>(std::lround(std::min(std::max(v, 0.0f), 1.0f) * LV_OPA_COVER));
+            fade = true;
+        } else if (name == "letter-spacing") {
+            const std::string_view v = trimmed(value);
+            int32_t px = 0;
+            if (equalsNoCase(v, "normal")) lv_obj_set_style_text_letter_space(o, 0, sel);
+            else if (cssLength(v, em, px)) lv_obj_set_style_text_letter_space(o, px, sel);
+        } else if (name == "text-decoration" || name == "text-decoration-line") {
+            lv_text_decor_t decor = LV_TEXT_DECOR_NONE;
+            if (decorValue(value, decor)) lv_obj_set_style_text_decor(o, decor, sel);
+        }
+    }
+    // a hint has no box of its own: its opacity is its text's, with the color's alpha
+    if (fade) lv_obj_set_style_text_opa(o, static_cast<lv_opa_t>(alpha * opacity / LV_OPA_COVER), sel);
 }
 
 }  // namespace UI

@@ -34,7 +34,9 @@ namespace UI {
 
 using CssDetail::AttrTest;
 using CssDetail::Compound;
+using CssDetail::Logical;
 using CssDetail::NthTest;
+using CssDetail::Pseudo;
 using CssDetail::Rule;
 using CssDetail::Selector;
 
@@ -332,6 +334,81 @@ bool nthKeyword(std::string_view name, P::Array<NthTest>& out) {
     return true;
 }
 
+// The ')' that closes the '(' at i, past nested parentheses, brackets and quotes; npos if none
+size_t closingParen(std::string_view s, size_t i) {
+    int depth = 0;
+    char quote = 0;
+    for (; i < s.size(); ++i) {
+        const char c = s[i];
+        if (quote) {
+            if (c == quote) quote = 0;
+        } else if (c == '"' || c == '\'') {
+            quote = c;
+        } else if (c == '(' || c == '[') {
+            ++depth;
+        } else if ((c == ')' || c == ']') && --depth == 0) {
+            return c == ')' ? i : std::string_view::npos;
+        }
+    }
+    return std::string_view::npos;
+}
+
+// a, b:is(c, d), [e=","]: the items of a selector list, split at the commas outside (), [] and quotes
+P::Array<std::string_view> selectorList(std::string_view s) {
+    P::Array<std::string_view> items;
+    int depth = 0;
+    char quote = 0;
+    size_t start = 0;
+    for (size_t i = 0; i <= s.size(); ++i) {
+        const char c = i < s.size() ? s[i] : ',';
+        if (quote) {
+            if (c == quote) quote = 0;
+            if (i < s.size()) continue;
+        }
+        if (c == '"' || c == '\'') quote = c;
+        else if (c == '(' || c == '[') ++depth;
+        else if ((c == ')' || c == ']') && depth > 0) --depth;
+        else if (c == ',' && depth == 0) {
+            items.push_back(s.substr(start, i - start));
+            start = i + 1;
+        }
+    }
+    return items;
+}
+
+bool parseSelector(std::string_view s, Selector& out);
+
+// The argument of :not(), :is(), :where(): selectors that read and that LVGL can match. A state
+// (:checked) or a pseudo-element inside them is not: LVGL has no style for "not pressed"
+bool logicalList(std::string_view arg, bool forgiving, Logical& l, uint32_t& specificity) {
+    specificity = 0;
+    for (std::string_view item : selectorList(arg)) {
+        Selector one;
+        bool ok = parseSelector(item, one);
+        for (const Compound& c : one.parts) ok = ok && !c.states && c.pseudo == Pseudo::None;
+        if (!ok) {
+            if (!forgiving) return false;  // :not() is not forgiving: one that does not read, and it is out
+            continue;                      // :is() and :where() leave that one out, as a browser does
+        }
+        specificity = std::max(specificity, one.specificity);
+        l.list.push_back(std::move(one));
+    }
+    return forgiving || !l.list.empty();
+}
+
+// The compound's rare parts, made when the first one is parsed
+CssDetail::CompoundExtra& extraOf(Compound& c) {
+    if (!c.extra) c.extra = P::create<CssDetail::CompoundExtra>();
+    return *c.extra;
+}
+
+// Specificities add up per component: ids, classes, types
+uint32_t addSpecificity(uint32_t a, uint32_t b) {
+    uint32_t out = 0;
+    for (int shift : {16, 8, 0}) out |= std::min(((a >> shift) & 0xFF) + ((b >> shift) & 0xFF), 255u) << shift;
+    return out;
+}
+
 // One compound selector at i: a type or *, then #id, .class, [attr] and pseudo-classes in any order
 bool parseCompound(std::string_view s, size_t& i, Compound& c) {
     const size_t start = i;
@@ -363,23 +440,46 @@ bool parseCompound(std::string_view s, size_t& i, Compound& c) {
             AttrTest t;
             if (!parseAttrTest(s, i, t)) return false;
             c.attrs.push_back(std::move(t));
-        } else if (ch == ':') {  // :root, the states, the places; anything else (::before, :not()) is not supported
+        } else if (ch == ':' && i + 1 < n && s[i + 1] == ':') {  // ::placeholder; ::before and the others are not supported
+            size_t j = i + 2;
+            while (j < n && isNameChar(s[j])) ++j;
+            if (!equalsNoCase(s.substr(i + 2, j - i - 2), "placeholder")) return false;
+            c.pseudo = Pseudo::Placeholder;
+            i = j;
+            break;  // nothing may follow it in the compound
+        } else if (ch == ':') {  // :root, the states, the places, :not() :is() :where(); anything else is not supported
             size_t j = i + 1;
             while (j < n && isNameChar(s[j])) ++j;
             const std::string_view pc = s.substr(i + 1, j - i - 1);
             uint16_t state = 0;
             NthTest t;
+            const bool logical = equalsNoCase(pc, "not") || equalsNoCase(pc, "is") || equalsNoCase(pc, "where");
             if (equalsNoCase(pc, "root")) {
                 c.root = true;
             } else if (pseudoState(pc, state)) {
                 c.states = static_cast<uint16_t>(c.states | state);
             } else if (j < n && s[j] == '(' && nthFunction(pc, t)) {
-                const size_t close = s.find(')', j);
+                const size_t close = closingParen(s, j);
                 if (close == std::string_view::npos || !parseNth(s.substr(j + 1, close - j - 1), t)) return false;
-                c.nths.push_back(t);
+                extraOf(c).nths.push_back(t);
                 j = close + 1;
-            } else if (!nthKeyword(pc, c.nths)) {
-                break;
+            } else if (j < n && s[j] == '(' && logical) {
+                const size_t close = closingParen(s, j);
+                Logical l;
+                l.negate = equalsNoCase(pc, "not");
+                uint32_t spec = 0;
+                if (close == std::string_view::npos || !logicalList(s.substr(j + 1, close - j - 1), !l.negate, l, spec)) {
+                    return false;
+                }
+                CssDetail::CompoundExtra& x = extraOf(c);
+                if (!equalsNoCase(pc, "where")) x.logicSpecificity = addSpecificity(x.logicSpecificity, spec);
+                x.logic.push_back(std::move(l));
+                i = close + 1;
+                continue;  // its list's specificity counts, not the pseudo-class itself
+            } else {
+                P::Array<NthTest> keyword;
+                if (!nthKeyword(pc, keyword)) break;
+                for (const NthTest& k : keyword) extraOf(c).nths.push_back(k);
             }
             ++c.pseudos;
             i = j;
@@ -421,8 +521,11 @@ bool parseSelector(std::string_view s, Selector& out) {
     }
     for (size_t k = 0; k + 1 < out.parts.size(); ++k) {
         if (out.parts[k].states) return false;  // button:active label: an ancestor's state is not an LVGL style
+        if (out.parts[k].pseudo != Pseudo::None) return false;  // a pseudo-element ends the selector
     }
+    if (out.parts.back().pseudo != Pseudo::None && out.parts.back().states) return false;  // input:focus::placeholder
     unsigned ids = 0, classes = 0, types = 0;
+    uint32_t logic = 0;
     for (const Compound& c : out.parts) {
         ids += !c.id.empty();
         classes += static_cast<unsigned>(c.classes.size()) + c.pseudos;  // pseudo-classes count as classes
@@ -430,9 +533,11 @@ bool parseSelector(std::string_view s, Selector& out) {
             if (t.name == "id" && t.op == '=') ++ids;  // #a#b
             else ++classes;
         }
-        types += !c.tag.empty();
+        types += !c.tag.empty() + (c.pseudo != Pseudo::None);  // a pseudo-element counts as a type
+        if (c.extra) logic = addSpecificity(logic, c.extra->logicSpecificity);
     }
-    out.specificity = (std::min(ids, 255u) << 16) | (std::min(classes, 255u) << 8) | std::min(types, 255u);
+    out.specificity = addSpecificity(
+        (std::min(ids, 255u) << 16) | (std::min(classes, 255u) << 8) | std::min(types, 255u), logic);
     return true;
 }
 
@@ -526,7 +631,7 @@ bool matchPlace(const Compound& c, const CssElement& el, int parent, const P::Ar
     const P::Array<Child>* kids = childrenOf(anc, parent);
     const size_t at = kids ? placeOf(el, *kids) : std::string_view::npos;
     if (at == std::string_view::npos) return false;
-    for (const NthTest& t : c.nths) {
+    for (const NthTest& t : c.extra->nths) {
         int index = 0, count = 0;
         for (size_t k = 0; k < kids->size(); ++k) {
             if (t.ofType && (*kids)[k].tag != (*kids)[at].tag) continue;
@@ -548,6 +653,8 @@ CssElement elementOf(const Child& c) {
     return e;
 }
 
+bool matchPart(const Selector& s, int part, const CssElement& el, int parent, const P::Array<CssElement>& anc);
+
 // el, a child of anc[parent] (-1: no parent known)
 bool matchCompound(const Compound& c, const CssElement& el, int parent, const P::Array<CssElement>& anc) {
     if (c.root && !el.root) return false;  // :root; the root itself (tag html) also takes html {} and * {}
@@ -565,7 +672,19 @@ bool matchCompound(const Compound& c, const CssElement& el, int parent, const P:
             return false;
         }
     }
-    return c.nths.empty() || matchPlace(c, el, parent, anc);
+    if (!c.extra) return true;
+    if (!c.extra->nths.empty() && !matchPlace(c, el, parent, anc)) return false;
+    for (const Logical& l : c.extra->logic) {  // :not(), :is(), :where(): the list where el stands
+        bool any = false;
+        for (const Selector& s : l.list) {
+            if (matchPart(s, static_cast<int>(s.parts.size()) - 1, el, parent, anc)) {
+                any = true;
+                break;
+            }
+        }
+        if (any == l.negate) return false;
+    }
+    return true;
 }
 
 // parts[0..part] hold, parts[part] for el, a child of anc[parent]
@@ -849,6 +968,7 @@ void Css::clear() {
     m_rules.clear();
     m_nextOrder = 0;
     m_hasCustom = false;
+    m_hasPlaceholder = false;
     m_rootCustom.clear();
     m_rootReady = false;
 }
@@ -959,15 +1079,14 @@ void Css::parse(std::string_view css) {
 
         Rule rule;
         // h1, h2: a list; a selector this engine cannot read is left out, the others stay
-        size_t s = 0;
-        const std::string_view sel(selector);
-        while (s <= sel.size()) {
-            size_t comma = sel.find(',', s);
-            if (comma == std::string_view::npos) comma = sel.size();
+        for (std::string_view item : selectorList(selector)) {
             Selector one;
-            if (parseSelector(sel.substr(s, comma - s), one)) rule.selectors.push_back(std::move(one));
-            else LOG_D(Log::UI, "CSS: selector '%.*s' not supported, left out", (int)(comma - s), sel.data() + s);
-            s = comma + 1;
+            if (parseSelector(item, one)) {
+                if (one.parts.back().pseudo == Pseudo::Placeholder) m_hasPlaceholder = true;
+                rule.selectors.push_back(std::move(one));
+            } else {
+                LOG_D(Log::UI, "CSS: selector '%.*s' not supported, left out", (int)item.size(), item.data());
+            }
         }
         if (rule.selectors.empty()) continue;
         for (const CssDecl& d : decls) {
@@ -1031,7 +1150,8 @@ const P::Array<CssDecl>& Css::rootCustom() const {
 
 P::Array<CssStateDecls> Css::cascadeIn(const CssElement& el, std::string_view inlineStyle,
                                        const P::Array<CssElement>& anc, int top,
-                                       const P::Array<P::Array<CssDecl>>& ancCustom, bool withRoot) const {
+                                       const P::Array<P::Array<CssDecl>>& ancCustom, bool withRoot,
+                                       Pseudo pseudo) const {
     struct Hit {
         const CssDecl* decl;
         uint16_t state;  // 0, or the LVGL state of :active and the like
@@ -1046,7 +1166,7 @@ P::Array<CssStateDecls> Css::cascadeIn(const CssElement& el, std::string_view in
         std::array<std::pair<uint16_t, uint32_t>, 8> matched{};
         size_t count = 0;
         for (const Selector& s : r.selectors) {
-            if (!matchSelector(s, el, anc, top)) continue;
+            if (s.parts.back().pseudo != pseudo || !matchSelector(s, el, anc, top)) continue;
             const uint16_t state = s.parts.back().states;
             size_t k = 0;
             while (k < count && matched[k].first != state) ++k;
@@ -1061,7 +1181,8 @@ P::Array<CssStateDecls> Css::cascadeIn(const CssElement& el, std::string_view in
             }
         }
     }
-    const P::Array<CssDecl> inlineDecls = parseDecls(inlineStyle);
+    // style="" is the element's: a pseudo-element has none
+    const P::Array<CssDecl> inlineDecls = pseudo == Pseudo::None ? parseDecls(inlineStyle) : P::Array<CssDecl>{};
     for (size_t k = 0; k < inlineDecls.size(); ++k) {
         const CssDecl& d = inlineDecls[k];
         hits.push_back(Hit{&d, 0, static_cast<uint8_t>(d.important ? 3 : 1), 0, static_cast<uint32_t>(k)});
@@ -1115,6 +1236,14 @@ void Css::applyMatching(Widget& w, const CssElement& el, std::string_view inline
     const P::Array<CssStateDecls> groups = cascadeStates(el, inlineStyle);
     for (const CssStateDecls& g : groups) applyProps(w, g.decls, g.state);  // the element as it is first
     applyCssTransitions(w.handle, groups);
+    if (m_hasPlaceholder && lv_obj_check_type(w.handle, &lv_textarea_class)) {
+        // ::placeholder: the hint an empty field shows, a part LVGL draws apart
+        const P::Array<CssElement>& anc = CssScope::ancestors();
+        int top = static_cast<int>(anc.size()) - 1;
+        if (top >= 0 && el.attrs.data() && sameElement(anc[static_cast<size_t>(top)], el)) --top;
+        const P::Array<CssStateDecls> hint = cascadeIn(el, {}, anc, top, customStack(), true, Pseudo::Placeholder);
+        if (!hint.empty() && hint[0].state == 0) applyCssPlaceholder(w.handle, hint[0].decls, fontPxOf(w.handle));
+    }
 }
 
 void Css::applyMatching(Widget& w, const char* tag, const char* id, const char* classNames) const {
@@ -1255,8 +1384,11 @@ void Css::applyProps(Widget& w, const P::Array<CssDecl>& decls, uint16_t state) 
 const Rule* Css::findClass(const P::String& className) const {
     for (const auto& rule : m_rules) {
         for (const Selector& s : rule.selectors) {
-            if (s.parts.size() == 1 && s.parts[0].tag.empty() && s.parts[0].id.empty() &&
-                s.parts[0].attrs.empty() && s.parts[0].classes.size() == 1 && s.parts[0].classes[0] == className) {
+            if (s.parts.size() != 1) continue;
+            const Compound& c = s.parts[0];
+            // just .className: not .className:active, :first-child, :not(), ::placeholder
+            if (c.tag.empty() && c.id.empty() && c.attrs.empty() && c.classes.size() == 1 && c.classes[0] == className &&
+                !c.root && !c.states && !c.extra && c.pseudo == Pseudo::None) {
                 return &rule;
             }
         }
