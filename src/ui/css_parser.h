@@ -7,10 +7,11 @@
  * `i` flag), any compound of them (button.primary#ok[type]), lists (h1, h2), descendant (nav a),
  * child (ul > li) and sibling (h2 + p, h2 ~ p) combinators, :root, the place among siblings
  * (:first-child, :last-child, :only-child, :nth-child(2n+1) and the -last- and -of-type forms,
- * read from the page text) and the states LVGL keeps for a widget: :active (pressed), :focus,
- * :checked, :disabled, :hover. A selector with anything else (::before, :not()) is left out, as
- * a browser leaves out a selector it does not know. @media whose query holds for the screen
- * (css_media.h) counts as if its rules stood outside it.
+ * read from the page text), :not(), :is() and :where() with selector lists, the states LVGL
+ * keeps for a widget: :active (pressed), :focus, :checked, :disabled, :hover, and ::placeholder
+ * of a text field. A selector with anything else (::before) is left out, as a browser leaves out
+ * a selector it does not know. @media whose query holds for the screen (css_media.h) counts as
+ * if its rules stood outside it.
  *
  * Cascade, as in CSS: declarations go by specificity (ids; classes and attributes; types), then
  * by their order in the sheets; style="" comes after the sheets; !important after all of that,
@@ -103,14 +104,34 @@ struct NthTest {
     bool ofType = false;
 };
 
+struct Selector;
+
+// :not(.a, .b), :is(.a, .b), :where(.a, .b): the element matches none of the list, or one of it.
+// The list's selectors are matched where the element stands (:not(.menu a) looks at its ancestors)
+struct Logical {
+    bool negate = false;       // :not()
+    P::Array<Selector> list;
+};
+
+// What a selector ends on: the element itself, or a part LVGL draws apart
+enum class Pseudo : uint8_t { None, Placeholder };
+
+// The rare parts of a compound, kept apart: most compounds (.x, p) have none of them
+struct CompoundExtra {
+    P::Array<NthTest> nths;         // :first-child, :nth-child()...
+    P::Array<Logical> logic;        // :not(), :is(), :where()
+    uint32_t logicSpecificity = 0;  // what those add: the most specific of each list (:where() adds none)
+};
+
 struct Compound {     // button.primary#ok[type]
     P::String tag;    // lower-case; "": any (also *)
     P::String id;
     P::Array<P::String> classes;
     P::Array<AttrTest> attrs;
+    P::Ptr<CompoundExtra> extra;    // nullptr when it has no place tests and no :not() / :is()
     bool root = false;    // :root
     uint16_t states = 0;  // :active, :focus, :checked, :disabled, :hover as LV_STATE_* bits
-    P::Array<NthTest> nths;  // :first-child, :nth-child()...
+    Pseudo pseudo = Pseudo::None;   // ::placeholder; only the last compound has one
     uint8_t pseudos = 0;  // pseudo-classes, for specificity
 };
 
@@ -176,6 +197,7 @@ private:
     P::Array<CssDetail::Rule> m_rules;
     uint32_t m_nextOrder = 0;
     bool m_hasCustom = false;                  // a sheet declares a custom property
+    bool m_hasPlaceholder = false;             // a rule for ::placeholder
     mutable P::Array<CssDecl> m_rootCustom;    // :root's custom properties, worked out once
     mutable bool m_rootReady = false;
     static const P::String s_emptyStr;
@@ -184,7 +206,8 @@ private:
     // properties, nullptr while they are worked out
     P::Array<CssStateDecls> cascadeIn(const CssElement& el, std::string_view inlineStyle,
                                       const P::Array<CssElement>& anc, int top,
-                                      const P::Array<P::Array<CssDecl>>& ancCustom, bool withRoot) const;
+                                      const P::Array<P::Array<CssDecl>>& ancCustom, bool withRoot,
+                                      CssDetail::Pseudo pseudo = CssDetail::Pseudo::None) const;
     const P::Array<CssDecl>& rootCustom() const;
 
     // The first rule that is just `.className` (legacy class-only API)

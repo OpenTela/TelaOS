@@ -29,9 +29,11 @@ typedef struct _lv_obj_t {
     #endif
 } lv_obj_t;
 
-// A style for a state goes to the mock's stateStyles, not over the element's own (lvgl_mock.h)
+// A style for a state, or for a part LVGL draws apart (a text field's placeholder, a custom part
+// from LV_PART_CUSTOM_FIRST), goes to the mock's stateStyles, not over the element's own
+// (lvgl_mock.h). The built-in parts without a state (a bar's indicator) still go into the fields.
 inline bool mockState(lv_obj_t* obj, const char* prop, int sel, long long value) {
-    if ((sel & 0xFFFF) == 0) return false;
+    if ((sel & 0xFFFF) == 0 && (static_cast<uint32_t>(sel) & 0xFF0000) < 0x080000) return false;
 #ifdef LVGL_MOCK_ENABLED
     if (obj && obj->mock_widget) obj->mock_widget->stateStyles.push_back({prop, sel, value});
 #else
@@ -144,6 +146,8 @@ typedef uint32_t lv_style_selector_t;  // a part | a state
 #define LV_PART_INDICATOR 0x020000
 #define LV_PART_KNOB      0x030000
 #define LV_PART_ITEMS     0x050000
+#define LV_PART_CUSTOM_FIRST 0x080000
+#define LV_PART_TEXTAREA_PLACEHOLDER LV_PART_CUSTOM_FIRST
 
 #define LV_SIZE_CONTENT   (-1)
 #define LV_DPI_DEF        130  // as in include/lv_conf.h

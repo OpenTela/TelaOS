@@ -2,7 +2,7 @@
   <!--
     Test fixture for CSS in TelaOS (docs/CSS.md): selectors and cascade; values (page "values");
     the box (page "box"); layout (page "layout"); text (page "text"); states (page "states");
-    structure and screen (page "structure").
+    structure and screen (page "structure"); :not(), :is(), ::placeholder (page "pseudo").
     Flashed by the simulator with --extra-data; driven by tests/tela_css.sim.
     Each line says which rule colors it; a line in white did not get its rule.
   -->
@@ -12,7 +12,7 @@
     .menu > li { color: #81C784; }
     ul li li { color: #FF8A65; }
     .card label { color: #CE93D8; }
-    a:not(.x), .ok { color: #E57373; }
+    a:has(img), .ok { color: #E57373; }
     [data-tone="warn"] { color: #FFD54F; }
     a[href^="http"] { color: #AAAAAA; }
     #main .big { font-size: 32px; }
@@ -62,6 +62,10 @@
     .zebra li:last-child { color: #FFD54F; }
     #structure h3 ~ p { color: #FF8A65; }
     #structure h3 + p { color: #4FC3F7; }
+    .sep li:not(:last-child) { border-bottom: 1px solid #4FC3F7; }
+    .tag:is(.hot, .new) { color: #E57373; }
+    .tag:not(:is(.hot, .new)) { color: #AAAAAA; }
+    .hinted::placeholder { color: #81C784; }
   </style>
   <ui default="/main">
 
@@ -74,14 +78,14 @@
           <ul><li id="nested">ul li li: orange</ul>
       </ul>
       <div class="card"><label id="inCard">.card label: violet</label></div>
-      <p class="ok" id="ok">a:not(.x), .ok: red</p>
+      <p class="ok" id="ok">a:has(img), .ok: red</p>
       <p data-tone="warn" id="warn">[data-tone=warn]: yellow</p>
       <p id="ext"><a href="https://example.com">a[href^=http]: grey</a></p>
       <p class="big" id="big">#main .big</p>
       <p class="note" id="note">p.note beats .note: green</p>
       <p class="must" id="strong">!important beats #id: blue</p>
       <p class="gone" id="gone">display: none</p>
-      <p><a href="/values">Values</a> <a href="/box">Box</a> <a href="/layout">Layout</a> <a href="/text">Text</a> <a href="/states">States</a> <a href="/structure">Structure</a></p>
+      <p><a href="/values">Values</a> <a href="/box">Box</a> <a href="/layout">Layout</a> <a href="/text">Text</a> <a href="/states">States</a> <a href="/structure">Structure</a> <a href="/pseudo">Pseudo</a></p>
     </page>
 
     <page id="values">
@@ -153,6 +157,19 @@
       <h3>h3</h3>
       <p id="nextp">h3 + p: blue</p>
       <p id="laterp">h3 ~ p: orange</p>
+      <a href="/main">Back</a>
+    </page>
+
+    <page id="pseudo">
+      <h2>Pseudo</h2>
+      <ul class="sep" id="sep">
+        <li>li:not(:last-child): a line under</li>
+        <li>two</li>
+        <li id="lastsep">the last: no line</li>
+      </ul>
+      <p class="tag hot" id="hot">.tag:is(.hot, .new): red</p>
+      <p class="tag" id="plaintag">.tag:not(:is(.hot, .new)): grey</p>
+      <input class="hinted" id="hinted" w="80%" placeholder="::placeholder: a green hint">
       <a href="/main">Back</a>
     </page>
 
