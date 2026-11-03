@@ -1,4 +1,4 @@
-# DOM v0.5
+# DOM v0.6
 
 DOM в TelaOS: элементы приложения для его скрипта на Lua — так, как браузер даёт их JavaScript.
 Браузер без JS — всё остальное должно быть: HTML (`docs/HTML_TAGS.md`), CSS (`docs/CSS.md`)
@@ -6,6 +6,9 @@ DOM в TelaOS: элементы приложения для его скрипт�
 
 ## Changelog
 
+- **v0.6**: Дерево: `document:createElement`, `appendChild`, `insertBefore`, `removeChild`; к ним
+  `el.parentElement`. Новый элемент строится так, как его построила бы разметка; вынутый ждёт
+  скрытым и возвращается таким, каким был. Работает 20 из 20.
 - **v0.5**: События: `addEventListener`, `removeEventListener`, `preventDefault`, `stopPropagation`.
   `click`, `input`, `change` идут вверх по предкам, `focus` и `blur` — нет. `preventDefault()`
   отменяет то, что TelaOS делает сама: переход по ссылке, `<details>`, закрытие `<dialog>`.
@@ -51,7 +54,7 @@ if title:hasAttribute("hidden") then title:removeAttribute("hidden") end
 - Новое приложение — новое дерево: элемент прежнего ничего не находит (`textContent` пуст,
   `getAttribute` — `nil`).
 
-## Работает: 16 из 20
+## Работает: 20 из 20
 
 Знаки: ✅ работает, — нет.
 
@@ -108,10 +111,12 @@ if title:hasAttribute("hidden") then title:removeAttribute("hidden") end
 
 | | Что | Как |
 |---|-----|-----|
-| — | `createElement()` | |
-| — | `appendChild()` | |
-| — | `removeChild()` | |
-| — | `insertBefore()` | |
+| ✅ | `createElement(tag)` | `document:createElement("li")` — элемент вне документа |
+| ✅ | `appendChild(child)` | в конец; элемент из документа переезжает |
+| ✅ | `removeChild(child)` | вынутый ждёт скрытым и может вернуться |
+| ✅ | `insertBefore(child, ref)` | перед `ref`; `nil` — в конец |
+
+Сверх списка: `el.parentElement`.
 
 ## Атрибуты на экране
 
@@ -228,6 +233,38 @@ local open = document.getElementById("todo"):querySelector("li:not(.done)")
   `p::before`. Если такой есть в списке, ошибка — весь список.
 - Метод элемента — через двоеточие: `el.querySelector(s)` с точкой — ошибка.
 
+## Дерево
+
+```lua
+local list = document.getElementById("todo")
+local li = document:createElement("li")
+li.textContent = "Купить хлеб"
+li.classList:add("new")
+list:appendChild(li)
+list:insertBefore(li, list:querySelector("li"))  -- первым
+list:removeChild(li)
+```
+
+- `document:createElement(tag)` даёт элемент вне документа: `getElementById` и `querySelector`
+  его не находят. Ему можно ставить атрибуты, классы, `style` и `textContent`, класть в него другие
+  элементы — экран от этого не меняется.
+- `appendChild(child)` и `insertBefore(child, ref)` кладут элемент в документ. Новый элемент
+  строится так, как его построила бы разметка с теми же тегами, атрибутами и текстом. CSS берётся
+  по месту, где он встал (`li:last-child`, `.card p`), слушатели — те, что ему уже дали. `{var}`
+  в тексте остаётся текстом, как у `textContent`.
+- Элемент, который уже в документе, переезжает со своими объектами как есть: с текстом, отметкой
+  флажка и слушателями. CSS к нему применяется заново, по новому месту.
+- `removeChild(child)` вынимает элемент. Его объекты ждут скрытыми и вернутся такими, какими были.
+  Вынутый элемент, который скрипт больше не держит, сборщик мусора Lua забирает вместе с объектами.
+- Каждый метод возвращает `child`, как в браузере. `el.parentElement` — родитель; у страницы
+  и у элемента вне документа он `nil`.
+- Как `DOMException` в браузере, ошибка будет, если:
+  - элемент кладут внутрь него самого или его потомка;
+  - `child` у `removeChild` или `ref` у `insertBefore` — не ребёнок этого элемента;
+  - элемент кладут внутрь того, что показывает текст: `<p>`, `<label>`, `<button>`. TelaOS кладёт
+    элементы в блоки — `<div>`, `<ul>`, `<li>`, страницу;
+  - переносят страницу: она остаётся на месте.
+
 ## textContent
 
 - Чтение — текст, как его видно: у надписи и абзаца — весь их текст, с `<b>`, `<a>` внутри;
@@ -266,6 +303,11 @@ local open = document.getElementById("todo"):querySelector("li:not(.done)")
 - У флажка и переключателя `preventDefault()` в `click` отметку не отменяет: LVGL ставит её раньше.
 - У `document` слушателей нет: дайте их странице (`<page id="main">`), до неё события доходят.
   Третьего аргумента (`capture`, `once`) тоже нет.
+- Новый пункт в `<ol>` получает точку, а не номер. Строчный элемент (`<span>`, `<b>`), положенный
+  в блок, становится отдельной строкой. Строчный элемент из абзаца `removeChild` вынимает только из
+  дерева: его текст остаётся в абзаце.
+- Каждый элемент `createElement` занимает место в дереве до конца приложения, несколько десятков
+  байт. Объекты вынутых и брошенных элементов сборщик мусора отдаёт.
 
 ## Тесты
 
@@ -277,6 +319,9 @@ local open = document.getElementById("todo"):querySelector("li:not(.done)")
   поиск в элементе, состояния, что поменял скрипт, ошибки, элементы прежнего приложения.
 - `ci/tests/lua/test_lua_style.cpp` — `el.style`: свойства, `cssText`, каскад, `--x`, что
   остаётся без внимания; `style=""` у `<label>` и `<div>` TelaOS.
+- `ci/tests/lua/test_lua_tree.cpp` — дерево: новый элемент строится по месту, с CSS этого места;
+  `insertBefore` ставит и элемент, и его виджет; вынутый ждёт скрытым и возвращается; переезд, ошибки,
+  слушатели, сборщик мусора.
 - `ci/tests/lua/test_lua_events.cpp` — события: вверх по предкам, `stopPropagation`,
   `preventDefault` у `href=`, по одному, снятие, типы и их события LVGL, ошибка в слушателе.
   Мок LVGL вызывает колбэки объекта, как LVGL: сначала с `LV_EVENT_PREPROCESS`.
@@ -285,4 +330,5 @@ local open = document.getElementById("todo"):querySelector("li:not(.done)")
   classes — классы прячут и показывают то, что внутри, соседа и первый пункт; страница query —
   `:checked` находит флажок, отмеченный касанием; страница style — `style=""` у надписи и `el.style`;
   страница events — касание идёт к карточке, `stopPropagation` держит его у кнопки, ссылка с
-  `preventDefault` не переходит.
+  `preventDefault` не переходит; страница tree — касание добавляет пункт из `createElement`, другое
+  переносит первый в конец, и `li:last-child` переходит к нему.

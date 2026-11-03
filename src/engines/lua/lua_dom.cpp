@@ -74,6 +74,55 @@ int getElementById(lua_State* L) {
     return 1;
 }
 
+// ---- The tree ----
+
+int createElement(lua_State* L) {
+    const int at = lua_istable(L, 1) ? 2 : 1;  // document:createElement(tag) too
+    const UI::Dom::Node n = UI::Dom::createElement(arg(L, at));
+    if (!n) return luaL_error(L, "createElement: '%s' is not a tag name", lua_tostring(L, at));
+    push(L, n);
+    return 1;
+}
+
+UI::Dom::Node elementArg(lua_State* L, int i) { return static_cast<Ref*>(luaL_checkudata(L, i, kElement))->node; }
+
+// What went wrong, as a browser's DOMException says it; else the child, as appendChild returns it
+int changed(lua_State* L, UI::Dom::TreeChange c, const char* what, int child) {
+    switch (c) {
+        case UI::Dom::TreeChange::NotAChild:
+            return luaL_error(L, "%s: the element is not a child of this one", what);
+        case UI::Dom::TreeChange::Loop:
+            return luaL_error(L, "%s: an element cannot go into itself or into what is in it", what);
+        case UI::Dom::TreeChange::NotABox:
+            return luaL_error(L, "%s: this element shows text; elements go into a box (<div>, <ul>, a page...)", what);
+        case UI::Dom::TreeChange::Page:
+            return luaL_error(L, "%s: a page stays where it is", what);
+        default:
+            lua_pushvalue(L, child);
+            return 1;
+    }
+}
+
+int appendChild(lua_State* L) {
+    return changed(L, UI::Dom::insertBefore(self(L), elementArg(L, 2), 0), "appendChild", 2);
+}
+
+// insertBefore(child, ref): ref nil is the end
+int insertBefore(lua_State* L) {
+    const UI::Dom::Node ref = lua_isnoneornil(L, 3) ? 0 : elementArg(L, 3);
+    return changed(L, UI::Dom::insertBefore(self(L), elementArg(L, 2), ref), "insertBefore", 2);
+}
+
+int removeChild(lua_State* L) {
+    return changed(L, UI::Dom::removeChild(self(L), elementArg(L, 2)), "removeChild", 2);
+}
+
+// No script holds the element: one out of the document lets its objects go
+int release(lua_State* L) {
+    if (s_L) UI::Dom::release(static_cast<Ref*>(lua_touserdata(L, 1))->node);
+    return 0;
+}
+
 int getAttribute(lua_State* L) {
     P::String value;
     if (UI::Dom::getAttribute(self(L), arg(L, 2), value)) pushString(L, value);
@@ -448,11 +497,14 @@ const luaL_Reg kMethods[] = {
     {"querySelectorAll", querySelectorAll},
     {"addEventListener", addEventListener},
     {"removeEventListener", removeEventListener},
+    {"appendChild", appendChild},
+    {"insertBefore", insertBefore},
+    {"removeChild", removeChild},
     {nullptr, nullptr},
 };
 
-// el.textContent, el.id, el.tagName, el.className, el.classList, el.style, el:method(); anything
-// else is nil
+// el.textContent, el.id, el.tagName, el.className, el.classList, el.style, el.parentElement,
+// el:method(); anything else is nil
 int index(lua_State* L) {
     const UI::Dom::Node n = self(L);
     if (lua_type(L, 2) != LUA_TSTRING) {
@@ -474,6 +526,8 @@ int index(lua_State* L) {
         pushList(L, n);
     } else if (key == "style") {
         pushStyle(L, n);
+    } else if (key == "parentElement") {
+        push(L, UI::Dom::parentOf(n));
     } else {
         lua_pushvalue(L, 2);
         lua_rawget(L, lua_upvalueindex(1));  // the methods
@@ -536,6 +590,8 @@ void registerAll(lua_State* L) {
     lua_setfield(L, -2, "__newindex");
     lua_pushcfunction(L, tostring);
     lua_setfield(L, -2, "__tostring");
+    lua_pushcfunction(L, release);
+    lua_setfield(L, -2, "__gc");
     lua_pop(L, 1);
 
     luaL_newmetatable(L, kClassList);
@@ -558,6 +614,8 @@ void registerAll(lua_State* L) {
     lua_newtable(L);
     lua_pushcfunction(L, getElementById);
     lua_setfield(L, -2, "getElementById");
+    lua_pushcfunction(L, createElement);
+    lua_setfield(L, -2, "createElement");
     lua_pushcfunction(L, docQuerySelector);
     lua_setfield(L, -2, "querySelector");
     lua_pushcfunction(L, docQuerySelectorAll);

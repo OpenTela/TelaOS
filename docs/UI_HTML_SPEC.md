@@ -1,9 +1,10 @@
-# UI HTML Specification v0.13
+# UI HTML Specification v0.14
 
 Декларативный язык разметки для создания интерфейсов на ESP32 с LVGL.
 
 ## Changelog
 
+- **v0.14**: `document:createElement()`, `el:appendChild()`, `insertBefore()`, `removeChild()` — дерево из Lua: [DOM.md](DOM.md).
 - **v0.13**: `el:addEventListener()` — события из Lua: `click`, `input`, `change`, `focus`, `blur`: [DOM.md](DOM.md).
 - **v0.12**: `el.style` — `style=""` из Lua; `style=""` берут и виджеты TelaOS: [DOM.md](DOM.md), [CSS.md](CSS.md).
 - **v0.11**: `document:querySelector()` и `querySelectorAll()` — элементы по селекторам CSS: [DOM.md](DOM.md).
@@ -582,6 +583,7 @@ Raw HTML → parse_templates() → цикл (max 8 проходов):
 | `document:querySelector(s)` / `document:querySelectorAll(s)` | Первый элемент по селектору CSS или все — таблицей; у `el:` — внутри элемента |
 | `el.style.color = "red"` / `el.style.cssText` | Свойства `style=""`; CSS применяется заново |
 | `el:addEventListener("click", fn)` / `el:removeEventListener(type, fn)` | События; `e:preventDefault()`, `e:stopPropagation()` |
+| `document:createElement(tag)` / `el:appendChild(c)` / `el:insertBefore(c, ref)` / `el:removeChild(c)` | Дерево: новые элементы строятся, как разметка |
 
 Всё о них — [DOM.md](DOM.md).
 

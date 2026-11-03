@@ -5,6 +5,7 @@
 # Page "query": querySelectorAll finds the boxes checked now, and hides the odd rows.
 # Page "style": style="" of a label shows, a tap sets el.style and the next takes it off.
 # Page "events": listeners get a tap that goes up, one stopped, a link that stays.
+# Page "tree": a tap adds a row made by createElement, another moves the first row to the end.
 
 wait 300
 > app launch dom_tags
@@ -109,6 +110,24 @@ wait 300
 expect "Events" :visible
 expect @readEvents "read: stayed"
 shot dom_07_events
+
+scroll @toTree
+tap "createElement"
+wait 300
+expect "Tree" :visible
+tap @addItem
+wait 200
+expect @readTree "read: t1 n1"
+expect @n1 :visible
+tap @addItem
+wait 200
+expect @readTree "read: t1 n1 n2"
+scroll @cycleItem
+tap @cycleItem
+wait 200
+expect @readTree "read: n1 n2 t1"
+expect @t1 :visible
+shot dom_08_tree
 
 expect mem.dram_failed 0
 expect mem.psram_failed 0

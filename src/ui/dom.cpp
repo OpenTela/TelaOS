@@ -41,8 +41,9 @@ constexpr uint32_t kIndexMask = (1u << kIndexBits) - 1;
 constexpr uint32_t kBuildMask = (1u << (32 - kIndexBits)) - 1;
 
 enum : uint8_t {
-    kGone = 1,    // out of the page: text replaced its content, its object was deleted
-    kStyled = 2,  // CSS was applied to its object, its style="" too
+    kGone = 1,      // out of the page: text replaced its content, its object was deleted
+    kStyled = 2,    // CSS was applied to its object, its style="" too
+    kDetached = 4,  // out of the document, as createElement made it or removeChild took it out
 };
 
 // An element. Links are indexes + 1 (0: none)
@@ -53,7 +54,8 @@ struct Entry {
     P::Ptr<CssUndo> undo;  // what its CSS changed, if anything
     uint32_t parent = 0, first = 0, last = 0, next = 0;
     uint8_t flags = 0;
-    uint8_t events = 0;  // the event types its object passes on to listeners (kClick...)
+    uint8_t events = 0;   // the event types its object passes on to listeners (kClick...)
+    uint8_t listens = 0;  // the event types it has listeners for: passed on again when it is built again
 };
 
 struct Tree {
@@ -64,6 +66,8 @@ struct Tree {
     P::Array<uint32_t> open;
     P::String asTag, asAttrs;  // Dom::As
     P::Array<std::pair<uint32_t, P::String>> styledAs;  // the tag CSS saw, where Dom::As changed it
+    P::Array<std::pair<uint32_t, P::String>> texts;     // the text of an element out of the document
+    P::Array<uint32_t> known;  // while appendChild builds: the script's elements in the markup
 };
 
 // Never destroyed: the app is cleared from its destructor, which may run after statics are gone
@@ -123,22 +127,76 @@ bool sameSource(uint32_t i, std::string_view attrs) {
 
 bool isOpen(uint32_t i) { return std::find(opened().begin(), opened().end(), i) != opened().end(); }
 
-uint32_t add(std::string_view tag, std::string_view attrs, lv_obj_t* obj) {
+// i into p's children, before `before` (0: the last)
+void link(uint32_t p, uint32_t i, uint32_t before) {
+    Entry& pe = node(p);
+    node(i).parent = p;
+    node(i).next = before;
+    if (!before) {
+        if (pe.last) node(pe.last).next = i;
+        else pe.first = i;
+        pe.last = i;
+    } else if (pe.first == before) {
+        pe.first = i;
+    } else {
+        for (uint32_t c = pe.first; c; c = node(c).next) {
+            if (node(c).next == before) {
+                node(c).next = i;
+                break;
+            }
+        }
+    }
+}
+
+void unlink(uint32_t i) {
+    const uint32_t p = node(i).parent;
+    if (!p) return;
+    Entry& pe = node(p);
+    uint32_t prev = 0;
+    for (uint32_t c = pe.first; c && c != i; c = node(c).next) prev = c;
+    if (prev) node(prev).next = node(i).next;
+    else pe.first = node(i).next;
+    if (pe.last == i) pe.last = prev;
+    node(i).parent = node(i).next = 0;
+}
+
+// The markup appendChild builds marks each element of the script's with this attribute: the walkers
+// may copy that text, the mark goes with it
+constexpr std::string_view kMark = "data-tela-node";
+
+// The script's element the attributes are of, in the markup appendChild builds; 0: none
+uint32_t knownIn(std::string_view attrs) {
+    if (tree().known.empty()) return 0;
+    std::string_view v;
+    if (!Css::findAttr(attrs, kMark, v) || v.empty()) return 0;
+    uint32_t i = 0;
+    for (char c : v) {
+        if (c < '0' || c > '9') return 0;
+        i = i * 10 + static_cast<uint32_t>(c - '0');
+    }
+    const auto& k = tree().known;
+    return std::find(k.begin(), k.end(), i) != k.end() ? i : 0;
+}
+
+uint32_t openTop() { return opened().empty() ? 0 : opened().back(); }
+
+// marked: the attributes as the markup has them (Dom::As gives the builder others)
+uint32_t add(std::string_view tag, std::string_view attrs, lv_obj_t* obj, std::string_view marked) {
+    if (const uint32_t k = knownIn(marked)) {  // the script's element, built: it keeps its handle
+        node(k).obj = obj;
+        tree().sources[k - 1] = attrs;
+        if (!node(k).parent && openTop()) link(openTop(), k, 0);
+        return k;
+    }
     if (nodes().size() >= kIndexMask) return 0;
     Entry e;
     e.tag = lower(tag);
     if (!attrs.empty()) e.attrs.assign(attrs.data(), attrs.size());
     e.obj = obj;
-    e.parent = opened().empty() ? 0 : opened().back();
     nodes().push_back(std::move(e));
     tree().sources.push_back(attrs);
     const uint32_t i = static_cast<uint32_t>(nodes().size());
-    if (const uint32_t p = node(i).parent) {
-        Entry& pe = node(p);
-        if (pe.last) node(pe.last).next = i;
-        else pe.first = i;
-        pe.last = i;
-    }
+    if (openTop()) link(openTop(), i, 0);
     return i;
 }
 
@@ -664,11 +722,254 @@ bool query(Node inside, std::string_view selectors, size_t limit, P::Array<Node>
         return true;
     }
     for (uint32_t i = 1; i <= nodes().size() && found.size() < limit; ++i) {
-        if (node(i).parent || (node(i).flags & kGone)) continue;  // the pages, then what is in them
+        if (node(i).parent || (node(i).flags & (kGone | kDetached))) continue;  // the pages, then what is in them
         if (matches(i, q)) found.push_back(handle(i));
         collect(i, q, limit, found);
     }
     return true;
+}
+
+// ---- The tree: elements into the document and out of it ----
+
+void setDetached(uint32_t i, bool on) {
+    Entry& e = node(i);
+    e.flags = static_cast<uint8_t>(on ? e.flags | kDetached : e.flags & ~kDetached);
+    for (uint32_t c = e.first; c; c = node(c).next) setDetached(c, on);
+}
+
+// The text an element that was never built shows when it is: its textContent
+const P::String* keptText(uint32_t i) {
+    for (const auto& t : tree().texts) {
+        if (t.first == i) return &t.second;
+    }
+    return nullptr;
+}
+
+void keepText(uint32_t i, std::string_view text) {
+    auto& texts = tree().texts;
+    texts.erase(std::remove_if(texts.begin(), texts.end(), [i](const auto& t) { return t.first == i; }), texts.end());
+    if (!text.empty()) texts.emplace_back(i, P::String(text));
+}
+
+// A text the walkers would take {var} in: it is put in after the build, as textContent puts it
+bool bindable(const P::String& text) { return text.find('{') != P::String::npos; }
+
+// i and what is in it as markup the page walkers build from, each element marked (kMark); what
+// has objects already is left out: it is moved in after. own: where i's attributes start
+void markupOf(uint32_t i, P::String& out, size_t* own = nullptr) {
+    const Entry& e = node(i);
+    out += '<';
+    out += e.tag;
+    if (own) *own = out.size();
+    out += ' ';
+    out += kMark;
+    out += "=\"";
+    out += std::to_string(i).c_str();
+    out += '"';
+    if (!e.attrs.empty() && !isSpace(e.attrs[0])) out += ' ';
+    out += e.attrs;
+    out += '>';
+    if (HtmlFlow::isVoid(e.tag.c_str())) return;
+    if (const P::String* t = keptText(i)) {
+        if (bindable(*t) && !e.first) {
+            out += '-';  // the text object to put it in
+        } else {
+            for (char c : *t) {
+                if (c == '&') out += "&amp;";
+                else if (c == '<') out += "&lt;";
+                else if (c == '>') out += "&gt;";
+                else out += c;
+            }
+        }
+    }
+    for (uint32_t c = e.first; c; c = node(c).next) {
+        if (!node(c).obj) markupOf(c, out);
+    }
+    out += "</";
+    out += e.tag;
+    out += '>';
+}
+
+void markKnown(uint32_t i) {
+    tree().known.push_back(i);
+    for (uint32_t c = node(i).first; c; c = node(c).next) {
+        if (!node(c).obj) markKnown(c);
+    }
+}
+
+// The texts with {var} in them, put into what was built, as text
+void textsAfter(uint32_t i) {
+    const P::String* t = keptText(i);
+    if (t && bindable(*t) && !node(i).first && node(i).obj) {
+        const P::String text = *t;
+        keepText(i, {});
+        setTextContent(handle(i), text);
+    }
+    for (uint32_t c = node(i).first; c; c = node(c).next) textsAfter(c);
+}
+
+// Where the objects of an element out of the document wait, hidden: they come back as they were
+lv_obj_t* s_limbo = nullptr;
+
+void onLimboDelete(lv_event_t*) { s_limbo = nullptr; }
+
+lv_obj_t* limbo() {
+    if (!s_limbo) {
+        s_limbo = lv_obj_create(lv_screen_active());
+        lv_obj_add_flag(s_limbo, LV_OBJ_FLAG_HIDDEN);
+        lv_obj_add_event_cb(s_limbo, onLimboDelete, LV_EVENT_DELETE, nullptr);
+    }
+    return s_limbo;
+}
+
+// i's objects and those of the elements in it go (or went)
+void forgetObjects(uint32_t i) {
+    Entry& e = node(i);
+    e.obj = nullptr;
+    e.undo.reset();
+    e.events = 0;
+    e.flags = static_cast<uint8_t>(e.flags & ~kStyled);
+    for (uint32_t c = e.first; c; c = node(c).next) forgetObjects(c);
+}
+
+// The LVGL parent the objects of p's elements go into: where those of its other elements are; or
+// for an HTML element its flow box, for a TelaOS one its box
+lv_obj_t* hostIn(uint32_t p, uint32_t but, bool html) {
+    for (uint32_t c = node(p).first; c; c = node(c).next) {
+        if (c != but && node(c).obj && !(node(c).flags & kDetached)) return lv_obj_get_parent(node(c).obj);
+    }
+    lv_obj_t* const box = HtmlFlow::contentOf(node(p).obj);
+    return html ? HtmlFlow::flowBox(box) : box;
+}
+
+bool isHtml(std::string_view tag) {
+    const P::String t = "<" + P::String(tag) + ">";
+    return HtmlFlow::hasHtml(t.c_str(), t.size());
+}
+
+// c's object where it goes among the objects of its parent's elements: before the next one's
+void place(uint32_t c) {
+    lv_obj_t* const o = node(c).obj;
+    for (uint32_t n = node(c).next; n; n = node(n).next) {
+        lv_obj_t* const next = node(n).obj;
+        if (next && lv_obj_get_parent(next) == lv_obj_get_parent(o)) {
+            int32_t to = lv_obj_get_index(next);
+            if (lv_obj_get_index(o) < to) --to;  // it leaves its place first
+            lv_obj_move_to_index(o, to);
+            return;
+        }
+    }
+    lv_obj_move_to_index(o, -1);  // the last
+}
+
+bool isElementObj(lv_obj_t* obj) {
+    for (uint32_t i = 1; i <= nodes().size(); ++i) {
+        if (node(i).obj == obj) return true;
+    }
+    return false;
+}
+
+// While it lives, what the walkers build is recorded in the tree, in p: the script's elements
+// (tree().known) keep their handles
+class Fragment {
+public:
+    explicit Fragment(uint32_t p) {
+        s_building = true;
+        opened().assign(1, p);
+        s_last = Last::None;
+        tree().sources.assign(nodes().size(), std::string_view());
+    }
+    ~Fragment() {
+        s_building = false;
+        opened().clear();
+        s_last = Last::None;
+        tree().sources.clear();
+        tree().sources.shrink_to_fit();
+        tree().known.clear();
+    }
+    Fragment(const Fragment&) = delete;
+    Fragment& operator=(const Fragment&) = delete;
+};
+
+// c, a child of p never built, built where it is: in p's box, the CSS scopes of p's ancestors and
+// p open, with p's children for places among siblings
+void build(uint32_t p, uint32_t c) {
+    P::String markup;
+    size_t at = 0;
+    markupOf(c, markup, &at);
+    const std::string_view own(markup.data() + at, markup.find('>', at) - at);  // as the walkers see it
+    P::Array<CssChild> kids;
+    for (uint32_t k = node(p).first; k; k = node(k).next) {
+        kids.push_back(CssChild{node(k).tag, k == c ? own : std::string_view(node(k).attrs)});
+    }
+    lv_obj_t* const box = HtmlFlow::contentOf(node(p).obj);
+    nodes().reserve(nodes().size() + 16);  // kids' views stay where they point while it builds
+    markKnown(c);
+    auto walk = [&] {
+        CssScope scope(node(p).tag, node(p).attrs, kids);
+        Fragment fragment(p);
+        parse_children(markup.c_str(), static_cast<int>(markup.size()), box);
+    };
+    inScopes(ancestorsOf(p), 0, false, walk);
+    if (!node(c).obj && isHtml(node(c).tag)) {  // <span> in a block: a line of its own, its object
+        lv_obj_t* const line = lv_obj_get_child(HtmlFlow::flowBox(box), -1);
+        if (line && !isElementObj(line)) node(c).obj = line;
+    }
+    textsAfter(c);
+}
+
+// The elements in c that have objects of their own already, into c's box: elements a script took
+// out, then put into an element it made
+void moveIn(uint32_t c) {
+    for (uint32_t k = node(c).first; k; k = node(k).next) {
+        if (node(k).obj && lv_obj_get_parent(node(k).obj) == s_limbo) {
+            lv_obj_set_parent(node(k).obj, hostIn(c, k, isHtml(node(k).tag)));
+            place(k);
+        } else if (!node(k).obj) {
+            continue;
+        }
+        moveIn(k);
+    }
+}
+
+// The listeners of the elements above c, for events that come up to them, and those of c and what
+// is in it: their objects pass them on
+void listenAgain(uint32_t c) {
+    for (uint32_t a = node(c).parent; a; a = node(a).parent) {
+        for (const EventType& t : kEventTypes) {
+            if ((node(a).listens & t.bit) && t.bubbles) passOn(c, t, true);
+        }
+    }
+    auto own = [](uint32_t i, auto& self) -> void {
+        for (const EventType& t : kEventTypes) {
+            if (!(node(i).listens & t.bit)) continue;
+            if (t.bit == kClick && node(i).obj) lv_obj_add_flag(node(i).obj, LV_OBJ_FLAG_CLICKABLE);
+            passOn(i, t, t.bubbles);
+        }
+        for (uint32_t k = node(i).first; k; k = node(k).next) self(k, self);
+    };
+    own(c, own);
+}
+
+// CSS on p's children again, and on what is in them: places among siblings (li:last-child) moved
+void restyleChildren(uint32_t p) {
+    if (!node(p).first) return;
+    auto all = [p] {
+        const P::Array<CssChild> kids = childrenOf(p);
+        CssScope scope(cssTag(p), node(p).attrs, kids);
+        for (uint32_t c = node(p).first; c; c = node(c).next) restyleTree(c);
+    };
+    inScopes(ancestorsOf(p), 0, true, all);
+}
+
+bool inDocument(uint32_t i) { return !(node(i).flags & (kDetached | kGone)); }
+
+// i is p or above it: p cannot go into i
+bool isAncestor(uint32_t i, uint32_t p) {
+    for (uint32_t a = p; a; a = node(a).parent) {
+        if (a == i) return true;
+    }
+    return false;
 }
 
 }  // namespace
@@ -693,6 +994,9 @@ void clear() {
     nodes().clear();
     tree().sources.clear();
     tree().styledAs.clear();
+    tree().texts.clear();
+    tree().known.clear();
+    s_limbo = nullptr;  // it went with the app's objects
     opened().clear();
     s_building = false;
     s_paused = 0;
@@ -708,7 +1012,7 @@ bool enter(std::string_view tag, std::string_view attrs) {
     uint32_t i = 0;
     // its object came just before its content (a box, then what is in it), or it is entered again
     if (s_last != Last::None && sameSource(s_lastNode, attrs) && !isOpen(s_lastNode)) i = s_lastNode;
-    if (!i) i = add(tag, attrs, nullptr);
+    if (!i) i = add(tag, attrs, nullptr, attrs);
     opened().push_back(i);
     s_last = Last::None;
     return true;
@@ -731,12 +1035,14 @@ bool element(lv_obj_t* obj, std::string_view tag, std::string_view attrs, bool s
         i = s_lastNode;  // styled after its content: a <label> with HTML in it
     }
     if (i) node(i).obj = obj;
-    else if (!(i = add(tag, attrs, obj))) return false;
+    else if (!(i = add(tag, attrs, obj, s_asOn ? std::string_view(tree().asAttrs) : attrs))) return false;
     if (styled) node(i).flags |= kStyled;
     if (s_asOn) {  // what the markup says, not what the builder was given
         if (styled) tree().styledAs.emplace_back(i, lower(tag));
-        node(i).tag = lower(tree().asTag);
-        node(i).attrs = std::move(tree().asAttrs);
+        if (!knownIn(tree().asAttrs)) {  // the script's element keeps its own
+            node(i).tag = lower(tree().asTag);
+            node(i).attrs = std::move(tree().asAttrs);
+        }
         s_asOn = false;
     }
     s_last = Last::Element;
@@ -778,7 +1084,7 @@ Node getElementById(std::string_view id) {
     for (uint32_t i = 1; i <= nodes().size(); ++i) {
         const Entry& e = node(i);
         Attr a;
-        if (!(e.flags & kGone) && findAttr(e.attrs, "id", a) && decoded(a.value) == id) return handle(i);
+        if (!(e.flags & (kGone | kDetached)) && findAttr(e.attrs, "id", a) && decoded(a.value) == id) return handle(i);
     }
     return 0;
 }
@@ -793,13 +1099,26 @@ P::String tagName(Node n) {
 
 P::String textContent(Node n) {
     const uint32_t i = indexOf(n);
-    if (!i || !node(i).obj || HtmlFlow::isVoid(node(i).tag.c_str())) return "";  // <input>, <img>: no content
+    if (!i || HtmlFlow::isVoid(node(i).tag.c_str())) return "";  // <input>, <img>: no content
+    if (!node(i).obj) {  // made by createElement: the text it is to show, then what is in it
+        if (!(node(i).flags & kDetached)) return "";
+        const P::String* t = keptText(i);
+        P::String all = t ? *t : P::String();
+        for (uint32_t c = node(i).first; c; c = node(c).next) all += textContent(handle(c));
+        return all;
+    }
     return HtmlFlow::getText(node(i).obj);
 }
 
 bool setTextContent(Node n, std::string_view text) {
     const uint32_t i = indexOf(n);
-    if (!i || !node(i).obj || HtmlFlow::isVoid(node(i).tag.c_str())) return false;
+    if (!i || HtmlFlow::isVoid(node(i).tag.c_str())) return false;
+    if (!node(i).obj && (node(i).flags & kDetached)) {  // never built: it shows the text when it is
+        dropChildren(i);
+        keepText(i, text);
+        return true;
+    }
+    if (!node(i).obj) return false;
     lv_obj_t* const obj = node(i).obj;
     lv_obj_t* shown = obj;  // a button shows its text in a label of its own
     forRegistered(obj, [&](UI::Element& el) {
@@ -952,6 +1271,79 @@ P::String cssText(Node n) {
 
 void setCssText(Node n, std::string_view text) { setAttribute(n, "style", styleText(Css::declarations(text))); }
 
+Node createElement(std::string_view tag) {
+    if (!validName(tag) || nodes().size() >= kIndexMask) return 0;
+    Entry e;
+    e.tag = lower(tag);
+    e.flags = kDetached;
+    nodes().push_back(std::move(e));
+    return handle(static_cast<uint32_t>(nodes().size()));
+}
+
+TreeChange insertBefore(Node parent, Node child, Node ref) {
+    const uint32_t p = indexOf(parent), c = indexOf(child), r = ref ? indexOf(ref) : 0;
+    if (!p || !c || (ref && !r)) return TreeChange::Done;  // an element of an app gone: nothing to change
+    if (isAncestor(c, p)) return TreeChange::Loop;
+    if (!node(c).parent && inDocument(c)) return TreeChange::Page;
+    if (r && node(r).parent != p) return TreeChange::NotAChild;
+    if (r == c) return TreeChange::Done;  // before itself: where it is
+    const bool built = inDocument(p);
+    if (built && !lv_obj_check_type(HtmlFlow::contentOf(node(p).obj), &lv_obj_class)) return TreeChange::NotABox;
+    const uint32_t from = node(c).parent;
+    unlink(c);
+    link(p, c, r);
+    if (!built) {  // into an element out of the document: its objects wait with it
+        if (node(c).obj && inDocument(c)) lv_obj_set_parent(node(c).obj, limbo());
+        setDetached(c, true);
+    } else if (node(c).obj) {  // it was in the document, or taken out: its objects, as they are
+        lv_obj_set_parent(node(c).obj, hostIn(p, c, isHtml(node(c).tag)));
+        setDetached(c, false);
+        place(c);
+        moveIn(c);
+    } else {  // made by createElement: built now
+        setDetached(c, false);
+        build(p, c);
+        if (node(c).obj) place(c);
+        moveIn(c);
+    }
+    if (built) {
+        listenAgain(c);
+        restyleChildren(p);  // c's place among them, and what CSS in this place gives it
+    }
+    if (from && from != p && inDocument(from)) restyleChildren(from);
+    return TreeChange::Done;
+}
+
+TreeChange removeChild(Node parent, Node child) {
+    const uint32_t p = indexOf(parent), c = indexOf(child);
+    if (!p || !c) return TreeChange::Done;
+    if (node(c).parent != p) return TreeChange::NotAChild;
+    const bool built = inDocument(c);
+    unlink(c);
+    if (built && node(c).obj) lv_obj_set_parent(node(c).obj, limbo());  // hidden, as it is: it may come back
+    setDetached(c, true);
+    if (built) restyleChildren(p);
+    return TreeChange::Done;
+}
+
+Node parentOf(Node n) {
+    const uint32_t i = indexOf(n);
+    return i ? handle(node(i).parent) : 0;
+}
+
+void release(Node n) {
+    const uint32_t i = indexOf(n);
+    if (!i || node(i).parent || !(node(i).flags & kDetached) || !node(i).obj) return;
+    lv_obj_t* const o = node(i).obj;
+    forgetObjects(i);
+    g_core.app().forgetInside(o);
+    forRegistered(o, [](UI::Element& el) {
+        el.w.handle = nullptr;
+        el.parentObj = nullptr;
+    });
+    lv_obj_delete_async(o);  // the collector may run anywhere, an LVGL event included
+}
+
 void setDispatch(Dispatch d) { s_dispatch = d; }
 
 bool listen(Node n, std::string_view type) {
@@ -959,6 +1351,7 @@ bool listen(Node n, std::string_view type) {
     if (!t) return false;
     const uint32_t i = indexOf(n);
     if (!i) return true;  // an element of an app gone: nothing comes to it
+    node(i).listens |= t->bit;  // built again (appendChild), it passes them on again
     if (t->bit == kClick && node(i).obj) {
         lv_obj_add_flag(node(i).obj, LV_OBJ_FLAG_CLICKABLE);  // any element takes a tap
     }
