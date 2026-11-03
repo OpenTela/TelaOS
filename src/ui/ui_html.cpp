@@ -1721,10 +1721,11 @@ void build_div(const UI::StartTag& tag, const P::String& content, lv_obj_t* host
         lv_obj_set_flex_align(container, mainAlign, crossAlign, LV_FLEX_ALIGN_START);
     }
 
-    if (!growAttr.empty())
+    if (!growAttr.empty() && !HtmlFlow::inFlow(host))  // no grow in an HTML flow box: see parse_children
         lv_obj_set_flex_grow(container, atoi(growAttr.c_str()));
 
     Widget{container}.applyCss("div", idAttr.c_str(), classAttr.c_str(), a.text());
+    HtmlFlow::applyDir(container, a.get("dir").c_str());
 
     bool hasDynVisible = !visAttr.empty() && visAttr.find('{') != P::String::npos;
     bool hasDynDisabled = !disAttr.empty() && disAttr.find('{') != P::String::npos;
@@ -1865,6 +1866,8 @@ void build_table_part(const UI::StartTag& tag, const P::String& content, lv_obj_
     auto idAttr = a.get("id");
     auto classAttr = a.get("class");
     Widget{container}.applyCss(tag.name.c_str(), idAttr.c_str(), classAttr.c_str(), a.text());
+    // <table dir="rtl">: columns from the right (rows are flex rows, which follow base_dir)
+    HtmlFlow::applyDir(container, a.get("dir").c_str());
 
     // visible binding
     auto visAttr = a.get("visible");
@@ -1996,8 +1999,10 @@ void parse_children(const char *html, int len, lv_obj_t *parent) {
                 : parent;
         build_element(tag, content, host, parent);
 
-        // flex-grow on any widget that is not a layout container
-        if (!UI::isContainer(tag.id)) {
+        // flex-grow on any widget that is not a layout container. Not in an HTML flow box: blocks of
+        // a page have no grow, and LVGL would size it from the box's own height, which is its
+        // content's (a loop: the result swings with the neighbours, see random page gen_0075)
+        if (!UI::isContainer(tag.id) && !HtmlFlow::inFlow(host)) {
             const P::String grow = tag.attrs.get("grow");
             if (!grow.empty()) {
                 lv_obj_t *lastChild = lv_obj_get_child(host, -1);

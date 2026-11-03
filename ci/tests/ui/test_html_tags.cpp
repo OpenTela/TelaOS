@@ -18,6 +18,7 @@
 #include <cstdio>
 #include <cstring>
 #include <string>
+#include <vector>
 #include "lvgl.h"
 #include "lvgl_mock.h"
 #include "core/core.h"
@@ -53,13 +54,26 @@ static bool shown(const MW* w) {
     return true;
 }
 
-// Text a person sees under w: label texts in tree order, joined by one space
+// Text a person sees under w: label texts in tree order, joined by one space. The words of an
+// HTML line (a row-wrap line box) touch: each keeps its own space, H<sub>2</sub>O reads "H2O".
 static void collect(const MW* w, std::string& out) {
     if (w->hidden) return;
+    const bool line = w->flexFlow == LV_FLEX_FLOW_ROW_WRAP;
+    std::string piece;
     if ((w->type == "Label" || w->type == "Checkbox") && !w->text.empty()) {
-        if (!out.empty() && out.back() != ' ' && out.back() != '\n' && w->text[0] != ' ') out += ' ';
-        out += w->text;
+        piece = w->text;
+    } else if (line) {
+        for (auto* c : w->children) {
+            std::string part;
+            collect(c, part);
+            piece += part;
+        }
     }
+    if (!piece.empty()) {
+        if (!out.empty() && out.back() != ' ' && out.back() != '\n' && piece[0] != ' ') out += ' ';
+        out += piece;
+    }
+    if (line) return;  // its children are in the piece
     for (auto* c : w->children) collect(c, out);
 }
 
@@ -93,6 +107,7 @@ static const char* APP_PARSE = R"HTML(
     <page id="m">
       <p id="lv">Count {count}</p>
       <p id="lv2">Count <b>{count}</b>!</p>
+      <p id="lv3">Count {count}: <a href="/a">a</a> <a href="/b">b</a></p>
       <p>line<br>break</p>
       <img src="none.png">
       <hr>
@@ -131,6 +146,18 @@ static const char* APP_TEXT = R"HTML(
   <blockquote id="bq">Quote</blockquote>
   <address id="adr">Street 1</address>
   <hr id="rule">
+</page></ui></app>
+)HTML";
+
+// Raised and lowered text, text direction: <sup>, <sub>, <bdo>, dir
+static const char* APP_TEXT_DIR = R"HTML(
+<app><ui default="/m"><page id="m">
+  <p id="e">E = mc<sup>2</sup>, H<sub>2</sub>O</p>
+  <p id="bdo"><bdo dir="rtl">olleH</bdo>, <bdo dir="RTL">тевирП</bdo>!</p>
+  <p id="rtl" dir="rtl">Right to left</p>
+  <p id="rtlw" dir="rtl">Two <a href="/a">links</a> <a href="/b">here</a></p>
+  <ul dir="rtl"><li>one<ul id="rin"><li>two</ul></ul>
+  <table id="rtb" dir="rtl"><tr><td>1</td><td>2</td></tr></table>
 </page></ui></app>
 )HTML";
 
@@ -186,6 +213,25 @@ static const char* APP_FORMS = R"HTML(
 </page></ui></app>
 )HTML";
 
+// Form attributes: <option selected/disabled>, maxlength, readonly, step, fieldset disabled
+static const char* APP_FORM_ATTRS = R"HTML(
+<app><ui default="/m"><page id="m">
+  <form>
+    <select id="lang"><option value="en">English</option><option value="ru" selected>Russian</option></select>
+    <select id="first"><option disabled>None</option><option>One</option><option>Two</option></select>
+    <select id="loose"><option>X<option>Y</select>
+    <input type="text" id="code" maxlength="4">
+    <textarea id="memo" maxlength="20" readonly>fixed</textarea>
+    <input type="range" id="steps" min="0" max="10" step="5" value="3">
+    <input type="text" id="off" disabled>
+    <fieldset disabled id="fs"><legend>Off</legend>
+      <input type="checkbox" id="fcb"> <input type="text" id="ftx"> <input type="range" id="frg">
+    </fieldset>
+    <label for="fcb" id="lfor">Agree</label>
+  </form>
+</page></ui></app>
+)HTML";
+
 static const char* APP_HIDDEN = R"HTML(
 <app><ui default="/m"><page id="m">
   <main id="mn">
@@ -223,6 +269,9 @@ static const char* APP_FLOW = R"HTML(
   <label id="free">Free</label>
   <label id="pinned" x="10" y="20">Pinned</label>
   <button id="btn">Btn</button>
+  <list id="glist" grow="3"><item>one</item></list>
+  <div id="gdiv" grow="2">box</div>
+  <div flex="column" h="100"><label id="glbl" grow="1">grows</label></div>
   Tail <b>text</b> <i>here</i>
 </page></ui></app>
 )HTML";
@@ -304,9 +353,11 @@ int main() {
     printf("\nLive {var}:\n");
     expectText("plain text binding", "lv", "Count 7");
     expectText("binding inside formatted text", "lv2", "Count 7!");
+    expectText("binding in a line with two links", "lv3", "Count 7: a b");
     engine.call("bump");
     expectText("plain text after Lua bump()", "lv", "Count 8");
     expectText("formatted text after Lua bump()", "lv2", "Count 8!");
+    expectText("line with two links after Lua bump()", "lv3", "Count 8: a b");
     engine.shutdown();
     g_eng = nullptr;
 
@@ -332,6 +383,31 @@ int main() {
     expectText("<blockquote>", "bq", "Quote");
     expectText("<address>", "adr", "Street 1");
     expectTrue("<hr>", byId("rule") != nullptr);
+
+    printf("\nRaised text, direction:\n");
+    render(APP_TEXT_DIR);
+    expectText("<sup>, <sub>: the words stay as written", "e", "E = mc2, H2O");
+    {
+        std::vector<const MW*> twos;  // the 2 of mc², then the 2 of H₂O
+        if (const MW* e = byId("e")) {
+            for (const MW* c : e->children) {
+                if (c->text == "2") twos.push_back(c);
+            }
+        }
+        expectTrue("<sup> drawn higher, <sub> lower", twos.size() == 2 && twos[0]->translateY < 0 &&
+                   twos[1]->translateY > 0);
+        expectTrue("the line makes room for them", byId("e") && byId("e")->padTop > 0 && byId("e")->padBottom > 0);
+    }
+    expectText("<bdo dir=rtl>: letters right to left, Cyrillic too", "bdo", "Hello, Привет!");
+    expectTrue("dir=rtl: the line sits at the right", byId("rtl") && byId("rtl")->textAlignH == 2 &&
+               byId("rtl")->baseDir == LV_BASE_DIR_RTL);
+    expectTrue("dir=rtl, words with links: at the right, in their order",
+               byId("rtlw") && byId("rtlw")->flexMainAlign == LV_FLEX_ALIGN_END &&
+               byId("rtlw")->baseDir == LV_BASE_DIR_LTR);
+    expectText("dir=rtl, words with links: text unchanged", "rtlw", "Two links here");
+    expectTrue("dir=rtl list: a nested list is indented from the right",
+               byId("rin") && byId("rin")->padRight > 0 && byId("rin")->padLeft == 0);
+    expectTrue("<table dir=rtl>: rows go right to left", byId("rtb") && byId("rtb")->baseDir == LV_BASE_DIR_RTL);
 
     printf("\nLists:\n");
     render(APP_LISTS);
@@ -381,6 +457,21 @@ int main() {
     expectTrue("checked before type=: still a checked checkbox", byId("cb3") && byId("cb3")->checked);
     expectTrue("disabled before id=: the id is kept", byId("off") != nullptr);
 
+    printf("\nForm attributes:\n");
+    render(APP_FORM_ATTRS);
+    expectTrue("<option selected> is chosen at the start", byId("lang") && byId("lang")->curValue == 1);
+    expectTrue("<option disabled> is skipped at the start", byId("first") && byId("first")->curValue == 1);
+    expectTrue("</option> may be left out", byId("loose") && byId("loose")->text == "X\nY");
+    expectTrue("<input maxlength>", byId("code") && byId("code")->maxLength == 4);
+    expectTrue("<textarea maxlength readonly>: limit and text", byId("memo") && byId("memo")->maxLength == 20 &&
+               byId("memo")->text == "fixed");
+    expectTrue("<input type=range step>: 3 snaps to 5", byId("steps") && byId("steps")->curValue == 5);
+    expectTrue("<input disabled> (text)", byId("off") && byId("off")->disabled);
+    expectTrue("<fieldset disabled>: every control inside is off",
+               byId("fcb") && byId("fcb")->disabled && byId("ftx") && byId("ftx")->disabled &&
+               byId("frg") && byId("frg")->disabled);
+    expectTrue("<label for> is still a label", byId("lfor") && textOf(byId("lfor")) == "Agree");
+
     printf("\nHidden and fallback content:\n");
     render(APP_HIDDEN);
     expectText("template/noscript/head hidden, fallbacks shown", "mn",
@@ -418,6 +509,11 @@ int main() {
         expectTrue("text right inside the page: one line", byText("Tail text here") != nullptr);
         expectTrue("comment with '>' leaves no text", textOf(page).find("bracket") == std::string::npos);
         expectTrue("<style> in the page applies to class", para && para->color == 0xFF0000);
+        // a flow box is a block, not a flex row of a TelaOS layout: grow= would size the widget
+        // from the box's own content height, a loop
+        expectTrue("grow= on a TelaOS widget in the flow: none", byId("glist") && byId("glist")->flexGrow == 0);
+        expectTrue("grow= on a TelaOS div in the flow: none", byId("gdiv") && byId("gdiv")->flexGrow == 0);
+        expectTrue("grow= in a TelaOS flex div: kept", byId("glbl") && byId("glbl")->flexGrow == 1);
     }
 
     printf("\nColors:\n");

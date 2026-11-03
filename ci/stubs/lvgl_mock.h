@@ -33,6 +33,8 @@ struct Widget {
     
     // Text alignment (inside widget)
     int textAlignH = 0;      // 0=left, 1=center, 2=right
+    int baseDir = -1;        // lv_base_dir_t set on this object; -1: inherited
+    int translateY = 0;      // drawn this far below its place (sup < 0, sub > 0)
     int padTop = 0;          // for vertical text alignment
     
     // Element alignment (position on parent)
@@ -52,6 +54,7 @@ struct Widget {
     // Input
     std::string placeholder;
     bool password = false;
+    int maxLength = 0;       // lv_textarea_set_max_length
     
     // Flex layout
     int flexFlow = -1;
