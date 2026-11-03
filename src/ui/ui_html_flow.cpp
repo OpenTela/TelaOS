@@ -19,6 +19,7 @@
 #include "ui/css_parser.h"
 #include "ui/ui_coords.h"
 #include "ui/ui_html_internal.h"
+#include "ui/ui_tag_reader.h"
 #include "ui/xml_utils.h"
 #include "utils/font.h"
 #include "utils/log_config.h"
@@ -28,6 +29,7 @@
 
 #include <strings.h>
 
+#include <algorithm>
 #include <cctype>
 #include <cstdio>
 #include <cstdlib>
@@ -1423,14 +1425,34 @@ void activate(lv_obj_t* target) {
     }
 }
 
-std::unordered_map<lv_obj_t*, P::String> s_labelFor;  // label -> id of its control
+std::unordered_map<lv_obj_t*, P::String> s_labelFor;        // label -> id of its control
+std::unordered_map<lv_obj_t*, lv_obj_t*> s_labelControl;    // label -> the control inside it
 
 void onLabelClick(lv_event_t* e) {
-    const auto it = s_labelFor.find(static_cast<lv_obj_t*>(lv_event_get_user_data(e)));
-    if (it != s_labelFor.end()) activate(g_core.app().findElement(it->second.c_str()));
+    lv_obj_t* label = static_cast<lv_obj_t*>(lv_event_get_user_data(e));
+    const auto it = s_labelFor.find(label);
+    if (it != s_labelFor.end()) {
+        activate(g_core.app().findElement(it->second.c_str()));
+        return;
+    }
+    const auto in = s_labelControl.find(label);
+    if (in != s_labelControl.end()) activate(in->second);
 }
 
-void onLabelDelete(lv_event_t* e) { s_labelFor.erase(static_cast<lv_obj_t*>(lv_event_get_user_data(e))); }
+void onLabelDelete(lv_event_t* e) {
+    lv_obj_t* label = static_cast<lv_obj_t*>(lv_event_get_user_data(e));
+    s_labelFor.erase(label);
+    s_labelControl.erase(label);
+}
+
+lv_obj_t* findControl(lv_obj_t* o) {
+    for (uint32_t i = 0; i < lv_obj_get_child_count(o); ++i) {
+        lv_obj_t* c = lv_obj_get_child(o, static_cast<int32_t>(i));
+        if (isControl(c)) return c;
+        if (lv_obj_t* inner = findControl(c)) return inner;
+    }
+    return nullptr;
+}
 
 // A boolean attribute (`readonly`, `disabled`) passed on to a TelaOS builder
 P::String flagFor(const TagRef& t, const char* name) {
@@ -1994,8 +2016,59 @@ void labelFor(lv_obj_t* label, const char* id) {
     lv_obj_add_event_cb(label, onLabelDelete, LV_EVENT_DELETE, label);
 }
 
+void labelControl(lv_obj_t* label, lv_obj_t* control) {
+    if (!label || !control) return;
+    s_labelControl[label] = control;
+    lv_obj_add_flag(label, LV_OBJ_FLAG_CLICKABLE);
+    lv_obj_add_event_cb(label, onLabelClick, LV_EVENT_CLICKED, label);
+    lv_obj_add_event_cb(label, onLabelDelete, LV_EVENT_DELETE, label);
+}
+
+lv_obj_t* firstControl(lv_obj_t* o) { return o ? findControl(o) : nullptr; }
+
+bool hasMarkup(const char* s, const char* e, bool controls) {
+    if (!s || e <= s) return false;
+    UI::TagReader reader(std::string_view(s, static_cast<size_t>(e - s)));
+    UI::StartTag tag;
+    bool any = false;
+    for (UI::TagReader::Step step; (step = reader.next(tag)) != UI::TagReader::Step::End;) {
+        if (step != UI::TagReader::Step::Tag) continue;
+        const char* n = tag.name.c_str();
+        const TagInfo* ti = info(n);
+        const bool phrasing = (ti && ti->kind == Kind::Inline) || is(n, "br") || is(n, "wbr") || is(n, "img");
+        const bool control = controls && (is(n, "input") || is(n, "textarea") || is(n, "meter") || is(n, "progress"));
+        if (!phrasing && !control) return false;
+        any = true;
+    }
+    return any;
+}
+
+lv_obj_t* richText(lv_obj_t* parent, const char* s, const char* e, bool fit) {
+    if (!parent || !s || e <= s) return nullptr;
+    TagRef owner;  // no attributes: no CSS or id of its own (the label or button has those); it keeps {var} live
+    constexpr std::string_view kName = "#text";
+    *std::copy(kName.begin(), kName.end(), owner.name) = '\0';
+    owner.astart = owner.aend = "";
+    owner.cstart = s;
+    owner.cend = e;
+    const uint32_t before = lv_obj_get_child_count(parent);
+    Seg seg(parent, Ctx{}, &owner, TextLook{});
+    walk(s, e, seg, Style{}, true);
+    seg.flush();
+    if (lv_obj_get_child_count(parent) == before) return nullptr;  // nothing to show
+    lv_obj_t* o = lv_obj_get_child(parent, -1);
+    if (fit) {  // a button's text: one line, as wide as it is
+        lv_obj_set_width(o, LV_SIZE_CONTENT);
+#if LV_USE_SPAN
+        if (lv_obj_check_type(o, &lv_spangroup_class)) lv_spangroup_set_mode(o, LV_SPAN_MODE_EXPAND);
+#endif
+    }
+    return o;
+}
+
 void reset() {
     s_labelFor.clear();
+    s_labelControl.clear();
     s_flow.clear();
     s_rootOf.clear();
     s_contentOf.clear();

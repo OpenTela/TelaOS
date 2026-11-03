@@ -271,6 +271,18 @@ static const char* APP_SETTEXT = R"HTML(
 </page></ui></app>
 )HTML";
 
+// HTML inside TelaOS labels and buttons
+static const char* APP_RICH = R"HTML(
+<app><ui default="/m"><page id="m">
+  <label id="rl">Name <i>(optional)</i></label>
+  <label id="rc"><input type="checkbox" id="rcb"> Remember me</label>
+  <label id="rp" x="10" y="400">Placed <b>bold</b></label>
+  <button id="rb"><b>Save</b> now</button>
+  <button id="ri"><img src="pic.png"> Pic</button>
+  <button id="rlb"><label font="32">Big</label></button>
+</page></ui></app>
+)HTML";
+
 static const char* APP_TELA = R"HTML(
 <app><ui default="/m"><page id="m">
   <!-- TelaOS only: nothing here may change -->
@@ -490,6 +502,32 @@ int main() {
     expectTrue("progress keeps its value", byId("pg") && byId("pg")->curValue == 500);
     expectTrue("<hr> takes no text", byId("rule") && byId("rule")->text.empty());
     expectTrue("<dialog>: its window gets the text", byText("new dialog") && !byText("old dialog"));
+
+    printf("\nHTML inside labels and buttons:\n");
+    render(APP_RICH);
+    expectText("<label> with <i> inside: text, no tags", "rl", "Name (optional)");
+    expectTrue("<label> with a checkbox inside: its text", textOf(byId("rc")).find("Remember me") != std::string::npos,
+               textOf(byId("rc")).c_str());
+    {
+        const MW* cb = byId("rcb");
+        bool inside = false;
+        for (const MW* w = cb; w; w = w->parent) inside = inside || w == byId("rc");
+        expectTrue("<label> with a checkbox inside: the checkbox is in it", cb && inside);
+    }
+    expectText("positioned <label> with <b>: text, no tags", "rp", "Placed bold");
+    expectTrue("positioned <label>: stays where x/y say", byId("rp") && byId("rp")->x == 10 && byId("rp")->y == 400);
+    expectText("<button> with <b> inside: text, no tags", "rb", "Save now");
+    {
+        const MW* b = byId("ri");
+        bool icon = false;
+        if (b) {
+            for (const MW* c : b->children) icon = icon || c->type == "Image";
+        }
+        expectTrue("<button> with <img> inside: the picture is its icon", icon);
+        expectText("<button> with <img> inside: the text after it", "ri", "Pic");
+    }
+    expectTrue("<button><label font=32> still sets the button's font",
+               byId("rlb") && byText("Big") && byText("Big")->fontSize == 32);
 
     printf("\nTelaOS page without HTML:\n");
     render(APP_TELA);

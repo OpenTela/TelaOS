@@ -48,6 +48,18 @@ lv_obj_t* flowBox(lv_obj_t* parent);
 // <label for="id">: a tap on `label` works the control with that id, as in a browser
 void labelFor(lv_obj_t* label, const char* id);
 
+// HTML inside a TelaOS <label> or <button>, as HTML allows it there: phrasing content (<b>, <a>,
+// <span>, <img>, <br>...) and, in a label, its control (<input>, <textarea>). Anything else (a
+// block, a TelaOS tag) and the text stays as before: <button><label font="32">OK</label></button>.
+bool hasMarkup(const char* s, const char* e, bool controls);
+// That text rendered into parent as one line box (a label, spans or a row of words), returned;
+// its {var} stay live. fit: as wide as its text (a button's label), not as wide as the parent.
+lv_obj_t* richText(lv_obj_t* parent, const char* s, const char* e, bool fit);
+// The first form control inside o: the control of <label><input type="checkbox"> Remember</label>
+lv_obj_t* firstControl(lv_obj_t* o);
+// A tap on label works control, as <label for> does by id
+void labelControl(lv_obj_t* label, lv_obj_t* control);
+
 // ui.setText() on an element built here (text with spans, a block, a checkbox, <li>, <dialog>).
 // false: not ours, the caller handles it.
 bool setText(lv_obj_t* obj, const char* text);

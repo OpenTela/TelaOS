@@ -127,6 +127,9 @@
         <input type="range" id="steps" min="0" max="10" step="5" value="3">
         <input type="text" id="fixed" value="fixed" readonly>
         <fieldset disabled><legend>Locked</legend><input type="checkbox" id="locked"> off</fieldset>
+        <label id="nick">Nickname <i>(optional)</i></label>
+        <label id="remember"><input type="checkbox" id="remcb"> Remember me</label>
+        <button id="richBtn"><b>Save</b> now</button>
         <p id="home_forms"><a href="/home">Home</a></p>
       </form>
     </page>
