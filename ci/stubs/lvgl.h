@@ -383,9 +383,31 @@ inline lv_obj_t* lv_screen_active() { return nullptr; }
 inline void lv_scr_load(lv_obj_t*) {}
 inline void lv_scr_load_anim(lv_obj_t*, int, int, int, bool) {}
 
-inline void lv_obj_del(lv_obj_t* obj) { delete obj; }
-inline void lv_obj_delete(lv_obj_t* obj) { delete obj; }
-inline void lv_obj_delete_async(lv_obj_t* obj) { delete obj; }
+// A deleted object's widget leaves its parent, as the object leaves the screen
+inline void mockDetach(lv_obj_t* obj) {
+#ifdef LVGL_MOCK_ENABLED
+    if (!obj || !obj->mock_widget || !obj->mock_widget->parent) return;
+    auto& ch = obj->mock_widget->parent->children;
+    ch.erase(std::remove(ch.begin(), ch.end(), obj->mock_widget), ch.end());
+#else
+    (void)obj;
+#endif
+}
+// The object moves to the end of another parent's children, as in LVGL
+inline void lv_obj_set_parent(lv_obj_t* obj, lv_obj_t* parent) {
+    if (!obj || !parent || obj->parent == parent) return;
+    mockDetach(obj);
+    obj->parent = parent;
+#ifdef LVGL_MOCK_ENABLED
+    if (obj->mock_widget && parent->mock_widget) {
+        obj->mock_widget->parent = parent->mock_widget;
+        parent->mock_widget->children.push_back(obj->mock_widget);
+    }
+#endif
+}
+inline void lv_obj_del(lv_obj_t* obj) { mockDetach(obj); delete obj; }
+inline void lv_obj_delete(lv_obj_t* obj) { mockDetach(obj); delete obj; }
+inline void lv_obj_delete_async(lv_obj_t* obj) { mockDetach(obj); delete obj; }
 inline lv_obj_t* lv_layer_top() { return nullptr; }
 inline void lv_obj_clean(lv_obj_t* obj) {
     if (obj && obj->mock_widget) obj->mock_widget->children.clear();

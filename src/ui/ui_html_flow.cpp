@@ -2193,6 +2193,11 @@ bool setText(lv_obj_t* obj, const char* text) {
     return false;
 }
 
+lv_obj_t* contentOf(lv_obj_t* obj) {
+    const auto c = s_contentOf.find(obj);
+    return c != s_contentOf.end() ? c->second : obj;
+}
+
 P::String getText(lv_obj_t* obj) {
     if (!obj) return "";
     auto c = s_contentOf.find(obj);

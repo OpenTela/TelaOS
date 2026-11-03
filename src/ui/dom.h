@@ -92,6 +92,29 @@ void setStyleProperty(Node n, std::string_view name, std::string_view value, boo
 P::String cssText(Node n);
 void setCssText(Node n, std::string_view text);
 
+// ---- The tree: createElement, appendChild, insertBefore, removeChild ----
+
+// An element out of the document. It takes attributes, text and elements; put into the document,
+// it is built as the markup would be. 0: not a name a tag can have
+Node createElement(std::string_view tag);
+
+enum class TreeChange : uint8_t {
+    Done,
+    NotAChild,  // ref (or the child to remove) is not a child of the parent
+    Loop,       // the child is the parent or above it
+    NotABox,    // the parent shows text (<p>, <label>, <button>): TelaOS puts elements into boxes
+    Page,       // a page stays where it is
+};
+
+// child into parent, before ref (0: the last). An element in the document moves with its objects
+// as they are; one taken out comes back so; one made by createElement is built here
+TreeChange insertBefore(Node parent, Node child, Node ref);
+// child out of the document: its objects wait, hidden, as they are
+TreeChange removeChild(Node parent, Node child);
+Node parentOf(Node n);  // 0: a page, or the top of what is out of the document
+// No script holds n any more: if it is out of the document, its objects go
+void release(Node n);
+
 // ---- Events (addEventListener) ----
 
 // An event on its way up the elements, as a listener sees it
