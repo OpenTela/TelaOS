@@ -1,4 +1,8 @@
-# PR checks: unit tests (TelaCI) and the screens of every app in the simulator.
+# PR checks: unit tests (TelaCI), the firmware of the boards, and the screens of every app
+# in the simulator.
+#
+# The firmware job builds what goes onto the watches — PlatformIO, the toolchain of the
+# board (GCC 8.4 for Arduino-ESP32 2.x) — and writes how much flash and RAM it takes.
 #
 # The simulator job builds sim/ against the PR base and against the PR, photographs every
 # page of every app on both, and posts one comment: what changed, before / after / diff.
@@ -38,6 +42,43 @@ jobs:
         run: python3 ci/test.py "$GITHUB_WORKSPACE"
       - name: Simulator tools tests
         run: python3 -m unittest discover -s sim/tools -p 'test_*.py'
+
+  firmware:
+    name: Firmware (${{ matrix.board }})
+    if: github.event.action != 'closed'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 40
+    strategy:
+      fail-fast: false
+      matrix:
+        # esp8048w550 is left out: its panel code sets num_fbs and bounce_buffer_size_px,
+        # which ESP-IDF 4.4 (espressif32@6.12.0) does not have
+        board: [esp4848s040, twatch2020]
+    steps:
+      - uses: actions/checkout@v6
+      - name: PlatformIO packages
+        uses: actions/cache@v5
+        with:
+          path: ~/.platformio
+          key: pio-${{ matrix.board }}-${{ runner.os }}-${{ hashFiles('platformio.ini') }}
+          restore-keys: pio-${{ matrix.board }}-${{ runner.os }}-
+      - name: PlatformIO
+        run: |
+          python3 -m venv ~/pio
+          ~/pio/bin/pip install --quiet platformio pillow   # Pillow: the icon scripts of the build
+          echo "$HOME/pio/bin" >> "$GITHUB_PATH"
+      - name: Build
+        shell: bash
+        run: pio run -e "${{ matrix.board }}" 2>&1 | tee build.log
+      - name: Size in the job summary
+        if: always()
+        shell: bash
+        run: |
+          {
+            echo "### Прошивка: ${{ matrix.board }}"
+            echo
+            grep -E '^(RAM|Flash):' build.log | sed 's/^/    /' || echo "Не собралась: лог — в шаге Build."
+          } >> "$GITHUB_STEP_SUMMARY"
 
   screens:
     name: Simulator screens
