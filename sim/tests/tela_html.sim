@@ -21,6 +21,7 @@ tap "Text"
 wait 200
 expect @h2 "Text"
 expect "Heading 3" :visible
+expect @h2mixed "Heading with inline"
 expect @inline1 "b strong i em u ins s del mark small H2O x2"
 expect @inline2 "code Ctrl samp x “quote” cite dfn HTML today seven"
 expect @inline3 "bdi span tela(TL) longword"
