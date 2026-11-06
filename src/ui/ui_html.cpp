@@ -1410,8 +1410,7 @@ void ui_show_page_internal(const char *path) {
             // It's a group - show default page
             const auto& def = !g_core.app().group(grp_idx).default_page.empty() 
                 ? g_core.app().group(grp_idx).default_page : g_core.app().group(grp_idx).page_ids[0];
-            char _buf[64]; snprintf(_buf, sizeof(_buf), "%s/%s", g_core.app().group(grp_idx).id.c_str(), def.c_str());
-            ui_show_page_internal(_buf);
+            ui_show_page_internal((g_core.app().group(grp_idx).id + "/" + def).c_str());
             return;
         }
         
@@ -2156,8 +2155,7 @@ int ui_html_render_internal(const char *html) {
             contents[content_count].attrs = std::string_view(pastart, static_cast<size_t>(paend - pastart));
             content_count++;
             
-            char _buf[64]; snprintf(_buf, sizeof(_buf), "%s/%s", g_core.app().group(gi).id.c_str(), page_id.c_str());
-            P::String full_id = _buf;
+            const P::String full_id = g_core.app().group(gi).id + "/" + page_id;
             g_core.app().addPage(full_id.c_str(), tile);
             
             LOG_D(Log::UI, "  page: %s (tile %d)", full_id.c_str(), (int)g_core.app().group(gi).page_ids.size() - 1);

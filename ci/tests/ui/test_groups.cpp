@@ -1,7 +1,8 @@
 /**
  * Test: Groups - tabs/swipe navigation
  * 
- * Check group with multiple pages: they belong to the group, navigation reaches each of them
+ * Check group with multiple pages: they belong to the group, navigation reaches each of them.
+ * The path of a page in a group is the group's id, "/" and its own id, however long both are.
  */
 #include <cstdio>
 #include "lvgl.h"
@@ -28,6 +29,25 @@ const char* GROUPS_APP = R"(
     <page id="settings">
       <label id="settings_label">Settings (standalone)</label>
     </page>
+  </ui>
+</app>
+)";
+
+// A path of 85 characters to the default page of the group
+const char* LONG_IDS_APP = R"(
+<app>
+  <ui default="/settings_page_with_a_long_name">
+    <page id="settings_page_with_a_long_name">
+      <label>Settings</label>
+    </page>
+    <group id="a_group_whose_name_is_rather_long_for_a_watch" default="and_a_default_page_with_a_long_name_too">
+      <page id="first_page">
+        <label>First</label>
+      </page>
+      <page id="and_a_default_page_with_a_long_name_too">
+        <label>Default</label>
+      </page>
+    </group>
   </ui>
 </app>
 )";
@@ -139,6 +159,40 @@ int main() {
         else FAIL("group not shown");
     }
     
+    // === Long ids ===
+    printf("\nLong ids (the path is longer than 63 characters):\n");
+
+    g_core.store().clear();
+    g_core.render(LONG_IDS_APP);
+    const P::String group = "a_group_whose_name_is_rather_long_for_a_watch";
+    const P::String path = group + "/and_a_default_page_with_a_long_name_too";
+    int gi = -1;  // a render adds to what the app has: the group is found by its id
+    for (int i = 0; i < g_core.app().groupsCount(); i++) {
+        if (g_core.app().group(i).id == group) gi = i;
+    }
+
+    TEST("the page is found by its whole path");
+    {
+        if (gi < 0) { FAIL("no group"); return 1; }
+        auto& g = g_core.app().group(gi);
+        if (path.size() > 63 && g.page_objs.size() == 2 && g_core.app().findElement(path.c_str()) == g.page_objs[1]) PASS();
+        else FAIL("the page is not under its whole path");
+    }
+
+    TEST("showPage(group) goes to its default page");
+    {
+        g_core.showPage(group.c_str());
+        if (g_core.app().currentGroup() == gi && g_core.app().group(gi).current_page_idx == 1) PASS();
+        else FAIL("group not shown on its default page");
+    }
+
+    TEST("showPage(group/page) goes to the page");
+    {
+        g_core.showPage((group + "/first_page").c_str());
+        if (g_core.app().currentGroup() == gi && g_core.app().group(gi).current_page_idx == 0) PASS();
+        else FAIL("not on the first page");
+    }
+
     // === Summary ===
     printf("\n");
     if (passed == total) {
