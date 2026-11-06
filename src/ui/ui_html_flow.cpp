@@ -9,8 +9,9 @@
  *                       2+ links / widgets   → row-wrap of word labels (each link tappable)
  *   TelaOS tags met inside HTML content are built by parse_children() as before.
  *
- * Visual language = widget_markdown.h: h1 48px, h2 32px, h3+ 16px, bold; b, strong → bold,
- * i, em → italic, code → green. Fonts: UI::Font, twelve sizes in four faces (utils/font.h).
+ * Visual language = widget_markdown.h's colours; headings the sizes of a browser (h1 2em … h6
+ * 0.67em), bold; b, strong → bold, i, em → italic, code → green. Fonts: UI::Font, twelve sizes in
+ * four faces (utils/font.h).
  */
 #include "lvgl.h"
 #include "ui/ui_html_flow.h"
@@ -557,13 +558,19 @@ struct TextLook {  // block text look
     int align = -1;
 };
 
-TextLook lookFor(std::string_view n) {
+// h1 … h6 of a browser's style sheet: their font-size in em of the text around them
+constexpr float kHeadingEm[] = {2.0f, 1.5f, 1.17f, 1.0f, 0.83f, 0.67f};
+
+// around: the size of the text the element is in, px
+TextLook lookFor(std::string_view n, int around) {
     TextLook l;
-    // Headings are bold, as in a browser
-    if (is(n, "h1")) l.font = UI::Font::LARGE, l.color = kText, l.bold = true;
-    else if (is(n, "h2")) l.font = UI::Font::MEDIUM, l.color = kH2, l.bold = true;
-    else if (n.size() == 2 && n[0] == 'h' && n[1] >= '3' && n[1] <= '6') l.font = UI::Font::SMALL, l.color = kH2, l.bold = true;
-    else if (is(n, "dt")) l.color = kAccent;
+    // Headings are bold and as large as in a browser. Down to a whole pixel first: h3 is 18.72px,
+    // drawn at 18; h5, 13.28, at 14; h6, 10.72, at 12, the smallest there is
+    if (n.size() == 2 && n[0] == 'h' && n[1] >= '1' && n[1] <= '6') {
+        l.font = static_cast<int>(static_cast<float>(around) * kHeadingEm[n[1] - '1']);
+        l.color = n[1] == '1' ? kText : kH2;
+        l.bold = true;
+    } else if (is(n, "dt")) l.color = kAccent;
     else if (is(n, "caption")) l.color = kDim, l.align = LV_TEXT_ALIGN_CENTER;
     else if (is(n, "figcaption") || is(n, "legend")) l.color = kDim;
     return l;
@@ -1393,7 +1400,7 @@ void delegate(const TagRef& t, lv_obj_t* box) {  // a TelaOS tag inside HTML con
 }
 
 void textElement(const TagRef& t, lv_obj_t* box, const Ctx& ctx) {
-    const TextLook look = lookFor(t.name);
+    const TextLook look = lookFor(t.name, UI::Font::sizeOf(lv_obj_get_style_text_font(box, LV_PART_MAIN)));
     if (!hasBlockOrAtom(t.cstart, t.cend)) {
         Inside in(t);  // its runs and widgets are inside it; its own style ignores this (see CssScope)
         Seg seg(box, ctx, &t, look);

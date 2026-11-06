@@ -130,7 +130,11 @@ static const char* APP_TEXT = R"HTML(
 <app><ui default="/m"><page id="m">
   <h1 id="h1">Title</h1>
   <h2 id="h2">Sub</h2>
+  <h3 id="h3">Third</h3>
   <h4 id="h4">Small heading</h4>
+  <h5 id="h5">Fifth</h5>
+  <h6 id="h6">Sixth</h6>
+  <section style="font-size: 20px"><h1 id="h1in20">In 20px text</h1></section>
   <p id="p1">Hello <b>bold</b> and <i>italic</i>, <code>x = 1</code>.</p>
   <p id="ent">&amp; &lt;tag&gt; &copy; &#8364; &#x41;</p>
   <p id="ws">  many    spaces
@@ -381,9 +385,18 @@ int main() {
         MW* h1 = byId("h1");
         MW* h2 = byId("h2");
         MW* h4 = byId("h4");
-        expectTrue("h1: 48px white", h1 && h1->text == "Title" && h1->fontSize == 48 && h1->color == 0xFFFFFF);
-        expectTrue("h2: 32px #DDDDDD", h2 && h2->fontSize == 32 && h2->color == 0xDDDDDD);
-        expectTrue("h4: 16px", h4 && h4->fontSize == 16);
+        expectTrue("h1: 2em, 32px white", h1 && h1->text == "Title" && h1->fontSize == 32 && h1->color == 0xFFFFFF);
+        expectTrue("h2: 1.5em, 24px #DDDDDD", h2 && h2->fontSize == 24 && h2->color == 0xDDDDDD);
+        expectTrue("h4: 1em, 16px", h4 && h4->fontSize == 16);
+        // a browser's 18.72, 13.28 and 10.72px: the nearest size there is
+        MW* h3 = byId("h3");
+        MW* h5 = byId("h5");
+        MW* h6 = byId("h6");
+        expectTrue("h3: 1.17em, 18px", h3 && h3->fontSize == 18);
+        expectTrue("h5: 0.83em, 14px", h5 && h5->fontSize == 14);
+        expectTrue("h6: 0.67em, 12px", h6 && h6->fontSize == 12);
+        MW* in20 = byId("h1in20");
+        expectTrue("h1 in 20px text: 2em, 40px", in20 && in20->fontSize == 40);
     }
     expectText("inline formatting keeps the words", "p1", "Hello bold and italic, x = 1.");
     expectText("entities", "ent", "& <tag> © € A");
