@@ -104,8 +104,8 @@ def standard(markup):
 
 
 def font_url(path):
-    """The font inside the page: Chromium loads a font from a file:// page only where the
-    browser is let read file:// from file:// (CORS), a picture everywhere"""
+    """The font inside the page: nothing for Chromium to fetch, wherever the page and the
+    fonts lie"""
     try:
         return "data:font/ttf;base64," + base64.b64encode(Path(path).read_bytes()).decode("ascii")
     except OSError:
