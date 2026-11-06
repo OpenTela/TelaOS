@@ -69,6 +69,22 @@
       </article>
     </page>
 
+    <page id="icons">
+      <article>
+        <h2 id="iconsTitle">Icons</h2>
+        <p id="byName"><span class="material-symbols-outlined">home</span>
+           <span class="material-symbols-outlined">settings</span>
+           <span class="material-symbols-rounded">favorite</span> <i class="material-icons">search</i></p>
+        <p id="inText">Battery <span class="material-symbols-outlined" style="font-size: 16px">battery_full</span> 80%</p>
+        <p id="signsText">✓ done · ← → ↑ ↓ · ★★★☆ ♥♡ ⚙ ☀ ☁ ❄ ▶ ⏸</p>
+        <p id="unknown"><span class="material-symbols-outlined">no_such_icon</span></p>
+        <p id="liveIcon">Sky: <span class="material-symbols-outlined">{sky}</span></p>
+        <button id="skyBtn" onclick="nextSky"><span class="material-symbols-outlined">add</span></button>
+        <p id="bigIcon"><span class="material-symbols-outlined" style="font-size: 48px">alarm</span></p>
+        <p id="home_icons"><a href="/home">Home</a></p>
+      </article>
+    </page>
+
     <page id="lists">
       <section>
         <h2>Lists</h2>
@@ -213,6 +229,7 @@
     <string name="city" default="msk"/>
     <string name="dialogOpen" default="false"/>
     <string name="sent" default="no"/>
+    <string name="sky" default="sunny"/>
   </state>
 
   <script language="lua">
@@ -230,6 +247,10 @@ end
 
 function submitted()
   state.sent = "yes"
+end
+
+function nextSky()
+  state.sky = state.sky == "sunny" and "rainy" or "sunny"
 end
   </script>
 </app>

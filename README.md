@@ -238,7 +238,7 @@ The bridge also enables remote control — deploy apps, take screenshots, simula
 ```bash
 pio run                    # build firmware
 pio run -t upload          # flash firmware
-pio run -t uploadfs        # flash apps to LittleFS
+pio run -t uploadfs        # flash apps and the icon fonts to LittleFS
 ```
 
 Deploy individual apps over BLE without reflashing:

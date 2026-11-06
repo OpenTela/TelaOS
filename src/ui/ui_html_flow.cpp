@@ -523,8 +523,9 @@ int fontForHtmlSize(const P::String& size) {  // <font size="1..7">
     return UI::Font::XLARGE;
 }
 
-// blockFont: the font size of the text the run is in (h1: 48), 0 for the default
-Style derive(const Style& base, const TagRef& t, uint8_t look, int blockFont) {
+// blockFont: the font size of the text the run is in (h1: 48), 0 for the default.
+// uaFont: the size the element has when no rule of the page sizes it (an icon: 24), 0 for none.
+Style derive(const Style& base, const TagRef& t, uint8_t look, int blockFont, int uaFont = 0) {
     Style s = base;
     switch (look) {
         case L_STRONG: s.color = kAccent; break;
@@ -563,6 +564,7 @@ Style derive(const Style& base, const TagRef& t, uint8_t look, int blockFont) {
     const P::String style = attr(t, "style");
     // em and % in font-size: of the font the run is in
     const float parentPx = static_cast<float>(base.font > 0 ? base.font : blockFont > 0 ? blockFont : UI::Font::SMALL);
+    bool sized = false;
     for (const UI::CssDecl& d : UI::Css::instance().cascade(el, style)) {
         if (d.name == "color") {
             UI::CssColor c;
@@ -571,7 +573,7 @@ Style derive(const Style& base, const TagRef& t, uint8_t look, int blockFont) {
                 s.opa = c.alpha;
             }
         } else if (d.name == "font-size") {
-            if (const int px = UI::cssFontSize(d.value, parentPx); px > 0) s.font = px;
+            if (const int px = UI::cssFontSize(d.value, parentPx); px > 0) s.font = px, sized = true;
         } else if (d.name == "text-decoration" || d.name == "text-decoration-line") {
             const P::String v = lower(d.value);
             if (v.find("none") != P::String::npos) s.decor = 0;
@@ -579,8 +581,29 @@ Style derive(const Style& base, const TagRef& t, uint8_t look, int blockFont) {
             if (v.find("line-through") != P::String::npos) s.decor |= kStrike;
         }
     }
+    if (uaFont && !sized) s.font = uaFont;
     return s;
 }
+
+// ============ Icons ============
+
+// The classes of Google's icon markup. Rounded and Sharp are drawn as Outlined, the one set the
+// watch has (data/system/fonts/, scripts/make_fonts.py)
+bool isIconClass(std::string_view classes) {
+    static constexpr std::string_view kIconClasses[] = {
+        "material-symbols-outlined", "material-symbols-rounded", "material-symbols-sharp",
+        "material-icons", "material-icons-outlined", "material-icons-round", "material-icons-sharp"};
+    constexpr std::string_view kSpace = " \t\r\n\f";
+    for (size_t i = classes.find_first_not_of(kSpace); i != std::string_view::npos;
+         i = classes.find_first_not_of(kSpace, i)) {
+        const std::string_view c = classes.substr(i, classes.find_first_of(kSpace, i) - i);
+        if (std::find(std::begin(kIconClasses), std::end(kIconClasses), c) != std::end(kIconClasses)) return true;
+        i += c.size();
+    }
+    return false;
+}
+
+constexpr int kIconPx = 24;  // Google's style sheet sizes the icon classes so
 
 // ============ Registry: containers built by this layer ============
 
@@ -1125,9 +1148,35 @@ void bdoRtl(const TagRef& t, Seg& seg, const Style& st) {
     }
 }
 
+// <span class="material-symbols-outlined">home</span>, <i class="material-icons">home</i>: in a
+// browser the icon font turns the name into the icon; here the name is looked up. An unknown name
+// stays text, as it does without the font. False: not an icon, t renders as usual.
+bool iconTag(const TagRef& t, Seg& seg, const Style& st) {
+    if (!t.cstart || t.cend <= t.cstart) return false;
+    std::string_view classes;
+    if (!UI::Css::findAttr(rawAttrs(t), "class", classes) || !isIconClass(classes)) return false;
+    std::string_view name(t.cstart, static_cast<size_t>(t.cend - t.cstart));
+    const size_t first = name.find_first_not_of(" \t\r\n");
+    if (first == std::string_view::npos) return false;
+    name = name.substr(first, name.find_last_not_of(" \t\r\n") + 1 - first);
+    if (name.find_first_of("<&") != std::string_view::npos) return false;  // markup or an entity: text
+    P::String rendered;  // {var}: the name it holds now (a live paragraph rebuilds on change)
+    if (name.find('{') != std::string_view::npos) {
+        rendered = render_template(P::String(name).c_str());
+        name = rendered;
+    }
+    const uint32_t code = UI::Font::iconCode(name);
+    if (!code) return false;
+    P::String glyph;
+    appendUtf8(glyph, code);
+    seg.shown(glyph, derive(st, t, L_PLAIN, seg.look().font, kIconPx));  // <i> too: no em look
+    return true;
+}
+
 void inlineTag(const TagRef& t, const TagInfo* ti, Seg& seg, const Style& st) {
     const uint8_t look = ti ? ti->look : L_PLAIN;
     if (look == L_SKIP) return;
+    if (iconTag(t, seg, st)) return;
     Style s = derive(st, t, look, seg.look().font);
     Inside in(t);
     if (is(t.name, "bdo") && lower(attr(t, "dir")) == "rtl") {

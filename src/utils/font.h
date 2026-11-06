@@ -6,6 +6,9 @@
 
 #include "lvgl.h"
 
+#include <cstdint>
+#include <string_view>
+
 // External font declarations (defined in font/*.c files). Not const, as they are defined there:
 // UI::Font sets their fallback, and a write to an object declared const may be dropped
 extern "C" {
@@ -35,6 +38,13 @@ public:
     static const lv_font_t* defaultFont();
     // The size of a font get() gives (16, 32, 48, 72); SMALL for any other font or none
     static int sizeOf(const lv_font_t* font);
+
+    // The fonts kept as files on LittleFS, data/system/fonts/ (scripts/make_fonts.py): the icon
+    // font of each size goes between Ubuntu_*px and UbuntuExt_*px, its names into iconCode().
+    // Once, after LittleFS is mounted; a file that is not there leaves its glyphs out.
+    static void loadFiles();
+    // The code of an icon by its Material Symbols name ("home"); 0 if there is no such icon
+    static uint32_t iconCode(std::string_view name);
 
 private:
     Font() = delete;
