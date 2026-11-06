@@ -1000,6 +1000,9 @@ void Seg::asSpans() {
     lv_obj_t* sg = lv_spangroup_create(box_);
     lv_obj_set_width(sg, lv_pct(100));
     lv_spangroup_set_mode(sg, LV_SPAN_MODE_BREAK);
+    // The look and the element's CSS first: a run that is only bold (<b> in <h1>) takes the size of
+    // the font the spangroup ends up with
+    decorate(sg);
     // Live {var} inside formatted text: spans are rebuilt from the element source on change
     if (owner_ && memchr(owner_->cstart, '{', owner_->cend - owner_->cstart)) {
         const P::String tpl(owner_->cstart, owner_->cend - owner_->cstart);
@@ -1021,7 +1024,6 @@ void Seg::asSpans() {
     } else {
         fillSpans(sg, items_);
     }
-    decorate(sg);
     for (const auto& it : items_) {  // one link in the paragraph: the paragraph is the link
         if (it.type == Item::TEXT && it.st.link()) {
             makeClickable(sg, it.st.href, it.st.onclick);
