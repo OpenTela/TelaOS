@@ -908,7 +908,8 @@ enum {
     LV_STYLE_BORDER_SIDE, LV_STYLE_TEXT_DECOR, LV_STYLE_TEXT_LETTER_SPACE,
     LV_STYLE_LAST_BUILT_IN_PROP = LV_STYLE_TEXT_LETTER_SPACE,
     // set and read one at a time (the margins of HTML blocks); css_undo.cpp's mock walks none of them
-    LV_STYLE_MARGIN_TOP, LV_STYLE_MARGIN_BOTTOM, LV_STYLE_PAD_TOP, LV_STYLE_PAD_BOTTOM
+    LV_STYLE_MARGIN_TOP, LV_STYLE_MARGIN_BOTTOM, LV_STYLE_PAD_TOP, LV_STYLE_PAD_BOTTOM,
+    LV_STYLE_TEXT_FONT  // taken off only (a browser-sized button's label: the button's font)
 };
 typedef struct {
     const lv_style_prop_t* props;
@@ -1128,6 +1129,7 @@ inline bool lv_obj_remove_local_style_prop(lv_obj_t* obj, lv_style_prop_t prop, 
     if (prop == LV_STYLE_BORDER_COLOR) { w->borderColor = 0; return true; }
     if (prop == LV_STYLE_MARGIN_TOP) { w->hasMarginTop = false; w->marginTop = 0; return true; }
     if (prop == LV_STYLE_MARGIN_BOTTOM) { w->hasMarginBottom = false; w->marginBottom = 0; return true; }
+    if (prop == LV_STYLE_TEXT_FONT) { w->font = nullptr; w->fontSize = 0; return true; }
     int unset = 0;
     int* f = mockField(w, prop, unset);
     if (!f) return false;
