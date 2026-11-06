@@ -167,7 +167,7 @@ static const char* APP_TEXT_DIR = R"HTML(
 
 static const char* APP_LISTS = R"HTML(
 <app><ui default="/m"><page id="m">
-  <ul id="ul"><li>Apple<li>Pear<ul><li>Inner</ul></ul>
+  <ul id="ul"><li id="apple">Apple<li>Pear<ul id="inner"><li>Inner</ul></ul>
   <ol id="ol" start="3"><li>c</li><li>d</li></ol>
   <ol id="olr" type="I" reversed><li>x</li><li>y</li><li>z</li></ol>
   <ol id="ola" type="a"><li value="27">aa</li></ol>
@@ -444,6 +444,20 @@ int main() {
     expectText("<ol type=a>, <li value=27>", "ola", "aa. aa");
     expectText("<dl> with omitted end tags", "dl", "T D");
     expectText("<menu>", "menu", "• item");
+    {
+        // as in a browser: 40px on the side lines start, nested lists too; items one under
+        // another; the marker outside its item, in that padding, its text at the item's edge
+        MW* ul = byId("ul");
+        MW* inner = byId("inner");
+        MW* apple = byId("apple");
+        MW* marker = apple && !apple->children.empty() ? apple->children[0] : nullptr;
+        expectTrue("<ul>: padding 40 at the left, no room between items",
+                   ul && ul->padLeft == 40 && ul->padRight == 0 && ul->padRow == 0);
+        expectTrue("a nested <ul>: 40 again", inner && inner->padLeft == 40);
+        expectTrue("the marker: out of the item's layout, at its left, text at the right",
+                   marker && marker->text == "\xE2\x80\xA2" && marker->ignoreLayout &&
+                   marker->alignType == LV_ALIGN_TOP_LEFT && marker->alignOfsX == -45 && marker->textAlignH == 2);
+    }
 
     printf("\nBlocks:\n");
     render(APP_BLOCKS);
