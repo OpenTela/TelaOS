@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """make_fonts.py — the fonts beside the four firmware fonts.
 
-    python3 scripts/make_fonts.py [ext] [sizes] [icons] [bold] [italic]     # all by default
+    python3 scripts/make_fonts.py [ext] [sizes] [icons] [bold] [italic] [lines]   # all by default
 
 ext — src/font/UbuntuExt_{16,32,48,72}px.c, the glyphs of other languages. Ubuntu_16px …
 Ubuntu_72px (src/font/) have 213 glyphs: ASCII, Russian and a few signs. The glyphs of the other
@@ -11,9 +11,9 @@ does not have is drawn from the second, and the 213 glyphs stay as they are, pix
 
 sizes — data/system/fonts/Ubuntu_{12,14,18,20,24,28,36,40}px.bin: the sizes between the four of
 the firmware, so font-size: 20px is drawn at 20px. The same face and the same 650 glyphs as
-Ubuntu_*px and UbuntuExt_*px together, in one font of each size, on the lines a font of the 213
-glyphs of Ubuntu_*px would have: as the four of the firmware. Files on LittleFS: UI::Font loads the
-one of a size when text of that size is first drawn, with the icons of the size behind it.
+Ubuntu_*px and UbuntuExt_*px together, in one font of each size, on the lines of a browser (see
+lines). Files on LittleFS: UI::Font loads the one of a size when text of that size is first drawn,
+with the icons of the size behind it.
 
 icons — data/system/fonts/Icons_<px>px.bin of every size, and Icons.txt: Material Symbols Outlined
 (Google, Apache 2.0: fonts/material-symbols/) — the icons of docs/ICONS.md, under the codes of the
@@ -24,13 +24,18 @@ same size; those of the sizes between come with their text. Icons.txt (name, cod
 <span class="material-symbols-outlined">home</span> looks up.
 
 bold — data/system/fonts/UbuntuBold_<px>px.bin of every size: Ubuntu Bold 0.83 (fonts/ubuntu/),
-the same 650 glyphs, on the lines of the regular face of the size. Files on LittleFS too: UI::Font
+the same 650 glyphs, on the lines of a browser. Files on LittleFS too: UI::Font
 loads the one of a size when text of that size first asks for bold (<b>, <strong>, headings,
 font-weight), and puts the icons of the size behind it.
 
 italic — data/system/fonts/UbuntuItalic_<px>px.bin and UbuntuBoldItalic_<px>px.bin of every size:
-Ubuntu Italic and Ubuntu Bold Italic 0.83, as bold — the same glyphs, on the lines of the regular
-face, loaded when text first asks for them (<i>, <em>, <cite>, font-style: italic).
+Ubuntu Italic and Ubuntu Bold Italic 0.83, as bold — the same glyphs, on the lines of a browser,
+loaded when text first asks for them (<i>, <em>, <cite>, font-style: italic).
+
+lines — the line of every text font, the flash ones (src/font/) and the files, as a browser takes
+it for line-height: normal: the ascent, the descent and the line gap of the face (hhea), each
+rounded to a pixel, as Chromium rounds them; half the gap above the text, the rest below. 16px:
+15 + 3 + 0 = 18 px. The glyphs are not drawn again: only the line in the font's head changes.
 
 Not part of the build: the generated files are committed. Needs fontTools (pip) and lv_font_conv
 1.5 (npm); LV_FONT_CONV names the lv_font_conv to run (default: lv_font_conv). icons also needs
@@ -39,6 +44,7 @@ its .codepoints beside it, both from MATERIAL_URL.
 """
 
 import hashlib
+import math
 import os
 import re
 import struct
@@ -254,7 +260,7 @@ def sizes(tool):
     for size in BETWEEN:
         path = out / f"Ubuntu_{size}px.bin"
         text_font(tool, FACE, codes, borrowed, size, path)
-        set_line(path, regular_line(tool, size))
+        set_line(path, browser_line(size))
     print(f"{len(codes) + len(borrowed)} glyphs in {len(BETWEEN)} fonts: data/system/fonts/Ubuntu_*px.bin")
 
 
@@ -267,7 +273,7 @@ def faces(tool, styled):
         for size in ALL:
             path = out / f"{name}_{size}px.bin"
             text_font(tool, face, codes, borrowed, size, path)
-            set_line(path, regular_line(tool, size))
+            set_line(path, browser_line(size))
         print(f"{len(codes) + len(borrowed)} glyphs in {len(ALL)} fonts: data/system/fonts/{name}_*px.bin")
 
 
@@ -279,21 +285,17 @@ def italic(tool):
     faces(tool, [(ITALIC, "UbuntuItalic"), (BOLD_ITALIC, "UbuntuBoldItalic")])
 
 
-def regular_line(tool, size):
-    """(ascent, descent) of the regular face of the size, as LVGL reads them from a binary font
-    (line_height = ascent - descent, base_line = -descent): those of Ubuntu_*px for the four of the
-    firmware, and for a size between those a font of the same 213 glyphs would have. lv_font_conv
-    takes the line from the glyphs it draws: the 650 would make the lines of the sizes between taller
-    than the four's, and text turning bold must not move its lines."""
-    if size in SIZES:
-        c = (ROOT / f"src/font/Ubuntu_{size}px.c").read_text()
-        line = int(re.search(r"\.line_height = (\d+)", c).group(1))
-        base = int(re.search(r"\.base_line = (\d+)", c).group(1))
-        return line - base, -base
-    with tempfile.TemporaryDirectory() as tmp:
-        path = Path(tmp) / "main.bin"
-        text_font(tool, FACE, MAIN, {}, size, path)
-        return struct.unpack_from("<Hh", path.read_bytes(), 16)
+def browser_line(size):
+    """(ascent, descent) of a line of the size, as LVGL reads them from a binary font (line_height
+    = ascent - descent, base_line = -descent): a browser's line-height: normal. The ascent, descent
+    and line gap of the regular face (hhea; the four faces have the same) at the size, each rounded
+    as Chromium rounds it (half up); half the gap above the text, the rest below. lv_font_conv takes
+    the line from the glyphs it draws instead: 21 px for 16px, where a browser has 18."""
+    font = TTFont(ROOT / FACE)
+    upem, hhea = font["head"].unitsPerEm, font["hhea"]
+    px = lambda units: math.floor(units * size / upem + 0.5)  # noqa: E731 — SkScalarRoundToScalar
+    ascent, descent, gap = px(hhea.ascent), px(-hhea.descent), px(hhea.lineGap)
+    return ascent + gap // 2, -(descent + gap - gap // 2)
 
 
 def set_line(path, line):
@@ -304,9 +306,35 @@ def set_line(path, line):
     path.write_bytes(bytes(data))
 
 
+def set_c_line(path, line):
+    """The line (ascent, descent) written into an lv_font_conv C font: line_height and base_line."""
+    ascent, descent = line
+    text = path.read_text()
+    text, n = re.subn(r"\.line_height = \d+,( *)/\*.*?\*/",
+                      rf".line_height = {ascent - descent},\g<1>/*A browser's line-height: normal (make_fonts.py lines)*/", text)
+    text, m = re.subn(r"(\.base_line = )\d+", rf"\g<1>{-descent}", text)
+    assert n == 1 and m == 1, path
+    path.write_text(text)
+
+
+def lines(_tool):
+    """The line of a browser into every text font there is: no glyph is drawn again."""
+    done = 0
+    for size in SIZES:
+        for name in ("Ubuntu", "UbuntuExt"):
+            set_c_line(ROOT / f"src/font/{name}_{size}px.c", browser_line(size))
+            done += 1
+    for path in sorted((ROOT / "data/system/fonts").glob("Ubuntu*_*px.bin")):
+        size = int(re.search(r"_(\d+)px\.bin$", path.name).group(1))
+        set_line(path, browser_line(size))
+        done += 1
+    print(f"the lines of a browser in {done} fonts: " +
+          ", ".join(f"{s}px {browser_line(s)[0] - browser_line(s)[1]}" for s in ALL))
+
+
 def main(argv):
-    parts = argv[1:] or ["ext", "sizes", "icons", "bold", "italic"]
-    if any(p not in ("ext", "sizes", "icons", "bold", "italic") for p in parts):
+    parts = argv[1:] or ["ext", "sizes", "icons", "bold", "italic", "lines"]
+    if any(p not in ("ext", "sizes", "icons", "bold", "italic", "lines") for p in parts):
         print(__doc__.strip().splitlines()[2].strip())
         return 2
     tool = os.environ.get("LV_FONT_CONV", "lv_font_conv")
@@ -320,6 +348,8 @@ def main(argv):
         bold(tool)
     if "italic" in parts:
         italic(tool)
+    if "lines" in parts:  # last: ext writes the C fonts anew
+        lines(tool)
     return 0
 
 

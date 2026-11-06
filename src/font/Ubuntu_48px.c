@@ -9280,7 +9280,7 @@ static lv_font_fmt_txt_dsc_t font_dsc = {
 lv_font_t Ubuntu_48px = {
     .get_glyph_dsc = lv_font_get_glyph_dsc_fmt_txt,    /*Function pointer to get glyph's data*/
     .get_glyph_bitmap = lv_font_get_bitmap_fmt_txt,    /*Function pointer to get glyph's bitmap*/
-    .line_height = 56,          /*The maximum line height required by the font*/
+    .line_height = 55,          /*A browser's line-height: normal (make_fonts.py lines)*/
     .base_line = 10,             /*Baseline measured from the bottom of the line*/
 #if !(LVGL_VERSION_MAJOR == 6 && LVGL_VERSION_MINOR == 0)
     .subpx = LV_FONT_SUBPX_NONE,
