@@ -252,8 +252,9 @@ pip install playwright==1.63.0 && python3 -m playwright install chromium
 python3 sim/tools/judge.py --app sim/tests/fixtures/apps/html_tags --shots build/screens/shots-head --all
 ```
 
-CI ставит ту же версию Playwright — и тот же Chromium в каждом прогоне. Без Playwright отчёт пишет
-«не измерена».
+CI ставит ту же версию Playwright — и тот же Chromium в каждом прогоне. Шрифты часов лежат прямо
+в странице (`data:`), а не рядом с ней файлами. Без Playwright — или если Chromium не запустился или
+не загрузил шрифты — отчёт пишет «не измерена» и почему: число на чужом шрифте не было бы числом.
 
 ## Проверка PR
 

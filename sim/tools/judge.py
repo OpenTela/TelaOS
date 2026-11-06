@@ -24,6 +24,7 @@ judge: check() gives None, unmeasured() says why. The rest is the Python standar
 """
 
 import argparse
+import base64
 import html as htmllib
 import json
 import re
@@ -102,9 +103,18 @@ def standard(markup):
     return re.sub(r"<([A-Za-z][\w-]*)((?:\s+[^>]*?)?)\s*/?>", start_tag, markup)
 
 
+def font_url(path):
+    """The font inside the page: Chromium loads a font from a file:// page only where the
+    browser is let read file:// from file:// (CORS), a picture everywhere"""
+    try:
+        return "data:font/ttf;base64," + base64.b64encode(Path(path).read_bytes()).decode("ascii")
+    except OSError:
+        return Path(path).as_uri()  # not there: Chromium says so (MEASURE checks the faces)
+
+
 def document(body, fonts, resources):
     """The page as a document for Chromium: the watch's fonts and the app's pictures"""
-    faces = "".join(f"@font-face {{ font-family: Ubuntu; src: url('{(Path(fonts) / f'{f}.ttf').as_uri()}'); "
+    faces = "".join(f"@font-face {{ font-family: Ubuntu; src: url('{font_url(Path(fonts) / f'{f}.ttf')}'); "
                     f"font-weight: {w}; font-style: {s}; }}\n" for f, w, s in FACES)
     base = f'<base href="{Path(resources).as_uri()}/">' if resources else ""
     # :where(): no weight, the page's own CSS wins; the UA's monospace is not a font of the watch
@@ -116,7 +126,7 @@ def document(body, fonts, resources):
 # ============ Chromium ============
 
 MEASURE = """async () => {
-  await Promise.all([...document.fonts].map(f => f.load().catch(() => null)));
+  const faces = await Promise.all([...document.fonts].map(f => f.load().then(() => "", () => f.style + " " + f.weight)));
   await document.fonts.ready;
   const REPLACED = new Set(["img", "input", "button", "select", "textarea", "video", "audio",
     "canvas", "iframe", "object", "embed", "svg", "progress", "meter"]);
@@ -129,7 +139,7 @@ MEASURE = """async () => {
       boxed: (cs.display !== "inline" && cs.display !== "contents") || REPLACED.has(e.localName),
       children: [...e.children].map(walk)};
   }
-  return [...document.body.children].map(walk);
+  return {failed: faces.filter(f => f), elements: [...document.body.children].map(walk)};
 }"""
 
 
@@ -153,7 +163,12 @@ def layout(documents, width, height):
                 f = Path(tmp) / f"{name}.html"
                 f.write_text(text, "utf-8")
                 page.goto(f.as_uri())
-                out[name] = page.evaluate(MEASURE)
+                got = page.evaluate(MEASURE)
+                if got["failed"]:  # another font would stand in for the watch's: no number
+                    MISSING = "Chromium не загрузил шрифты часов: " + ", ".join(got["failed"])
+                    browser.close()
+                    return None, None
+                out[name] = got["elements"]
             version = browser.version
             browser.close()
     except Exception as e:  # noqa: BLE001 — no browser installed, or it fell: the report says so

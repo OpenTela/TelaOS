@@ -71,9 +71,14 @@ class Pages(unittest.TestCase):
 
     def test_document_has_the_watch_fonts_and_pictures(self):
         with tempfile.TemporaryDirectory() as tmp:
-            doc = judge.document("<p>x</p>", Path(tmp) / "fonts", Path(tmp) / "res")
+            fonts = Path(tmp) / "fonts"
+            fonts.mkdir()
+            for face, _, _ in judge.FACES[:3]:
+                (fonts / f"{face}.ttf").write_bytes(b"FONT")
+            doc = judge.document("<p>x</p>", fonts, Path(tmp) / "res")
         self.assertEqual(doc.count("@font-face"), 4)
-        self.assertIn("Ubuntu-BoldItalic.ttf", doc)
+        self.assertEqual(doc.count("url('data:font/ttf;base64,Rk9OVA==')"), 3)  # in the page: no file:// to load
+        self.assertIn("Ubuntu-BoldItalic.ttf'", doc)  # missing: as a file, Chromium says it failed
         self.assertIn('<base href="file://', doc)
         self.assertIn(":where(*) { font-family: Ubuntu; }", doc)
         self.assertIn("<body><p>x</p></body>", doc)
