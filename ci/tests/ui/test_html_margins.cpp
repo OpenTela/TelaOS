@@ -3,6 +3,8 @@
  * style sheet's (<p> 1em, <h1> 0.67em of its own font, a list in a list none), the page's CSS
  * instead, collapsing between blocks, out of a parent with nothing in their way, into the body's
  * 8px. The objects carry the used margins: flex adds the one below to the next one's above.
+ * And aside: 40px on both sides of <blockquote> and <figure>, on the side lines start of <dd>,
+ * <fieldset>'s 2px with its frame and padding; the page's CSS instead.
  */
 #include <cstdio>
 #include <string>
@@ -39,11 +41,38 @@ static const char* APP = R"HTML(
 </app>
 )HTML";
 
+static const char* APP_ASIDE = R"HTML(
+<app>
+  <style>
+    .flat { margin: 0; }
+  </style>
+  <ui default="/main">
+    <page id="main">
+      <blockquote id="bq">Quote</blockquote>
+      <figure id="fig"><figcaption>Caption</figcaption></figure>
+      <dl><dt>Term</dt><dd id="dd">Definition</dd></dl>
+      <dl dir="rtl"><dt>Term</dt><dd id="ddRtl">Definition</dd></dl>
+      <fieldset id="fs"><legend>Group</legend>Inside</fieldset>
+      <blockquote id="flat" class="flat">The page's CSS</blockquote>
+      <figure id="oneSide" style="margin-left: 0">The page's CSS, one side</figure>
+    </page>
+  </ui>
+</app>
+)HTML";
+
 static int total = 0, passed = 0;
 
 #define TEST(name) printf("  %-58s ", name); total++;
 #define PASS() do { printf("✓\n"); passed++; } while (0)
 #define FAIL(msg) printf("✗ %s\n", msg)
+
+static void render(const char* html) {
+    LvglMock::reset();
+    LvglMock::create_screen(480, 480);
+    g_core.store().clear();
+    g_core.initDynamicApp(nullptr);
+    g_core.render(html);
+}
 
 static MW* byId(const char* id) { return LvglMock::g_screen ? LvglMock::g_screen->findById(id) : nullptr; }
 
@@ -61,11 +90,26 @@ static void expectMargins(const char* name, const char* id, int top, int bottom)
     }
 }
 
+// An element's margins aside, its padding and frame: left, right
+static void expectAside(const char* name, const char* id, int left, int right, int padLeft, int padRight,
+                        int border) {
+    const MW* w = byId(id);
+    TEST(name) {
+        if (w && w->marginLeft == left && w->marginRight == right && w->padLeft == padLeft &&
+            w->padRight == padRight && w->borderWidth == border) {
+            PASS();
+        } else {
+            FAIL(w ? ("margin " + std::to_string(w->marginLeft) + " / " + std::to_string(w->marginRight) +
+                      ", pad " + std::to_string(w->padLeft) + " / " + std::to_string(w->padRight) + ", border " +
+                      std::to_string(w->borderWidth)).c_str()
+                   : "no widget");
+        }
+    }
+}
+
 int main() {
     printf("=== HTML MARGINS ===\n\n");
-    LvglMock::create_screen(480, 480);
-    g_core.store().clear();
-    g_core.render(APP);
+    render(APP);
 
     printf("between blocks:\n");
     expectMargins("<p> <p>: 16px between, the larger, not 32", "p2", 16, 0);
@@ -110,6 +154,24 @@ int main() {
             else FAIL(body ? ("pad_row " + std::to_string(body->padRow)).c_str() : "no body");
         }
     }
+
+    render(APP_ASIDE);
+    printf("\naside, a browser's:\n");
+    expectAside("<blockquote>: 40px on both sides, no line or padding", "bq", 40, 40, 0, 0, 0);
+    expectAside("<figure>: 40px on both sides", "fig", 40, 40, 0, 0, 0);
+    expectAside("<dd>: 40px on the side lines start", "dd", 40, 0, 0, 0, 0);
+    expectAside("<dd> in dir=rtl: on the right", "ddRtl", 0, 40, 0, 0, 0);
+    expectAside("<fieldset>: 2px, a 2px frame, 0.75em in it", "fs", 2, 2, 12, 12, 2);
+    {
+        const MW* w = byId("fs");
+        TEST("<fieldset>: 0.35em above in it, 0.625em below") {
+            if (w && w->padTop == 6 && w->padBottom == 10) PASS();
+            else FAIL(w ? ("pad " + std::to_string(w->padTop) + " / " + std::to_string(w->padBottom)).c_str()
+                        : "no widget");
+        }
+    }
+    expectAside("the page's CSS instead: margin: 0", "flat", 0, 0, 0, 0, 0);
+    expectAside("...margin-left: 0, the right one stays", "oneSide", 0, 40, 0, 0, 0);
 
     printf("\n");
     if (passed == total) {
