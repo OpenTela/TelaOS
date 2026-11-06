@@ -538,7 +538,7 @@ struct Style {  // inline run style
     uint8_t weight = 0;  // 0: as the text around, kWeightNormal, kWeightBold
     uint8_t slant = 0;   // 0: as the text around, kSlantNormal, kSlantItalic
     uint8_t decor = 0;
-    int8_t shift = 0;  // sup: -1 (raised), sub: +1 (lowered)
+    int8_t shift = 0;  // how far the baseline moves, px: sup up (< 0), sub down (> 0)
     P::String href;
     P::String onclick;
     bool same(const Style& o) const {
@@ -612,8 +612,14 @@ Style derive(const Style& base, const TagRef& t, uint8_t look, int blockFont, in
         case L_STRONG: s.weight = kWeightBold; break;  // b, strong: the bold face, as in a browser
         case L_EM: s.slant = kSlantItalic; break;  // i, em, cite, var, dfn: the italic face, as in a browser
         case L_DIM: case L_RT: s.color = kDim; break;
-        case L_SUB: s.color = kDim, s.shift = 1; break;
-        case L_SUP: s.color = kDim, s.shift = -1; break;
+        case L_SUB:  // font-size: smaller, the baseline down a fifth of the text around and 1px, as Chromium
+        case L_SUP: {  // ... up a third and 1px
+            s.color = kDim;
+            s.font = static_cast<int>(parentPx / 1.2f + 0.5f);
+            const float by = look == L_SUB ? parentPx / 5 + 1 : -(parentPx / 3 + 1);
+            s.shift = static_cast<int8_t>(by < 0 ? by - 0.5f : by + 0.5f);
+            break;
+        }
         case L_CODE: s.color = kCode; break;
         case L_MARK: s.color = kMark; break;
         case L_UNDER: s.decor |= kUnderline; break;
@@ -1414,6 +1420,16 @@ void alignWordsRow(lv_obj_t* row) {
     lv_obj_set_flex_align(row, LV_FLEX_ALIGN_END, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_START);
 }
 
+// A word of a sup or sub run in a row of words: how far it moves from where the row puts it,
+// centered on the line, for its baseline to be `shift` px from the baseline of the text around it
+// (font: around), as a browser has it
+int baselineMove(const lv_font_t* around, const lv_font_t* own, int shift) {
+    if (!around || !own) return shift;
+    const int line = lv_font_get_line_height(around), ownLine = lv_font_get_line_height(own);
+    const int ascent = line - around->base_line, ownAscent = ownLine - own->base_line;
+    return ascent - ownAscent - (line - ownLine) / 2 + shift;
+}
+
 // Text with widgets, several links or sup/sub: a row that wraps word by word, like an HTML line box
 void Seg::asWords() {
     lv_obj_t* row = plainObj(box_);
@@ -1425,7 +1441,7 @@ void Seg::asWords() {
     UI::letOverflow(row);  // a line box clips nothing either; before the element's CSS (overflow: hidden)
     decorate(row);
     alignWordsRow(row);
-    int raise = 0, drop = 0;  // how far sup and sub leave the line: the row makes room for them
+    int raise = 0;  // how far a sup goes above the line: the row makes room for it
     for (const auto& it : items_) {
         if (it.type == Item::ATOM) {
             renderAtom(it.atom, row);
@@ -1446,9 +1462,8 @@ void Seg::asWords() {
             lv_label_set_text(w, live ? render_template(word.c_str()).c_str() : word.c_str());
             if (it.st.color != kInherit) lv_obj_set_style_text_color(w, lv_color_hex(it.st.color), LV_PART_MAIN);
             if (it.st.opa < LV_OPA_COVER) lv_obj_set_style_text_opa(w, it.st.opa, LV_PART_MAIN);
-            if (const lv_font_t* f = runFont(it.st, lv_obj_get_style_text_font(w, LV_PART_MAIN))) {
-                lv_obj_set_style_text_font(w, f, LV_PART_MAIN);
-            }
+            const lv_font_t* around = lv_obj_get_style_text_font(w, LV_PART_MAIN);  // the row's
+            if (const lv_font_t* f = runFont(it.st, around)) lv_obj_set_style_text_font(w, f, LV_PART_MAIN);
 #if !defined(LVGL_MOCK_ENABLED)
             if (it.st.decor) {
                 lv_obj_set_style_text_decor(w, static_cast<lv_text_decor_t>(
@@ -1456,12 +1471,17 @@ void Seg::asWords() {
                     ((it.st.decor & kStrike) ? LV_TEXT_DECOR_STRIKETHROUGH : 0)), LV_PART_MAIN);
             }
 #endif
-            if (it.st.shift) {  // sup: a third of the line up, sub: a fifth down
-                const int line = lv_font_get_line_height(lv_obj_get_style_text_font(w, LV_PART_MAIN));
-                const int dy = it.st.shift < 0 ? -line / 3 : line / 5;
+            if (it.st.shift) {
+                const lv_font_t* own = lv_obj_get_style_text_font(w, LV_PART_MAIN);
+                const int dy = baselineMove(around, own, it.st.shift);
                 lv_obj_set_style_translate_y(w, dy, LV_PART_MAIN);
-                if (dy < 0 && -dy > raise) raise = -dy;
-                if (dy > 0 && dy > drop) drop = dy;
+                // Its top on its line, moved: above the line, the row makes room for it; below, LVGL
+                // takes the moved word into the row's height itself. The line is as high as the
+                // higher of the two fonts (a sup of <font size=6> makes it so)
+                const int ownLine = lv_font_get_line_height(own);
+                const int line = std::max(lv_font_get_line_height(around), ownLine);
+                const int top = (line - ownLine) / 2 + dy;
+                if (-top > raise) raise = -top;
             }
             makeClickable(w, it.st.href, it.st.onclick);
             if (live) {  // {var}: the TelaOS binding mechanism keeps the word up to date
@@ -1473,7 +1493,6 @@ void Seg::asWords() {
         }
     }
     if (raise) lv_obj_set_style_pad_top(row, raise, LV_PART_MAIN);
-    if (drop) lv_obj_set_style_pad_bottom(row, drop, LV_PART_MAIN);
 }
 
 // ============ Walking content ============

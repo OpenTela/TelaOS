@@ -72,7 +72,7 @@ inline int32_t lv_anim_path_ease_in_out(const lv_anim_t*) { return 0; }
 inline int32_t lv_anim_path_step(const lv_anim_t*) { return 0; }
 inline lv_obj_t* lv_display_get_default() { return nullptr; }
 inline uint32_t lv_display_get_inactive_time(lv_obj_t*) { return 0; }
-typedef struct _lv_font_t { int line_height; } lv_font_t;
+typedef struct _lv_font_t { int line_height; int base_line; } lv_font_t;  // base_line: from the line's bottom
 typedef struct _lv_style_t {} lv_style_t;
 typedef struct {} lv_obj_class_t;
 typedef struct { struct { uint32_t w, h, cf; } header; uint32_t data_size; const uint8_t* data; } lv_image_dsc_t;
