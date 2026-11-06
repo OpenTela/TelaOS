@@ -162,8 +162,8 @@ int main() {
     expectFace("<font size=\"-1\">: 2, 13px → 14", word(screen, "Minus"), "14");
     // the size only: a word of the mock has no font it inherits, so it is not bold here
     const MW* larger = word(screen, "Larger");
-    TEST("<big> in <h2>: 32 × 1.2 → 38, drawn at 40") {
-        if (larger && larger->font && UI::Font::sizeOf(static_cast<const lv_font_t*>(larger->font)) == 40) PASS();
+    TEST("<big> in <h2>: 24 × 1.2 → 29, drawn at 28") {
+        if (larger && larger->font && UI::Font::sizeOf(static_cast<const lv_font_t*>(larger->font)) == 28) PASS();
         else FAIL(("got " + faceOf(larger)).c_str());
     }
 

@@ -116,10 +116,10 @@ int main() {
     expectFace("font: 32px sans-serif: the size, no weight", "shortsize", "32 regular");
 
     printf("\nHTML: headings and table headers are bold, as in a browser:\n");
-    expectFace("<h1>: 48, bold", "h1", "48 bold");
-    expectFace("<h2>: 32, bold", "h2", "32 bold");
+    expectFace("<h1>: 32, bold", "h1", "32 bold");
+    expectFace("<h2>: 24, bold", "h2", "24 bold");
     expectFace("<h4>: 16, bold", "h4", "16 bold");
-    expectFace("<h2> with font-weight: normal", "h2plain", "32 regular");
+    expectFace("<h2> with font-weight: normal", "h2plain", "24 regular");
     expectFace("<h3> with font-size: 32px: still bold", "h3big", "32 bold");
     expectFace("<p>: the font of the text around", "p", "-");
     expectFace("<p> with font-weight: bold", "pbold", "16 bold");

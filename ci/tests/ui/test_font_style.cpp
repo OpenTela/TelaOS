@@ -127,7 +127,7 @@ int main() {
     expectFace("font-style: slanted: left out", byId("bad"), "16");
     expectFace("style=\"font-style: italic\"", byId("inline"), "16 italic");
     expectFace("font: italic bold 20px sans-serif", byId("short"), "20 bold italic");
-    expectFace("<h2> with font-style: italic: bold italic", byId("h2"), "32 bold italic");
+    expectFace("<h2> with font-style: italic: bold italic", byId("h2"), "24 bold italic");
     expectFace("<p> with font-style: italic", byId("p"), "16 italic");
 
     printf("\nHTML: italic as in a browser:\n");
