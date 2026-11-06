@@ -317,6 +317,20 @@ int cssFontWeight(std::string_view text) {
     return static_cast<int>(v);
 }
 
+int cssFontStyle(std::string_view text) {
+    text = trimmed(text);
+    if (equalsNoCase(text, "normal")) return kCssNormal;
+    if (equalsNoCase(text, "italic")) return kCssItalic;
+    const P::Array<std::string_view> parts = cssParts(text);  // oblique, oblique 10deg
+    if (parts.empty() || parts.size() > 2 || !equalsNoCase(parts[0], "oblique")) return 0;
+    if (parts.size() == 2) {
+        size_t i = 0;
+        float v = 0;
+        if (!cssNumber(parts[1], i, v) || !equalsNoCase(parts[1].substr(i), "deg")) return 0;
+    }
+    return kCssItalic;
+}
+
 bool cssColor(std::string_view text, CssColor& out) {
     text = trimmed(text);
     if (text.empty()) return false;

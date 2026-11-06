@@ -7,7 +7,7 @@
  *   ## H2       → font 32, bold
  *   ### H3+     → font 16, bold (header color)
  *   **bold**    → bold, as <strong> in HTML (accent= colors it)
- *   *italic*    → dimmed color
+ *   *italic*    → italic, as <em> in HTML
  *   `code`      → code color
  *   - list item → "  • item"
  *   empty line  → paragraph break
@@ -31,7 +31,7 @@ struct Markdown : Widget {
     uint32_t    h1Color     = 0xFFFFFF;   // header 1 color
     uint32_t    h2Color     = 0xDDDDDD;   // header 2 color
     uint32_t    accentColor = NO_COLOR;   // bold text color (accent=); none: the text color
-    uint32_t    dimColor    = 0xAAAAAA;   // italic text color
+    uint32_t    dimColor    = 0xAAAAAA;   // list markers
     uint32_t    codeColor   = 0x81C784;   // code text color
     uint32_t    bgcolor     = NO_COLOR;
 
@@ -212,7 +212,7 @@ private:
                 size_t end = text.find('*', i);
                 if (end != P::String::npos) {
                     P::String italic(text.data() + i, end - i);
-                    addSpan(italic, Font::get(UI::Font::SMALL), dimColor);
+                    addSpan(italic, Font::get(UI::Font::SMALL, false, true), color);
                     i = end + 1;
                 } else {
                     buf += '*';

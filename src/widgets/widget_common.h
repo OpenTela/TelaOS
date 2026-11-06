@@ -62,9 +62,9 @@ struct Widget {
     }
     void setBgColor(uint32_t bgcolor) { applyBgColor(bgcolor); }
 
-    void applyFont(int size, bool bold = false) {
+    void applyFont(int size, bool bold = false, bool italic = false) {
         if (!handle) return;
-        const lv_font_t* f = (size > 0 || bold) ? Font::get(size, bold) : UI::Font::defaultFont();
+        const lv_font_t* f = (size > 0 || bold || italic) ? Font::get(size, bold, italic) : UI::Font::defaultFont();
         if (f) lv_obj_set_style_text_font(handle, f, 0);
     }
 
