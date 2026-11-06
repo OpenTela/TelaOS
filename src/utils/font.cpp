@@ -3,6 +3,8 @@
 #include "utils/psram_alloc.h"
 
 #include <algorithm>
+#include <cstdlib>
+#include <initializer_list>
 #include <string>
 #include <utility>
 
@@ -22,22 +24,57 @@ namespace UI {
 
 namespace {
 
-constexpr int kSizes[] = {Font::SMALL, Font::MEDIUM, Font::LARGE, Font::XLARGE};
+// The sizes get() draws. 16, 32, 48 and 72 are Ubuntu_*px, in flash; the ones between are files on
+// LittleFS, Ubuntu_<px>px.bin (scripts/make_fonts.py, the same list), loaded the first time text of
+// the size is drawn.
+constexpr int kSizes[] = {12, 14, Font::SMALL, 18, 20, 24, 28, Font::MEDIUM, 36, 40, Font::LARGE, Font::XLARGE};
+constexpr int kCount = static_cast<int>(sizeof(kSizes) / sizeof(kSizes[0]));
 
-// The place of a size of get() in kSizes: the next one not smaller
-int slot(int px) {
-    return px <= Font::SMALL ? 0 : px <= Font::MEDIUM ? 1 : px <= Font::LARGE ? 2 : 3;
+bool inFlash(int i) {
+    const int px = kSizes[i];
+    return px == Font::SMALL || px == Font::MEDIUM || px == Font::LARGE || px == Font::XLARGE;
+}
+
+// The place in kSizes of the size nearest px, the larger of two as near (22 → 24); flashOnly: of the
+// four in flash. No size (0): the default, 16.
+int slot(int px, bool flashOnly = false) {
+    if (px <= 0) px = Font::SMALL;
+    int best = -1;
+    for (int i = 0; i < kCount; ++i) {
+        if (flashOnly && !inFlash(i)) continue;
+        if (best < 0 || std::abs(kSizes[i] - px) <= std::abs(kSizes[best] - px)) best = i;
+    }
+    return best;
+}
+
+// Ubuntu_*px of a size in flash
+lv_font_t* flashFont(int i) {
+    switch (kSizes[i]) {
+        case Font::MEDIUM: return &Ubuntu_32px;
+        case Font::LARGE: return &Ubuntu_48px;
+        case Font::XLARGE: return &Ubuntu_72px;
+        default: return &Ubuntu_16px;
+    }
 }
 
 // The icon names of Icons.txt, sorted by name as the file is: name → code
 P::Array<std::pair<P::String, uint32_t>> s_icons;
 
 #if defined(LVGL_MOCK_ENABLED)
-// No files in the mock: stand-ins of the bold faces, so tests see which face the engine asks for
-lv_font_t s_mockBold[4] = {{Font::SMALL}, {Font::MEDIUM}, {Font::LARGE}, {Font::XLARGE}};
+// No files in the mock: stand-ins of the fonts kept as files, so tests see which font the engine
+// asks for. A stand-in's line_height is its size, as with the mock's Ubuntu_*px.
+lv_font_t s_mockRegular[kCount];
+lv_font_t s_mockBold[kCount];
+const bool s_mock = [] {
+    for (int i = 0; i < kCount; ++i) s_mockRegular[i].line_height = s_mockBold[i].line_height = kSizes[i];
+    return true;
+}();
 
+const lv_font_t* regularFont(int i) { return inFlash(i) ? flashFont(i) : &s_mockRegular[i]; }
 const lv_font_t* boldFont(int i) { return &s_mockBold[i]; }
+const lv_font_t* loadedRegular(int i) { return regularFont(i); }
 const lv_font_t* loadedBold(int i) { return &s_mockBold[i]; }
+bool hasFile(int) { return true; }
 #else
 // A glyph Ubuntu_*px does not have (ä, Ł, Ω, Ґ, №, ≤…) is drawn from UbuntuExt_*px of the
 // same size. Set before main(): the launcher takes &Ubuntu_*px directly, not through get().
@@ -49,11 +86,17 @@ const bool s_fallbacks = [] {
     return true;
 }();
 
-// The fonts of files, by size: the icons (loadFiles) and the bold faces (loaded when first asked
-// for; tried once, so a file that is not there stays nullptr)
-lv_font_t* s_iconFonts[4] = {};
-lv_font_t* s_bold[4] = {};
-bool s_boldTried[4] = {};
+// The fonts of files of a size (by its place in kSizes), each tried once: a file that is not there
+// stays nullptr
+struct Files {
+    lv_font_t* regular = nullptr;  // a size between the four in flash: Ubuntu_<px>px.bin
+    lv_font_t* bold = nullptr;     // UbuntuBold_<px>px.bin
+    lv_font_t* icons = nullptr;    // Icons_<px>px.bin: of the four in flash at start, the rest with their text
+    bool regularTried = false;
+    bool boldTried = false;
+    bool iconsTried = false;
+};
+Files s_files[kCount];
 
 // A font file takes up to 400 KB of PSRAM: loaded only with room for it and much to spare
 constexpr size_t kFilesRoom = 1024 * 1024;
@@ -114,33 +157,66 @@ void loadIconNames() {
     std::sort(s_icons.begin(), s_icons.end());  // the file is sorted; a hand-edited one may not be
 }
 
-// UbuntuBold_<px>px.bin, the bold face of a size, the first time text of that size is bold. Its
-// glyphs are those of Ubuntu_*px and UbuntuExt_*px together; the icons of the size are behind it.
-const lv_font_t* boldFont(int i) {
-    if (!s_boldTried[i]) {
-        s_boldTried[i] = true;
-        s_bold[i] = loadFont(fileName("UbuntuBold", kSizes[i]));
-        if (s_bold[i]) s_bold[i]->fallback = s_iconFonts[i];
+lv_font_t* loadIcons(int i) {
+    Files& f = s_files[i];
+    if (!f.iconsTried) {
+        f.iconsTried = true;
+        f.icons = loadFont(fileName("Icons", kSizes[i]));
     }
-    return s_bold[i];
+    return f.icons;
 }
 
-const lv_font_t* loadedBold(int i) { return s_bold[i]; }
+// The icons behind the text of a size; for a size between whose file is not there, those of the
+// nearest size in flash
+const lv_font_t* iconsFont(int i) {
+    if (const lv_font_t* icons = loadIcons(i)) return icons;
+    return inFlash(i) ? nullptr : s_files[slot(kSizes[i], true)].icons;
+}
+
+// Ubuntu_<px>px.bin, a size between the four in flash, the first time text of the size is drawn:
+// the glyphs of Ubuntu_*px and UbuntuExt_*px together, the icons of the size behind them
+const lv_font_t* regularFont(int i) {
+    if (inFlash(i)) return flashFont(i);
+    Files& f = s_files[i];
+    if (!f.regularTried) {
+        f.regularTried = true;
+        f.regular = loadFont(fileName("Ubuntu", kSizes[i]));
+        if (f.regular) f.regular->fallback = iconsFont(i);
+    }
+    return f.regular;
+}
+
+// UbuntuBold_<px>px.bin, the bold face of a size, the first time text of the size is bold: the
+// same glyphs, the icons of the size behind them
+const lv_font_t* boldFont(int i) {
+    Files& f = s_files[i];
+    if (!f.boldTried) {
+        f.boldTried = true;
+        f.bold = loadFont(fileName("UbuntuBold", kSizes[i]));
+        if (f.bold) f.bold->fallback = iconsFont(i);
+    }
+    return f.bold;
+}
+
+const lv_font_t* loadedRegular(int i) { return inFlash(i) ? flashFont(i) : s_files[i].regular; }
+const lv_font_t* loadedBold(int i) { return s_files[i].bold; }
+// Whether text of a size draws in it: in flash, loaded, or not tried yet
+bool hasFile(int i) { return inFlash(i) || !s_files[i].regularTried || s_files[i].regular; }
 #endif
 
 }  // namespace
 
 void Font::loadFiles() {
 #if !defined(LVGL_MOCK_ENABLED)
-    lv_font_t* text[] = {&Ubuntu_16px, &Ubuntu_32px, &Ubuntu_48px, &Ubuntu_72px};
-    const lv_font_t* ext[] = {&UbuntuExt_16px, &UbuntuExt_32px, &UbuntuExt_48px, &UbuntuExt_72px};
-    for (int i = 0; i < 4; ++i) {
-        lv_font_t* icons = loadFont(fileName("Icons", kSizes[i]));
+    for (int i = 0; i < kCount; ++i) {
+        if (!inFlash(i)) continue;  // the sizes between load their icons with their text
+        lv_font_t* icons = loadIcons(i);
         if (!icons) continue;
         // Icons hold codes no text font has (their own, ✓ ← ⚙): text → icons → other languages
-        icons->fallback = ext[i];
-        text[i]->fallback = icons;
-        s_iconFonts[i] = icons;
+        lv_font_t* text = flashFont(i);
+        if (text->fallback == icons) continue;  // chained already
+        icons->fallback = text->fallback;       // UbuntuExt_*px (s_fallbacks)
+        text->fallback = icons;
     }
     loadIconNames();
     LOG_I(Log::UI, "font: %u icon names", static_cast<unsigned>(s_icons.size()));
@@ -156,20 +232,20 @@ uint32_t Font::iconCode(std::string_view name) {
 }
 
 int Font::nearest(int requested) {
-    return kSizes[slot(requested)];
+    const int i = slot(requested);
+    return kSizes[hasFile(i) ? i : slot(requested, true)];
 }
 
 const lv_font_t* Font::get(int size, bool bold) {
-    const int i = slot(size);
-    if (bold) {
-        if (const lv_font_t* b = boldFont(i)) return b;  // no file: the regular face
+    // The nearest size; without its file, the nearest of the four in flash. Of a size, the bold
+    // face, or the regular one without its file.
+    for (const int i : {slot(size), slot(size, true)}) {
+        if (bold) {
+            if (const lv_font_t* b = boldFont(i)) return b;
+        }
+        if (const lv_font_t* r = regularFont(i)) return r;
     }
-    switch (i) {
-        case 1: return &Ubuntu_32px;
-        case 2: return &Ubuntu_48px;
-        case 3: return &Ubuntu_72px;
-        default: return &Ubuntu_16px;
-    }
+    return &Ubuntu_16px;  // not reached: the sizes in flash are always there
 }
 
 const lv_font_t* Font::defaultFont() {
@@ -177,18 +253,17 @@ const lv_font_t* Font::defaultFont() {
 }
 
 int Font::sizeOf(const lv_font_t* font) {
-    for (int i = 0; i < 4; ++i) {
-        if (font && font == loadedBold(i)) return kSizes[i];
+    if (!font) return SMALL;
+    for (int i = 0; i < kCount; ++i) {
+        if (font == loadedRegular(i) || font == loadedBold(i)) return kSizes[i];
     }
-    if (font == &Ubuntu_32px) return MEDIUM;
-    if (font == &Ubuntu_48px) return LARGE;
-    if (font == &Ubuntu_72px) return XLARGE;
     return SMALL;
 }
 
 bool Font::isBold(const lv_font_t* font) {
-    for (int i = 0; i < 4; ++i) {
-        if (font && font == loadedBold(i)) return true;
+    if (!font) return false;
+    for (int i = 0; i < kCount; ++i) {
+        if (font == loadedBold(i)) return true;
     }
     return false;
 }

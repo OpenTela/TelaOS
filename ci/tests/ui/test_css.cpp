@@ -557,9 +557,9 @@ int main() {
 
     printf("\nFont on button:\n");
 
-    TEST(".btnFont → button gets font-size 24→32 (snapped)") {
+    TEST(".btnFont → button gets font-size 24") {
         auto* w = page->findById("btn_fontsize");
-        if (w && w->fontSize == 32) PASS();  // Font::nearest(24) = 32
+        if (w && w->fontSize == 24) PASS();  // Font::nearest(24) = 24
         else { FAIL(""); if(w) printf("      fontSize=%d\n", w->fontSize); }
     }
 

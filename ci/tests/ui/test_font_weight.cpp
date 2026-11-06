@@ -94,8 +94,8 @@ int main() {
         if (f != UI::Font::get(32) && UI::Font::isBold(f) && UI::Font::sizeOf(f) == 32) PASS();
         else FAIL("");
     }
-    TEST("get(20, true): the next size not smaller, as get(20)") {
-        if (UI::Font::get(20, true) == UI::Font::get(32, true)) PASS();
+    TEST("get(22, true): the nearest size, as get(22)") {
+        if (UI::Font::get(22, true) == UI::Font::get(24, true) && UI::Font::sizeOf(UI::Font::get(22, true)) == 24) PASS();
         else FAIL("");
     }
     TEST("the regular faces are not bold") {
