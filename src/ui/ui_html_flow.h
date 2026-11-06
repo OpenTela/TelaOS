@@ -72,6 +72,10 @@ bool setText(lv_obj_t* obj, const char* text);
 P::String getText(lv_obj_t* obj);
 // The box obj's content is in: a <li>'s body, a <dialog>'s window; obj itself for the others
 lv_obj_t* contentOf(lv_obj_t* obj);
+// Around CSS applied again to obj (a script changed a class): the margins this layer wrote into
+// it go before, so that CSS's own come back; after, those it has now are its margins
+void marginsAside(lv_obj_t* obj);
+void restyled(lv_obj_t* obj, const char* tag);
 // checked= from a script: a checkbox or a switch takes it, a radio turns the rest of its group
 // off. No change event and no bind=, as a browser fires none. false: obj is none of them
 bool setChecked(lv_obj_t* obj, bool on);

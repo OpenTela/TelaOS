@@ -65,8 +65,6 @@ constexpr uint32_t kRule = 0x555555;     // hr, borders, bar track
 constexpr uint32_t kPanel = 0x222222;    // dialog, placeholders
 constexpr uint32_t kInherit = 0xFF000000;
 
-constexpr int kGap = 8;        // between blocks
-constexpr int kGapList = 4;    // in <details>
 constexpr int kIndent = 20;    // dd, blockquote
 constexpr int kListPad = 40;   // a list's padding on the side its lines start: a browser's 40px
 constexpr int kMarkerGap = 5;  // a marker and its item: the space after "1." of a browser's marker
@@ -702,9 +700,13 @@ P::String decimal(int n) { return std::to_string(n).c_str(); }
 // An id for an element the page gave none: _html_0, _html_1…
 P::String autoId() { return "_html_" + decimal(s_autoId++); }
 
+void forgetMargins(const lv_obj_t* box);
+void onFlowLayout(lv_event_t* e);
+
 void onFlowDelete(lv_event_t* e) {
     lv_obj_t* o = static_cast<lv_obj_t*>(lv_event_get_user_data(e));
     s_flow.erase(o);
+    forgetMargins(o);
     for (auto it = s_rootOf.begin(); it != s_rootOf.end(); ++it) {
         if (it->second == o) {
             s_rootOf.erase(it);
@@ -716,12 +718,52 @@ void onFlowDelete(lv_event_t* e) {
 void track(lv_obj_t* box) {
     s_flow.insert(box);
     lv_obj_add_event_cb(box, onFlowDelete, LV_EVENT_DELETE, box);
+    lv_obj_add_event_cb(box, onFlowLayout, LV_EVENT_LAYOUT_CHANGED, box);
 }
 
 // Element object → the box that holds its content (<li> row → body, <dialog> backdrop → window)
 std::unordered_map<lv_obj_t*, lv_obj_t*> s_contentOf;
 
 void onContentOwnerDelete(lv_event_t* e) { s_contentOf.erase(static_cast<lv_obj_t*>(lv_event_get_user_data(e))); }
+
+// ============ Margins: a browser's, collapsing ============
+//
+// A block has the margins a browser gives it above and below (its style sheet: <p> 1em, <h2>
+// 0.83em of its own font…), or those of the page's CSS. Between two blocks there is the larger of
+// the two: margins collapse. The first child's margin above comes out of its parent and joins the
+// parent's when nothing (a padding, a border) is between them, the last child's below too; the
+// body's 8px joins its first and last child's. LVGL's flex adds margins up: the margins written
+// into the objects are the used ones, so that the sums are the collapsed margins. They are worked
+// out again each time flex lays a box out: a child shown, hidden, added or gone changes them.
+
+enum Side { kAbove = 0, kBelow = 1 };
+constexpr lv_style_prop_t kMarginProp[] = {LV_STYLE_MARGIN_TOP, LV_STYLE_MARGIN_BOTTOM};
+
+struct Margin {
+    int16_t own[2] = {0, 0};  // above, below: the page's CSS, or else a browser's
+    uint8_t ua[2] = {0, 0};   // a browser's, in hundredths of the font size...
+    float em = 0;             // ...a heading's as a browser works it out; 0: the object's font
+    bool keep = false;        // not a block: a line of text, a TelaOS widget (not a <div> of text: a
+                              // flow box). Its margins stay as CSS gave them, flex adds them up;
+                              // margins around it do not join
+};
+
+struct BoxMargins {
+    P::Map<const lv_obj_t*, Margin> kids;  // its children's own margins
+    int16_t in[2] = {0, 0};        // its first child's margin above, its last child's below...
+    bool out[2] = {false, false};  // ...come out of it: no padding or border in their way
+    bool list = false;             // a list's box: a list in it has no margins
+};
+
+// flow box → its children's margins (onFlowDelete). Never destroyed, as UI::Dom's tree: the
+// objects that go at the simulator's exit, after the statics, still find it
+P::Map<const lv_obj_t*, BoxMargins>& s_margins = *P::create<P::Map<const lv_obj_t*, BoxMargins>>().release();
+
+void forgetMargins(const lv_obj_t* box) { s_margins.erase(box); }
+
+// CSS: the largest of the positive margins plus the most negative of the negative ones
+int collapsed(int a, int b) { return std::max({a, b, 0}) + std::min({a, b, 0}); }
+
 
 void setContentBox(lv_obj_t* outer, lv_obj_t* inner) {
     s_contentOf[outer] = inner;
@@ -736,12 +778,12 @@ lv_obj_t* plainObj(lv_obj_t* parent) {
     return o;
 }
 
-lv_obj_t* newBox(lv_obj_t* parent, int gap = kGap) {
+// A flow box: its children one under another, nothing between them but their margins
+lv_obj_t* newBox(lv_obj_t* parent) {
     lv_obj_t* b = plainObj(parent);
     lv_obj_set_width(b, lv_pct(100));
     lv_obj_set_height(b, LV_SIZE_CONTENT);
     lv_obj_set_flex_flow(b, LV_FLEX_FLOW_COLUMN);
-    lv_obj_set_style_pad_row(b, gap, LV_PART_MAIN);
     UI::letOverflow(b);  // what sticks out of an HTML block shows, as in a browser; overflow: hidden clips
     track(b);
     return b;
@@ -778,7 +820,7 @@ lv_obj_t* flowParent(lv_obj_t* parent) {
     auto it = s_rootOf.find(parent);
     if (it != s_rootOf.end()) return it->second;
     fillWidth(parent);
-    lv_obj_t* root = newBox(parent, kGap);
+    lv_obj_t* root = newBox(parent);
     lv_obj_set_style_pad_all(root, kBodyPad, LV_PART_MAIN);
     lv_obj_set_style_text_font(root, Font::get(UI::Font::SMALL), LV_PART_MAIN);
     lv_obj_set_style_text_color(root, lv_color_hex(kText), LV_PART_MAIN);
@@ -874,6 +916,228 @@ struct Ctx {
     bool pre = false;
     int listDepth = 0;
 };
+
+// h1 … h6: a browser's margin above and below, in hundredths of the heading's own font
+constexpr uint8_t kHeadingMargin[] = {67, 83, 100, 133, 167, 233};
+
+// A browser's margin above and below an element (its style sheet), in hundredths of its font
+uint8_t uaMargin(std::string_view n, bool inList) {
+    static constexpr const char* kOneEm[] = {"p", "blockquote", "figure", "pre", "xmp", "listing", "plaintext"};
+    static constexpr const char* kLists[] = {"ul", "ol", "menu", "dir", "dl"};
+    if (oneOf(n, kOneEm)) return 100;
+    if (n.size() == 2 && n[0] == 'h' && n[1] >= '1' && n[1] <= '6') return kHeadingMargin[n[1] - '1'];
+    if (oneOf(n, kLists)) return inList ? 0 : 100;  // a list in a list has none
+    if (is(n, "hr")) return 50;
+    return 0;
+}
+
+// A heading's font size as a browser works it out (h6: 10.72px in 16px text), if o still has the
+// font the watch draws that size with (12px): CSS gave it no other; else 0
+float headingEm(lv_obj_t* o, float em) {
+    const int drawn = UI::Font::sizeOf(lv_obj_get_style_text_font(o, LV_PART_MAIN));
+    return em > 0 && drawn == UI::Font::sizeOf(Font::get(static_cast<int>(em), true)) ? em : 0;
+}
+
+// o's own margins: those the page's CSS gave it (CSS writes them before this layer sees the
+// element), or else a browser's
+void ownMargins(lv_obj_t* o, Margin& m) {
+    m.em = headingEm(o, m.em);
+    const float font = m.em > 0 ? m.em : static_cast<float>(UI::Font::sizeOf(lv_obj_get_style_text_font(o, LV_PART_MAIN)));
+    for (int s : {kAbove, kBelow}) {
+        lv_style_value_t v;
+        const bool css = lv_obj_get_local_style_prop(o, kMarginProp[s], &v, LV_PART_MAIN) == LV_STYLE_RES_FOUND;
+        m.own[s] = static_cast<int16_t>(css ? v.num : static_cast<int>(m.ua[s] * font / 100 + 0.5f));
+    }
+}
+
+// o, new in box: its margins (under its address: what was there before is gone)
+void noteObj(lv_obj_t* box, lv_obj_t* o, uint8_t above, uint8_t below, float em = 0, bool keep = false) {
+    Margin m;
+    m.ua[kAbove] = above;
+    m.ua[kBelow] = below;
+    m.em = em;
+    m.keep = keep;
+    ownMargins(o, m);
+    s_margins[box].kids[o] = m;
+}
+
+// The objects an element made in box, from child `from` on: the first takes a browser's margin
+// above, the last the one below. <body>, <html>: their content went into the box itself
+void noteBlock(const TagRef& t, lv_obj_t* box, uint32_t from, const Ctx& ctx) {
+    if (is(t.name, "body") || is(t.name, "html")) return;
+    const uint32_t n = lv_obj_get_child_count(box);
+    const uint8_t ua = uaMargin(t.name, ctx.listDepth > 0);
+    const std::string_view name = t.name;
+    const bool heading = name.size() == 2 && name[0] == 'h' && name[1] >= '1' && name[1] <= '6';
+    const float em = heading ? static_cast<float>(UI::Font::sizeOf(lv_obj_get_style_text_font(box, LV_PART_MAIN))) *
+                                   kHeadingEm[name[1] - '1']
+                             : 0;
+    const bool tela = !info(t.name);  // a TelaOS widget in HTML: as TelaOS lays it out
+    for (uint32_t i = from; i < n; ++i) {
+        lv_obj_t* const o = lv_obj_get_child(box, static_cast<int32_t>(i));
+        noteObj(box, o, i == from ? ua : 0, i + 1 == n ? ua : 0, em, tela && !s_flow.count(o));
+    }
+}
+
+// Inside a list: a list there has no margins
+bool inList(lv_obj_t* box) {
+    for (lv_obj_t* o = box; o; o = lv_obj_get_parent(o)) {
+        const auto it = s_margins.find(o);
+        if (it != s_margins.end() && it->second.list) return true;
+    }
+    return false;
+}
+
+// The implicit root box of a page or TelaOS container: the body
+bool isRoot(const lv_obj_t* box) {
+    for (const auto& kv : s_rootOf) {
+        if (kv.second == box) return true;
+    }
+    return false;
+}
+
+// A box whose children stack as blocks do: a flow box, flex in a column (not one CSS made a row
+// or a grid: there each child keeps its margins)
+bool stacks(lv_obj_t* o) {
+    return s_flow.count(o) && lv_obj_get_style_layout(o, LV_PART_MAIN) == LV_LAYOUT_FLEX &&
+           lv_obj_get_style_flex_flow(o, LV_PART_MAIN) == LV_FLEX_FLOW_COLUMN;
+}
+
+// What stands for box among its parent's children: the row of an <li> or a <summary> that box is
+// the content box of, else box itself
+lv_obj_t* standIn(lv_obj_t* box) {
+    lv_obj_t* const p = lv_obj_get_parent(box);
+    const auto it = p ? s_contentOf.find(p) : s_contentOf.end();
+    return it != s_contentOf.end() && it->second == box ? p : box;
+}
+
+// A child's content box: an <li>'s body, else the child
+const lv_obj_t* contentBox(const lv_obj_t* o) {
+    const auto it = s_contentOf.find(const_cast<lv_obj_t*>(o));
+    return it != s_contentOf.end() ? it->second : o;
+}
+
+// The flow box that what comes out of box goes into; nullptr: none (the body, a cell, a dialog)
+lv_obj_t* outerOf(lv_obj_t* box) {
+    if (isRoot(box)) return nullptr;
+    lv_obj_t* const p = lv_obj_get_parent(standIn(box));
+    return p && stacks(p) ? p : nullptr;
+}
+
+// Nothing between o's edge on side s and what is in it: no padding, no border; below, no height
+// of its own either
+bool openAt(lv_obj_t* o, int s) {
+    const int pad = s == kAbove ? lv_obj_get_style_pad_top(o, LV_PART_MAIN) : lv_obj_get_style_pad_bottom(o, LV_PART_MAIN);
+    const lv_border_side_t side = s == kAbove ? LV_BORDER_SIDE_TOP : LV_BORDER_SIDE_BOTTOM;
+    const bool border = (lv_obj_get_style_border_side(o, LV_PART_MAIN) & side) && lv_obj_get_style_border_width(o, LV_PART_MAIN) > 0;
+    return pad == 0 && !border && (s == kAbove || lv_obj_get_style_height(o, LV_PART_MAIN) == LV_SIZE_CONTENT);
+}
+
+// A child's margin on side s, joined with what comes out of its content there
+int marginOf(const BoxMargins& bm, lv_obj_t* c, int s) {
+    const auto k = bm.kids.find(c);
+    const int own = k != bm.kids.end() ? k->second.own[s] : 0;
+    const auto in = s_margins.find(contentBox(c));
+    return in != s_margins.end() && in->second.out[s] ? collapsed(own, in->second.in[s]) : own;
+}
+
+// A style written only when it changes: each write lays the box out again, and a 0 that is not
+// there needs no room for it either (margins and paddings are not inherited: the object's own)
+void setPx(lv_obj_t* o, lv_style_prop_t prop, int v) {
+    if (lv_obj_get_style_prop(o, LV_PART_MAIN, prop).num == v) return;
+    lv_style_value_t val;
+    val.num = v;
+    lv_obj_set_local_style_prop(o, prop, val, LV_PART_MAIN);
+}
+
+// The used margins of box's children, written into them: flex adds a child's margin below to the
+// next one's above, and that sum is the collapsed margin. The body's 8px margin joins its first
+// and last child's: its padding takes them. true: what comes out of the box changed, the box
+// around it needs its margins again
+bool collapse(lv_obj_t* box) {
+    BoxMargins& bm = s_margins[box];
+    const bool root = isRoot(box);
+    const bool block = stacks(box);
+    lv_obj_t* const el = standIn(box);
+    // the first child's margin above and the last one's below come out of the box only into a
+    // block around it, through no padding or border, and not out of a box that scrolls or clips,
+    // or one that grows: the box around keeps their margins off it (collapse below)
+    const bool may = block && outerOf(box) && lv_obj_has_flag(box, LV_OBJ_FLAG_OVERFLOW_VISIBLE) &&
+                     !lv_obj_has_flag(box, LV_OBJ_FLAG_SCROLLABLE) && lv_obj_get_style_flex_grow(el, LV_PART_MAIN) == 0;
+    bool out[2];
+    for (int s : {kAbove, kBelow}) out[s] = may && openAt(box, s) && (el == box || openAt(el, s));
+    int16_t in[2] = {0, 0};
+    const uint32_t n = lv_obj_get_child_count(box);
+    lv_obj_t* last = nullptr;  // the block laid out last so far, its margin below not written yet
+    bool first = true;
+    int below = 0;             // that margin: it joins the next one's above
+    for (uint32_t i = 0; i < n; ++i) {
+        lv_obj_t* const c = lv_obj_get_child(box, static_cast<int32_t>(i));
+        const auto r = bm.kids.emplace(c, Margin{});
+        if (r.second) {  // one this layer did not make: a TelaOS widget (a <div> of text is a block)
+            r.first->second.keep = !s_flow.count(c);
+            ownMargins(c, r.first->second);
+        }
+        const Margin& m = r.first->second;
+        if (lv_obj_has_flag(c, LV_OBJ_FLAG_HIDDEN) || lv_obj_has_flag(c, LV_OBJ_FLAG_IGNORE_LAYOUT) ||
+            lv_obj_has_flag(c, LV_OBJ_FLAG_FLOATING)) {
+            continue;
+        }
+        // flex items in a row, a grid, a TelaOS widget: each keeps its own. One that grows too: flex
+        // leaves the margins of a growing item out of the room it shares, so a margin put on it would
+        // make a content-sized box taller each time it is laid out
+        if (!block || m.keep || lv_obj_get_style_flex_grow(c, LV_PART_MAIN) > 0) {
+            if (last) setPx(last, LV_STYLE_MARGIN_BOTTOM, below);  // flex adds it to c's
+            last = nullptr;
+            first = false;
+            below = 0;
+            setPx(c, LV_STYLE_MARGIN_TOP, m.own[kAbove]);
+            setPx(c, LV_STYLE_MARGIN_BOTTOM, m.own[kBelow]);
+            continue;
+        }
+        const int above = marginOf(bm, c, kAbove);
+        if (last) setPx(last, LV_STYLE_MARGIN_BOTTOM, 0);  // the one before: its margin is in c's
+        if (first) in[kAbove] = static_cast<int16_t>(above);
+        setPx(c, LV_STYLE_MARGIN_TOP, !first ? collapsed(below, above) : (out[kAbove] || root) ? 0 : above);
+        below = marginOf(bm, c, kBelow);
+        last = c;
+        first = false;
+    }
+    if (last) {  // the last child a block: its margin below comes out, or the box holds it
+        in[kBelow] = static_cast<int16_t>(below);
+        setPx(last, LV_STYLE_MARGIN_BOTTOM, (out[kBelow] || root) ? 0 : below);
+    }
+    if (bm.kids.size() > n) {  // children gone: their margins with them
+        P::Map<const lv_obj_t*, Margin> live;
+        for (uint32_t i = 0; i < n; ++i) {
+            lv_obj_t* const c = lv_obj_get_child(box, static_cast<int32_t>(i));
+            live[c] = bm.kids[c];
+        }
+        bm.kids.swap(live);
+    }
+    if (root) {  // the body's margin and its children's: one margin
+        setPx(box, LV_STYLE_PAD_TOP, collapsed(kBodyPad, in[kAbove]));
+        setPx(box, LV_STYLE_PAD_BOTTOM, collapsed(kBodyPad, in[kBelow]));
+    }
+    const bool changed = in[0] != bm.in[0] || in[1] != bm.in[1] || out[0] != bm.out[0] || out[1] != bm.out[1];
+    for (int s : {kAbove, kBelow}) {
+        bm.in[s] = in[s];
+        bm.out[s] = out[s];
+    }
+    return changed;
+}
+
+// box and the boxes around it, outward, as long as what comes out of one changes
+void collapseOut(lv_obj_t* box) {
+    while (box && collapse(box)) box = outerOf(box);
+}
+
+// Flex laid a flow box out: its children may have changed (one shown, hidden, added, gone)
+void onFlowLayout(lv_event_t* e) {
+    lv_obj_t* const box = static_cast<lv_obj_t*>(lv_event_get_user_data(e));
+    if (!collapse(box)) return;
+    if (lv_obj_t* const outer = outerOf(box)) lv_obj_mark_layout_as_dirty(outer);
+}
 
 class Seg;
 void walk(const char* p, const char* end, Seg& seg, const Style& st, bool inlineOnly);
@@ -1009,11 +1273,17 @@ void Seg::flush() {
         if (it.st.link() && !(lastLink && lastLink->same(it.st))) ++links;
         lastLink = it.st.link() ? &it.st : nullptr;
     }
+    const uint32_t from = box_ ? lv_obj_get_child_count(box_) : 0;
     // spans cannot move off the line: raised and lowered text (sup, sub) goes word by word too
     if (atoms || links >= 2 || shifted) asWords();
     else if (!formatted) asLabel();
     else asSpans();
     items_.clear();
+    if (box_ && s_flow.count(box_)) {  // a line: no block (a <p> is, noteBlock says so)
+        for (uint32_t i = from; i < lv_obj_get_child_count(box_); ++i) {
+            noteObj(box_, lv_obj_get_child(box_, static_cast<int32_t>(i)), 0, 0, 0, true);
+        }
+    }
     lastSpace_ = true;
 }
 
@@ -1327,7 +1597,7 @@ void handleTag(const TagRef& t, Seg& seg, const Style& st, bool inlineOnly) {
         // an inline element wrapping blocks or widgets (<a><img></a>) becomes a tappable box
         if (!inlineOnly && hasBlockOrAtom(t.cstart, t.cend)) {
             seg.flush();
-            lv_obj_t* b = newBox(seg.box(), kGap);
+            lv_obj_t* b = newBox(seg.box());
             Style s = derive(st, t, ti->look, seg.look().font);
             makeClickable(b, s.href, s.onclick);
             applyGlobal(t, b);
@@ -1335,6 +1605,8 @@ void handleTag(const TagRef& t, Seg& seg, const Style& st, bool inlineOnly) {
             Seg inner(b, seg.ctx());
             walk(t.cstart, t.cend, inner, s, false);
             inner.flush();
+            collapse(b);
+            noteObj(seg.box(), b, 0, 0);
             return;
         }
         inlineTag(t, ti, seg, st);
@@ -1351,7 +1623,9 @@ void handleTag(const TagRef& t, Seg& seg, const Style& st, bool inlineOnly) {
         return;
     }
     seg.flush();
+    const uint32_t from = lv_obj_get_child_count(seg.box());
     renderBlock(t, seg.box(), seg.ctx());
+    noteBlock(t, seg.box(), from, seg.ctx());
 }
 
 void walk(const char* p, const char* end, Seg& seg, const Style& st, bool inlineOnly) {
@@ -1387,6 +1661,7 @@ void renderInto(const TagRef& t, lv_obj_t* box, const Ctx& ctx) {
     Seg seg(box, ctx);
     walk(t.cstart, t.cend, seg, Style{}, false);
     seg.flush();
+    collapse(box);  // its children are all there: their margins
 }
 
 // ============ Elements ============
@@ -1416,7 +1691,7 @@ void textElement(const TagRef& t, lv_obj_t* box, const Ctx& ctx) {
         seg.flush();
         return;
     }
-    lv_obj_t* b = newBox(box, kGap);
+    lv_obj_t* b = newBox(box);
     applyLook(b, look);
     applyGlobal(t, b);
     renderInto(t, b, ctx);
@@ -1431,7 +1706,7 @@ void blockElement(const TagRef& t, lv_obj_t* box, const Ctx& ctx) {
         renderInto(t, box, ctx);
         return;
     }
-    lv_obj_t* b = newBox(box, kGap);
+    lv_obj_t* b = newBox(box);
     const bool rtl = rtlIn(t, box);  // indents and the quote line are on the side lines start
     if (is(n, "blockquote")) {
         if (rtl) lv_obj_set_style_pad_right(b, kIndent - 8, LV_PART_MAIN);
@@ -1515,18 +1790,20 @@ void listItem(const TagRef& li, lv_obj_t* parent, const Ctx& ctx, const P::Strin
     const bool rtl = rtlIn(li, parent);
     lv_obj_set_style_text_align(m, rtl ? LV_TEXT_ALIGN_LEFT : LV_TEXT_ALIGN_RIGHT, LV_PART_MAIN);
     lv_obj_align(m, rtl ? LV_ALIGN_TOP_RIGHT : LV_ALIGN_TOP_LEFT, rtl ? kListPad + kMarkerGap : -(kListPad + kMarkerGap), 0);
-    lv_obj_t* body = newBox(row, 0);  // no room between the lines of an item, as in a browser
+    lv_obj_t* body = newBox(row);
     lv_obj_set_width(body, 0);
     lv_obj_set_flex_grow(body, 1);
     applyGlobal(li, row);
     setContentBox(row, body);
+    if (s_flow.count(parent)) noteObj(parent, row, 0, 0);
     Ctx inner = ctx;
     inner.listDepth = ctx.listDepth + 1;
     renderInto(li, body, inner);
 }
 
 void listElement(const TagRef& t, lv_obj_t* box, const Ctx& ctx) {
-    lv_obj_t* lb = newBox(box, 0);  // items one under another, as in a browser: no room between
+    lv_obj_t* lb = newBox(box);
+    s_margins[lb].list = true;
     // 40px on the side its lines start, every list, nested ones too: the markers sit in it
     if (rtlIn(t, box)) lv_obj_set_style_pad_right(lb, kListPad, LV_PART_MAIN);
     else lv_obj_set_style_pad_left(lb, kListPad, LV_PART_MAIN);
@@ -1554,9 +1831,13 @@ void listElement(const TagRef& t, lv_obj_t* box, const Ctx& ctx) {
     // • – › : glyphs the Ubuntu fonts have (no ◦ or ▪ in flash)
     static const char* const kBullets[] = {"\xE2\x80\xA2", "\xE2\x80\x93", "\xE2\x80\xBA"};
     Inside in(t);
+    Ctx inside = ctx;
+    inside.listDepth = ctx.listDepth + 1;
     for (const auto& c : items) {
         if (!is(c.name, "li")) {  // a list nested straight in a list, or other content
+            const uint32_t from = lv_obj_get_child_count(lb);
             renderBlock(c, lb, ctx);
+            noteBlock(c, lb, from, inside);
             continue;
         }
         if (!attr(c, "value").empty()) n = atoi(attr(c, "value").c_str());
@@ -1564,6 +1845,7 @@ void listElement(const TagRef& t, lv_obj_t* box, const Ctx& ctx) {
         listItem(c, lb, ctx, marker);
         n += reversed ? -1 : 1;
     }
+    collapse(lb);
 }
 
 // ---- Rules, images, preformatted ----
@@ -1951,7 +2233,7 @@ bool findChild(const TagRef& t, const char* name, TagRef& out) {
 }
 
 void detailsElement(const TagRef& t, lv_obj_t* box, const Ctx& ctx) {
-    lv_obj_t* d = newBox(box, kGapList);
+    lv_obj_t* d = newBox(box);
     applyGlobal(t, d);
     const bool open = has(t, "open");
 
@@ -1964,7 +2246,7 @@ void detailsElement(const TagRef& t, lv_obj_t* box, const Ctx& ctx) {
     lv_obj_t* marker = lv_label_create(head);
     lv_label_set_text(marker, open ? "\xE2\x80\x93" : "+");
     lv_obj_set_style_text_color(marker, lv_color_hex(kAccent), LV_PART_MAIN);
-    lv_obj_t* title = newBox(head, 0);
+    lv_obj_t* title = newBox(head);
     lv_obj_set_width(title, 0);
     lv_obj_set_flex_grow(title, 1);
     setContentBox(head, title);  // its text is the summary's, without the marker
@@ -1981,7 +2263,7 @@ void detailsElement(const TagRef& t, lv_obj_t* box, const Ctx& ctx) {
         newTextLabel(title, "Details");
     }
 
-    lv_obj_t* body = newBox(d, kGap);
+    lv_obj_t* body = newBox(d);
     lv_obj_set_style_pad_left(body, kIndent, LV_PART_MAIN);
     if (!open) lv_obj_add_flag(body, LV_OBJ_FLAG_HIDDEN);
     Seg seg(body, ctx);
@@ -1992,6 +2274,9 @@ void detailsElement(const TagRef& t, lv_obj_t* box, const Ctx& ctx) {
         walk(t.cstart, t.cend, seg, Style{}, false);
     }
     seg.flush();
+    collapse(title);
+    collapse(body);
+    collapse(d);
 
     auto* fold = new Fold{body, marker};
     lv_obj_add_flag(head, LV_OBJ_FLAG_CLICKABLE);
@@ -2026,7 +2311,7 @@ void dialogElement(const TagRef& t, lv_obj_t* box, const Ctx& ctx) {
     lv_obj_set_flex_flow(back, LV_FLEX_FLOW_COLUMN);
     lv_obj_set_flex_align(back, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
     lv_obj_add_flag(back, LV_OBJ_FLAG_CLICKABLE);  // modal: taps stay in the dialog
-    lv_obj_t* win = newBox(back, kGap);
+    lv_obj_t* win = newBox(back);
     lv_obj_set_width(win, lv_pct(80));
     lv_obj_set_style_bg_color(win, lv_color_hex(kPanel), LV_PART_MAIN);
     lv_obj_set_style_bg_opa(win, LV_OPA_COVER, LV_PART_MAIN);
@@ -2081,7 +2366,7 @@ void fallbackElement(const TagRef& t, lv_obj_t* box, const Ctx& ctx) {
             for (char c : it.text) text = text || !isspace(static_cast<unsigned char>(c));
         }
         if (text) {
-            lv_obj_t* b = newBox(box, kGap);
+            lv_obj_t* b = newBox(box);
             applyGlobal(t, b);
             renderInto(t, b, ctx);
             return;
@@ -2222,6 +2507,7 @@ void create(const char* tag, const char* astart, const char* aend, const char* c
     Seg seg(box, Ctx{});
     handleTag(t, seg, Style{}, false);
     seg.flush();
+    collapseOut(box);  // the page's elements come one by one; or a script's, into a block
     LOG_D(Log::UI, "html: <%s>", tag);
 }
 
@@ -2381,6 +2667,25 @@ lv_obj_t* contentOf(lv_obj_t* obj) {
     return c != s_contentOf.end() ? c->second : obj;
 }
 
+void marginsAside(lv_obj_t* obj) {
+    lv_obj_t* const box = obj ? lv_obj_get_parent(obj) : nullptr;
+    if (!box || !s_flow.count(box)) return;
+    for (int side : {kAbove, kBelow}) lv_obj_remove_local_style_prop(obj, kMarginProp[side], LV_PART_MAIN);
+}
+
+void restyled(lv_obj_t* obj, const char* tag) {
+    lv_obj_t* const box = obj ? lv_obj_get_parent(obj) : nullptr;
+    if (!box || !s_flow.count(box)) return;
+    const auto r = s_margins[box].kids.emplace(obj, Margin{});
+    Margin& m = r.first->second;
+    if (r.second) {  // it came here from another box: a browser's margins for its tag
+        m.ua[kAbove] = m.ua[kBelow] = uaMargin(tag ? tag : "", inList(box));
+        m.keep = !info(tag ? tag : "") && !s_flow.count(obj);
+    }
+    ownMargins(obj, m);
+    lv_obj_mark_layout_as_dirty(box);  // flex lays the box out again, and its margins are worked out
+}
+
 P::String getText(lv_obj_t* obj) {
     if (!obj) return "";
     auto c = s_contentOf.find(obj);
@@ -2479,6 +2784,7 @@ void reset() {
     s_flow.clear();
     s_rootOf.clear();
     s_contentOf.clear();
+    s_margins.clear();
     s_toggles.clear();
 }
 
@@ -2512,7 +2818,7 @@ void applyDir(lv_obj_t* obj, const char* dir) {
 
 void makeFlow(lv_obj_t* container) {
     lv_obj_set_flex_flow(container, LV_FLEX_FLOW_COLUMN);
-    lv_obj_set_style_pad_row(container, kGap, LV_PART_MAIN);
+    lv_obj_set_style_pad_row(container, 0, LV_PART_MAIN);  // its blocks' margins are between them
 }
 
 void renderContent(const char* html, size_t len, lv_obj_t* container) {
@@ -2521,6 +2827,7 @@ void renderContent(const char* html, size_t len, lv_obj_t* container) {
     Seg seg(container, Ctx{});
     walk(html, html + len, seg, Style{}, false);
     seg.flush();
+    collapseOut(container);
 }
 
 }  // namespace HtmlFlow

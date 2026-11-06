@@ -13,6 +13,7 @@
 //   expect @id <value>       check widget value (a container: the text it shows); ranges: 20..30
 //   expect @id contains <v>  substring of the value
 //   expect <@id|"text"> :visible | :hidden   on screen, or hidden / scrolled out of view
+//   expect @id :y <px>       its box in its parent's content (:x, :y, :w, :h); ranges: 20..30
 //   expect $var <value>      check app state variable (TelaOS)
 //   expect mem.<figure> <v>  the watch's memory: dram_|psram_ + free, min_free, largest,
 //                            total, blocks, failed (ranges: 40000..999999)

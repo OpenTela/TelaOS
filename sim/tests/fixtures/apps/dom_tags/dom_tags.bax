@@ -3,7 +3,8 @@
     Test fixture for the DOM in TelaOS (docs/DOM.md): document.getElementById, textContent,
     getAttribute, setAttribute, removeAttribute (page "main"); classList (page "classes");
     querySelector and querySelectorAll (page "query"); el.style and style="" (page "style");
-    addEventListener (page "events"); createElement, appendChild, removeChild (page "tree").
+    addEventListener (page "events"); createElement, appendChild, removeChild (page "tree");
+    the margins between blocks when one hides and a class gives one a margin (page "margins").
     Flashed by the simulator with --extra-data; driven by tests/tela_dom.sim. The script runs
     when the app starts: a line "read: ..." shows what it read, the others show what it wrote.
   -->
@@ -16,6 +17,7 @@
     .off { display: none; }
     #evCard { display: flex; gap: 8px; }
     #todo li:last-child { color: #81C784; }
+    .wide { margin-top: 40px; }
   </style>
   <ui default="/main">
     <page id="main">
@@ -93,6 +95,15 @@
       <button id="cycleItem">First to last</button>
       <p id="readTree">-</p>
       <a href="/main">Back</a>
+    </page>
+
+    <page id="margins">
+      <h2 id="mTitle">Margins</h2>
+      <p id="m1">the first line</p>
+      <p id="m2">this line hides, then comes back</p>
+      <p id="m3">the third line</p>
+      <p id="m4">.wide: 40px above</p>
+      <button id="mToggle" onclick="toggleMargins">Toggle</button>
     </page>
   </ui>
   <state>
@@ -185,5 +196,13 @@ el("cycleItem"):addEventListener("click", function()
   el("todo"):appendChild(first)
   rows()
 end)
+
+-- A line between two hides (their margins join), a class gives the last one 40px above
+local narrow = true
+function toggleMargins()
+  if narrow then el("m2"):setAttribute("hidden", "") else el("m2"):removeAttribute("hidden") end
+  el("m4").classList:toggle("wide")
+  narrow = not narrow
+end
   </script>
 </app>

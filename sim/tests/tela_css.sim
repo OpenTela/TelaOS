@@ -23,6 +23,7 @@ tap "Back"
 wait 200
 expect "Selectors" :visible
 
+scroll @pages
 tap "Values"
 wait 200
 expect "rgba(): half white" :visible
@@ -35,6 +36,7 @@ tap "Back"
 wait 200
 expect "Selectors" :visible
 
+scroll @pages
 tap "Box"
 wait 200
 expect @framed "border: 2px solid blue"
@@ -46,6 +48,7 @@ tap "Back"
 wait 200
 expect "Selectors" :visible
 
+scroll @pages
 tap "Layout"
 wait 200
 expect @bar "left middle right"
@@ -57,6 +60,7 @@ tap "Back"
 wait 200
 expect "Selectors" :visible
 
+scroll @pages
 tap "Text"
 wait 200
 expect @tdeco "text-decoration: underline"
@@ -67,6 +71,7 @@ tap "Back"
 wait 200
 expect "Selectors" :visible
 
+scroll @pages
 tap "States"
 wait 200
 expect @tick off
@@ -79,6 +84,7 @@ tap "Back"
 wait 200
 expect "Selectors" :visible
 
+scroll @pages
 tap "Structure"
 wait 200
 expect @narrow "@media (max-width: 500px): green"
@@ -90,6 +96,7 @@ tap "Back"
 wait 200
 expect "Selectors" :visible
 
+scroll @pages
 tap "Pseudo"
 wait 200
 expect @hot ".tag:is(.hot, .new): red"
