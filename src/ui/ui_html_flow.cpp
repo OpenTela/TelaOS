@@ -155,43 +155,54 @@ const TagInfo* info(std::string_view name) {
     return nullptr;
 }
 
-bool is(std::string_view a, std::string_view b) { return a == b; }
+// Whether a tag name is b. Out of line, as the strcmp it replaces: a few hundred places ask, and
+// the flash of the watch is short.
+[[gnu::noinline]] bool is(std::string_view a, std::string_view b) { return a == b; }
+[[gnu::noinline]] bool is(const char* a, const char* b) { return std::string_view(a) == std::string_view(b); }
 
 // Whether n is one of names
+[[gnu::noinline]] bool oneOf(std::string_view n, const char* const* names, size_t count) {
+    for (size_t i = 0; i < count; ++i) {
+        if (n == names[i]) return true;
+    }
+    return false;
+}
 template <size_t N>
-bool oneOf(std::string_view n, const std::string_view (&names)[N]) {
-    return std::find(std::begin(names), std::end(names), n) != std::end(names);
+bool oneOf(std::string_view n, const char* const (&names)[N]) {
+    return oneOf(n, names, N);
 }
 
 // ASCII letters in any case are the same: tag and attribute names
-bool sameNoCase(std::string_view a, std::string_view b) {
-    return a.size() == b.size() && std::equal(a.begin(), a.end(), b.begin(), [](char x, char y) {
-               return tolower(static_cast<unsigned char>(x)) == tolower(static_cast<unsigned char>(y));
-           });
+[[gnu::noinline]] bool sameNoCase(std::string_view a, std::string_view b) {
+    if (a.size() != b.size()) return false;
+    for (size_t i = 0; i < a.size(); ++i) {
+        if (tolower(static_cast<unsigned char>(a[i])) != tolower(static_cast<unsigned char>(b[i]))) return false;
+    }
+    return true;
 }
 
 bool isTelaTag(std::string_view n) {
-    static constexpr std::string_view kTela[] = {"label", "button", "switch", "slider", "input", "canvas",
+    static constexpr const char* kTela[] = {"label", "button", "switch", "slider", "input", "canvas",
                                                  "image", "markdown", "qr", "tabs", "tab", "select", "list",
                                                  "item", "div", "table", "tr", "td", "page", "group"};
     return oneOf(n, kTela);
 }
 
 bool isVoidName(std::string_view n) {
-    static constexpr std::string_view kVoid[] = {"area", "base", "br", "col", "embed", "hr", "img", "input",
+    static constexpr const char* kVoid[] = {"area", "base", "br", "col", "embed", "hr", "img", "input",
                                                  "link", "meta", "param", "source", "track", "wbr", "frame"};
     return oneOf(n, kVoid);
 }
 
 // Content is raw text: no tags inside
 bool isRawText(std::string_view n) {
-    return is(n, "script") || is(n, "style") || is(n, "textarea") || is(n, "title") || is(n, "xmp") ||
-           is(n, "plaintext");
+    static constexpr const char* kRaw[] = {"script", "style", "textarea", "title", "xmp", "plaintext"};
+    return oneOf(n, kRaw);
 }
 
 // Inline-level replaced elements and form controls: sit inside a line of text
 bool isAtomName(std::string_view n) {
-    static constexpr std::string_view kAtom[] = {"img", "input", "button", "select", "textarea", "label",
+    static constexpr const char* kAtom[] = {"img", "input", "button", "select", "textarea", "label",
                                                  "progress", "meter", "image", "switch", "slider", "canvas"};
     return oneOf(n, kAtom);
 }
@@ -244,12 +255,16 @@ P::String lower(const P::String& s) {
 class TagName {
 public:
     TagName() = default;
-    TagName(std::string_view s) {  // NOLINT(google-explicit-constructor): a name, as the text it is
-        for (char c : s) {
-            if (!push(c)) break;
+    explicit TagName(std::string_view s)
+        : len_(static_cast<uint8_t>(std::min(s.size(), kMax))) {
+        std::copy_n(s.data(), len_, chars_.begin());
+    }
+    TagName(const char* s) {  // NOLINT(google-explicit-constructor)
+        while (len_ < kMax && s[len_]) {
+            chars_[len_] = s[len_];
+            ++len_;
         }
     }
-    TagName(const char* s) : TagName(std::string_view(s)) {}  // NOLINT(google-explicit-constructor)
 
     // c at the end; false if the name is full
     bool push(char c) {
@@ -268,6 +283,9 @@ private:
     std::array<char, kMax + 1> chars_{};
     uint8_t len_ = 0;
 };
+
+// Whether a tag name is b: two pointers, as the strcmp it replaces
+[[gnu::noinline]] bool is(const TagName& a, const char* b) { return std::string_view(a) == std::string_view(b); }
 
 struct TagRef {
     TagName name;
@@ -314,7 +332,7 @@ const char* skipComment(const char* p, const char* end) {
 // ---- Omitted end tags: <li>one<li>two, <p>one<p>two, <dt>term<dd>definition ----
 
 bool closesP(std::string_view n) {  // a start tag that ends an open <p>
-    static constexpr std::string_view kClose[] = {
+    static constexpr const char* kClose[] = {
         "address", "article", "aside", "blockquote", "details", "dialog", "div", "dl", "fieldset", "figcaption",
         "figure", "footer", "form", "h1", "h2", "h3", "h4", "h5", "h6", "header", "hgroup", "hr", "main", "menu",
         "nav", "ol", "p", "pre", "search", "section", "table", "ul"};
@@ -322,32 +340,35 @@ bool closesP(std::string_view n) {  // a start tag that ends an open <p>
 }
 
 bool optionalEnd(std::string_view n) {
-    static constexpr std::string_view kOpt[] = {"li", "dt", "dd", "p", "rt", "rp", "option", "optgroup",
+    static constexpr const char* kOpt[] = {"li", "dt", "dd", "p", "rt", "rp", "option", "optgroup",
                                                 "thead", "tbody", "tfoot", "tr", "td", "th"};
     return oneOf(n, kOpt);
 }
 
 // Does start tag `next` end the open element `open` (same level)?
-bool impliedEnd(std::string_view open, std::string_view next) {
-    auto any = [next](std::initializer_list<std::string_view> names) {
-        return std::find(names.begin(), names.end(), next) != names.end();
+bool impliedEnd(const char* open, const char* next) {
+    auto any = [next](std::initializer_list<const char*> names) {
+        for (const char* n : names) {
+            if (is(n, next)) return true;
+        }
+        return false;
     };
-    if (open == "li") return any({"li"});
-    if (open == "dt" || open == "dd") return any({"dt", "dd"});
-    if (open == "rt" || open == "rp") return any({"rt", "rp"});
-    if (open == "option") return any({"option", "optgroup"});
-    if (open == "optgroup") return any({"optgroup"});
-    if (open == "thead" || open == "tbody") return any({"tbody", "tfoot"});
-    if (open == "tr") return any({"tr", "thead", "tbody", "tfoot"});
-    if (open == "td" || open == "th") return any({"td", "th", "tr", "thead", "tbody", "tfoot"});
-    if (open == "p") return closesP(next);
+    if (is(open, "li")) return any({"li"});
+    if (is(open, "dt") || is(open, "dd")) return any({"dt", "dd"});
+    if (is(open, "rt") || is(open, "rp")) return any({"rt", "rp"});
+    if (is(open, "option")) return any({"option", "optgroup"});
+    if (is(open, "optgroup")) return any({"optgroup"});
+    if (is(open, "thead") || is(open, "tbody")) return any({"tbody", "tfoot"});
+    if (is(open, "tr")) return any({"tr", "thead", "tbody", "tfoot"});
+    if (is(open, "td") || is(open, "th")) return any({"td", "th", "tr", "thead", "tbody", "tfoot"});
+    if (is(open, "p")) return closesP(next);
     return false;
 }
 
 bool readTag(const char* p, const char* end, TagRef& t);
 
 // Where an element without its end tag ends: at a sibling that implies it, or at the parent's end
-const char* impliedClose(const char* p, const char* end, std::string_view name) {
+const char* impliedClose(const char* p, const char* end, const char* name) {
     while (p < end) {
         p = static_cast<const char*>(memchr(p, '<', end - p));
         if (!p) return end;
@@ -362,7 +383,7 @@ const char* impliedClose(const char* p, const char* end, std::string_view name) 
             ++p;
             continue;
         }
-        if (impliedEnd(name, next)) return p;
+        if (impliedEnd(name, next.c_str())) return p;
         if (!readTag(p, end, c)) {
             ++p;
             continue;
@@ -401,7 +422,7 @@ bool readTag(const char* p, const char* end, TagRef& t) {
     if (optionalEnd(t.name)) {
         // <li>, <p>, <dd> may omit the end tag: then the next sibling that implies it ends them
         // (<li>a<li>b, <p>a<div>), not a later </li> of another list
-        const char* implied = impliedClose(q + 1, end, t.name);
+        const char* implied = impliedClose(q + 1, end, t.name.c_str());
         if (!close || close > end || implied < close) {
             t.cend = t.next = implied;
             return true;
@@ -532,12 +553,12 @@ struct TextLook {  // block text look
     int align = -1;
 };
 
-TextLook lookFor(const char* n) {
+TextLook lookFor(std::string_view n) {
     TextLook l;
     // Headings are bold, as in a browser
     if (is(n, "h1")) l.font = UI::Font::LARGE, l.color = kText, l.bold = true;
     else if (is(n, "h2")) l.font = UI::Font::MEDIUM, l.color = kH2, l.bold = true;
-    else if (n[0] == 'h' && n[1] >= '3' && n[1] <= '6' && !n[2]) l.font = UI::Font::SMALL, l.color = kH2, l.bold = true;
+    else if (n.size() == 2 && n[0] == 'h' && n[1] >= '3' && n[1] <= '6') l.font = UI::Font::SMALL, l.color = kH2, l.bold = true;
     else if (is(n, "dt")) l.color = kAccent;
     else if (is(n, "caption")) l.color = kDim, l.align = LV_TEXT_ALIGN_CENTER;
     else if (is(n, "figcaption") || is(n, "legend")) l.color = kDim;
@@ -658,8 +679,11 @@ std::unordered_set<lv_obj_t*> s_flow;                // every flow box
 std::unordered_map<lv_obj_t*, lv_obj_t*> s_rootOf;   // page/TelaOS container → its implicit flow root
 int s_autoId = 0;
 
+// The decimal digits of n: "42", "-7" (std::to_string: the firmware has it already)
+P::String decimal(int n) { return std::to_string(n).c_str(); }
+
 // An id for an element the page gave none: _html_0, _html_1…
-P::String autoId() { return P::String("_html_") + std::to_string(s_autoId++).c_str(); }
+P::String autoId() { return "_html_" + decimal(s_autoId++); }
 
 void onFlowDelete(lv_event_t* e) {
     lv_obj_t* o = static_cast<lv_obj_t*>(lv_event_get_user_data(e));
@@ -1341,7 +1365,7 @@ void delegate(const TagRef& t, lv_obj_t* box) {  // a TelaOS tag inside HTML con
 }
 
 void textElement(const TagRef& t, lv_obj_t* box, const Ctx& ctx) {
-    const TextLook look = lookFor(t.name.c_str());
+    const TextLook look = lookFor(t.name);
     if (!hasBlockOrAtom(t.cstart, t.cend)) {
         Inside in(t);  // its runs and widgets are inside it; its own style ignores this (see CssScope)
         Seg seg(box, ctx, &t, look);
@@ -1427,7 +1451,7 @@ P::String olMarker(int n, char type) {
         return s + ".";
     }
     if ((type == 'i' || type == 'I') && n > 0) return roman(n, type == 'I') + ".";
-    return P::String(std::to_string(n).c_str()) + ".";
+    return decimal(n) + ".";
 }
 
 void listItem(const TagRef& li, lv_obj_t* parent, const Ctx& ctx, const P::String& marker) {
@@ -1788,7 +1812,7 @@ void textareaElement(const TagRef& t, lv_obj_t* parent) {
     a += " multiline=\"true\"";
     P::String h = attr(t, "h");
     if (h.empty() && !attr(t, "rows").empty()) {
-        h = std::to_string(atoi(attr(t, "rows").c_str()) * 20 + 16).c_str();
+        h = decimal(atoi(attr(t, "rows").c_str()) * 20 + 16);
     }
     if (!h.empty()) a += " h=\"" + h + "\"";
     {
