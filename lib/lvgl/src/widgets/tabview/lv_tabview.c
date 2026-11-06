@@ -331,11 +331,14 @@ static void cont_scroll_end_event_cb(lv_event_t * e)
         int32_t t;
         if((tv_obj->tab_pos & LV_DIR_VER) != 0) {
             int32_t w = lv_obj_get_content_width(cont);
+            /*TelaOS: a tab view 0 wide (100% of a parent 0 wide) has no tab to scroll to: w divides below*/
+            if(w <= 0) return;
             if(lv_obj_get_style_base_dir(tv, LV_PART_MAIN) == LV_BASE_DIR_RTL)  t = -(p.x - w / 2) / w;
             else t = (p.x + w / 2) / w;
         }
         else {
             int32_t h = lv_obj_get_content_height(cont);
+            if(h <= 0) return;  /*TelaOS: the same, 0 high*/
             t = (p.y + h / 2) / h;
         }
 

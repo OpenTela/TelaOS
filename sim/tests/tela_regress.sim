@@ -1,0 +1,10 @@
+# tela_regress.sim — pages that once stopped the simulator and the watch stay drawn.
+# Fixture: sim/tests/fixtures/apps/regress (flashed with --extra-data sim/tests/fixtures).
+# Page "tabs": a tab view 0 wide with an <input> in a tab (a division by its width in LVGL).
+
+wait 300
+> app launch regress
+wait 800
+expect @title "Tabs 0 wide"
+wait 500
+expect "Tabs 0 wide" :visible
