@@ -41,6 +41,22 @@ scroll @home_text
 tap @home_text
 wait 200
 
+# ---- languages: glyphs the first font has not come from its fallback (UbuntuExt_*px) ------
+# No link to it from home, so home stays as it is: reached by the console.
+> ui nav langs
+wait 200
+expect @langsTitle "Языки · Γλώσσες"
+expect @de "Deutsch: Größe, Äpfel, Übermaß"
+expect @pl "Polski: zażółć gęślą jaźń"
+expect @ro "Română: știință, țară"
+expect @el "Ελληνικά: Καλημέρα κόσμε"
+expect @uk "Українська: ґанок, їжак, Ґ"
+expect @kk "Қазақша: әке, ұлы, өнер"
+expect @signs "№ 7 · 2 − 1 ≤ 3 ≠ 4 · ≈ ∞ √ ‰ … ™"
+shot html_02_langs
+> ui nav home
+wait 200
+
 # ---- lists: markers, numbering, omitted end tags --------------------------------------
 tap "Lists"
 wait 200

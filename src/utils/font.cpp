@@ -2,6 +2,22 @@
 
 namespace UI {
 
+#if !defined(LVGL_MOCK_ENABLED)
+namespace {
+
+// A glyph Ubuntu_*px does not have (ä, Ł, Ω, Ґ, №, ≤…) is drawn from UbuntuExt_*px of the
+// same size. Set before main(): the launcher takes &Ubuntu_*px directly, not through get().
+const bool s_fallbacks = [] {
+    Ubuntu_16px.fallback = &UbuntuExt_16px;
+    Ubuntu_32px.fallback = &UbuntuExt_32px;
+    Ubuntu_48px.fallback = &UbuntuExt_48px;
+    Ubuntu_72px.fallback = &UbuntuExt_72px;
+    return true;
+}();
+
+}  // namespace
+#endif
+
 int Font::nearest(int requested) {
     if (requested <= 16) return 16;
     if (requested <= 32) return 32;
