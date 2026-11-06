@@ -157,7 +157,9 @@ def layout(documents, width, height):
     out = {}
     try:
         with tempfile.TemporaryDirectory() as tmp, sync_playwright() as p:
-            browser = p.chromium.launch()
+            # Without hinting: the height of a line is then the font's, not what the machine's
+            # fontconfig asks for (hinted, 16px Ubuntu is 20 px high on GitHub, 18 here and on a Mac)
+            browser = p.chromium.launch(args=["--font-render-hinting=none"])
             page = browser.new_page(viewport={"width": width, "height": height}, device_scale_factor=1)
             for name, text in documents.items():
                 f = Path(tmp) / f"{name}.html"
