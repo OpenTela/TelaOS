@@ -65,7 +65,8 @@ constexpr uint32_t kRule = 0x555555;     // hr, borders, bar track
 constexpr uint32_t kPanel = 0x222222;    // dialog, placeholders
 constexpr uint32_t kInherit = 0xFF000000;
 
-constexpr int kIndent = 20;    // dd, blockquote
+constexpr int kIndent = 20;    // the content of <details>
+constexpr int kBlockIndent = 40;  // a browser's: blockquote, figure on both sides; dd on the side lines start
 constexpr int kListPad = 40;   // a list's padding on the side its lines start: a browser's 40px
 constexpr int kMarkerGap = 5;  // a marker and its item: the space after "1." of a browser's marker
 constexpr int kBodyPad = 8;    // HTML body margin
@@ -1707,27 +1708,24 @@ void blockElement(const TagRef& t, lv_obj_t* box, const Ctx& ctx) {
         return;
     }
     lv_obj_t* b = newBox(box);
-    const bool rtl = rtlIn(t, box);  // indents and the quote line are on the side lines start
-    if (is(n, "blockquote")) {
-        if (rtl) lv_obj_set_style_pad_right(b, kIndent - 8, LV_PART_MAIN);
-        else lv_obj_set_style_pad_left(b, kIndent - 8, LV_PART_MAIN);
-        lv_obj_set_style_text_color(b, lv_color_hex(kH2), LV_PART_MAIN);
-#if !defined(LVGL_MOCK_ENABLED)
-        lv_obj_set_style_border_side(b, rtl ? LV_BORDER_SIDE_RIGHT : LV_BORDER_SIDE_LEFT, LV_PART_MAIN);
-#endif
-        lv_obj_set_style_border_width(b, 3, LV_PART_MAIN);
+    // a browser's margins aside: LVGL takes them off the block's 100% width, as CSS does
+    if (is(n, "blockquote") || is(n, "figure")) {
+        lv_obj_set_style_margin_left(b, kBlockIndent, LV_PART_MAIN);
+        lv_obj_set_style_margin_right(b, kBlockIndent, LV_PART_MAIN);
+        if (is(n, "blockquote")) lv_obj_set_style_text_color(b, lv_color_hex(kH2), LV_PART_MAIN);
+    } else if (is(n, "dd")) {  // on the side its lines start
+        if (rtlIn(t, box)) lv_obj_set_style_margin_right(b, kBlockIndent, LV_PART_MAIN);
+        else lv_obj_set_style_margin_left(b, kBlockIndent, LV_PART_MAIN);
+    } else if (is(n, "fieldset")) {  // 2px aside, a 2px frame, 0.35em 0.75em 0.625em in it
+        const int em = UI::Font::sizeOf(lv_obj_get_style_text_font(b, LV_PART_MAIN));
+        lv_obj_set_style_margin_left(b, 2, LV_PART_MAIN);
+        lv_obj_set_style_margin_right(b, 2, LV_PART_MAIN);
+        lv_obj_set_style_border_width(b, 2, LV_PART_MAIN);
         lv_obj_set_style_border_color(b, lv_color_hex(kRule), LV_PART_MAIN);
-    } else if (is(n, "dd")) {
-        if (rtl) lv_obj_set_style_pad_right(b, kIndent, LV_PART_MAIN);
-        else lv_obj_set_style_pad_left(b, kIndent, LV_PART_MAIN);
-    } else if (is(n, "fieldset")) {
-        lv_obj_set_style_border_width(b, 1, LV_PART_MAIN);
-        lv_obj_set_style_border_color(b, lv_color_hex(kRule), LV_PART_MAIN);
-        lv_obj_set_style_radius(b, 8, LV_PART_MAIN);
-        lv_obj_set_style_pad_all(b, 10, LV_PART_MAIN);
-    } else if (is(n, "figure")) {
-        lv_obj_set_style_pad_left(b, 16, LV_PART_MAIN);
-        lv_obj_set_style_pad_right(b, 16, LV_PART_MAIN);
+        lv_obj_set_style_pad_top(b, (em * 35 + 50) / 100, LV_PART_MAIN);
+        lv_obj_set_style_pad_left(b, (em * 75 + 50) / 100, LV_PART_MAIN);
+        lv_obj_set_style_pad_right(b, (em * 75 + 50) / 100, LV_PART_MAIN);
+        lv_obj_set_style_pad_bottom(b, (em * 625 + 500) / 1000, LV_PART_MAIN);
     } else if (is(n, "address")) {  // italic, as in a browser
         const lv_font_t* f = lv_obj_get_style_text_font(b, LV_PART_MAIN);
         lv_obj_set_style_text_font(b, Font::get(UI::Font::sizeOf(f), UI::Font::isBold(f), true), LV_PART_MAIN);
