@@ -9,8 +9,8 @@
  *                       2+ links / widgets   → row-wrap of word labels (each link tappable)
  *   TelaOS tags met inside HTML content are built by parse_children() as before.
  *
- * Visual language = widget_markdown.h: h1 48px, h2 32px, h3+ 16px; strong → accent,
- * em → dim, code → green. No extra fonts: the watch keeps its flash.
+ * Visual language = widget_markdown.h: h1 48px, h2 32px, h3+ 16px, bold; b, strong → bold,
+ * i, em → italic, code → green. Fonts: UI::Font, twelve sizes in four faces (utils/font.h).
  */
 #include "lvgl.h"
 #include "ui/ui_html_flow.h"
