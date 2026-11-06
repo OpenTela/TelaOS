@@ -68,15 +68,7 @@ void setup() {
     Serial.printf("[Heap] After Display: %d bytes free\n", ESP.getFreeHeap());
     
     g_core.store().onChange([](const P::String& name, const VarValue& value) {
-        P::String strVal = std::visit([](auto&& v) -> P::String {
-            using T = std::decay_t<decltype(v)>;
-            if constexpr (std::is_same_v<T, P::String>) return v;
-            else if constexpr (std::is_same_v<T, int>) return P::String(std::to_string(v).c_str());
-            else if constexpr (std::is_same_v<T, bool>) return v ? "true" : "false";
-            else if constexpr (std::is_same_v<T, float>) { char buf[32]; snprintf(buf, 32, "%.2f", v); return buf; }
-            return "";
-        }, value);
-        ui_update_bindings(name.c_str(), strVal.c_str());
+        ui_update_bindings(name.c_str(), Store::valueToString(value).c_str());
     });
     
     display_lock();
