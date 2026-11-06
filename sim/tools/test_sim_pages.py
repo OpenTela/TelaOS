@@ -34,7 +34,8 @@ def picture(path, dot=None):
 
 # page -> what each run draws: (tree, red dot or None), or None when the run did not draw it
 SCENARIO = {
-    "gen_0000": {"base": (screen(BUTTON), None), "head": (screen(BUTTON), None)},                 # same
+    # same: the elements a script sees ("dom", only the head's robot writes them) are not what is drawn
+    "gen_0000": {"base": (screen(BUTTON), None), "head": ({**screen(BUTTON), "dom": [{"tag": "page"}]}, None)},
     "gen_0001": {"base": (screen(BUTTON), None), "head": (screen(BUTTON, LABEL), None)},          # a new label
     "gen_0002": {"base": (screen(BUTTON), None), "head": (screen(BUTTON), (20, 20))},             # pixels in #ok
     "gen_0003": {"base": (screen(BUTTON), None), "head": (screen(BUTTON), (30, 30)), "head-2": (screen(BUTTON), (31, 31))},
@@ -66,7 +67,7 @@ class SimPages(unittest.TestCase):
 
     def test_what_differs_and_how(self):
         r = self.result
-        self.assertEqual(r["same"], 1)  # gen_0000; the capture time does not count
+        self.assertEqual(r["same"], 1)  # gen_0000; the capture time and the elements do not count
         self.assertEqual([c["page"] for c in r["changed"]], ["gen_0001", "gen_0002"])
         self.assertTrue(any("«Hi»" in w for w in r["changed"][0]["changes"]), r["changed"][0])
         self.assertEqual(r["changed"][1]["changes"], ["Виджеты те же — изменились только пиксели, в `btn #ok`"])

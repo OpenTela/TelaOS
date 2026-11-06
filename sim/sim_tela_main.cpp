@@ -15,11 +15,14 @@
 
 #include "Arduino.h"
 #include "core/core.h"
+#include "ui/dom.h"
 
 #include <SDL.h>
 
+#include <cctype>
 #include <cstdio>
 #include <cstdlib>
+#include <functional>
 #include <string>
 #include <vector>
 
@@ -143,6 +146,26 @@ int main(int argc, char** argv) {
         }
         return {};
     };
+#ifdef UI_DOM_WALK  // firmware older than the walk: its trees have no "dom"
+    hooks.domNodes = [] {
+        std::vector<Sim::DomNode> out;
+        std::function<void(UI::Dom::Node, int)> walk = [&](UI::Dom::Node n, int depth) {
+            for (; n; n = UI::Dom::nextSibling(n)) {
+                Sim::DomNode d;
+                d.tag = UI::Dom::tagName(n).c_str();
+                for (char& c : d.tag) c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
+                P::String id;
+                if (UI::Dom::getAttribute(n, "id", id)) d.id = id.c_str();
+                d.obj = UI::Dom::objectOf(n);
+                d.depth = depth;
+                out.push_back(std::move(d));
+                walk(UI::Dom::firstChild(n), depth + 1);
+            }
+        };
+        walk(UI::Dom::firstChild(0), 0);
+        return out;
+    };
+#endif
     hooks.memJson = [] { return SimHeap::json(); };
     hooks.memValue = [](const std::string& figure, double& value) {
         const size_t cut = figure.find('_');

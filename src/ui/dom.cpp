@@ -1331,6 +1331,36 @@ Node parentOf(Node n) {
     return i ? handle(node(i).parent) : 0;
 }
 
+namespace {
+// A page: in the document and inside no element
+bool isPage(uint32_t i) { return !node(i).parent && !(node(i).flags & (kGone | kDetached)); }
+
+Node pageFrom(uint32_t i) {
+    for (; i <= nodes().size(); ++i) {
+        if (isPage(i)) return handle(i);
+    }
+    return 0;
+}
+}  // namespace
+
+Node firstChild(Node n) {
+    if (!n) return pageFrom(1);
+    const uint32_t i = indexOf(n);
+    return i ? handle(node(i).first) : 0;
+}
+
+Node nextSibling(Node n) {
+    const uint32_t i = indexOf(n);
+    if (!i) return 0;
+    if (node(i).parent) return handle(node(i).next);
+    return isPage(i) ? pageFrom(i + 1) : 0;  // out of the document: alone
+}
+
+lv_obj_t* objectOf(Node n) {
+    const uint32_t i = indexOf(n);
+    return i ? node(i).obj : nullptr;
+}
+
 void release(Node n) {
     const uint32_t i = indexOf(n);
     if (!i || node(i).parent || !(node(i).flags & kDetached) || !node(i).obj) return;

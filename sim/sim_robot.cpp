@@ -407,6 +407,46 @@ void dumpObj(std::ostream& f, lv_obj_t* o, int depth, const NameOf& nameOf) {
     f << "}";
 }
 
+// Hidden: it or a parent of it (lv_obj_is_visible says no to what is only scrolled away too)
+bool hiddenInTree(const lv_obj_t* o) {
+    for (; o; o = lv_obj_get_parent(o)) {
+        if (lv_obj_has_flag(o, LV_OBJ_FLAG_HIDDEN)) return true;
+    }
+    return false;
+}
+
+// The elements as nested JSON: each one with the box of its object, if it has one
+void dumpDom(std::ostream& f, const std::vector<DomNode>& nodes) {
+    f << "[";
+    int open = -1;  // the depth of the element written last: its "}" is not written yet
+    for (const DomNode& n : nodes) {
+        if (n.depth > open) {
+            if (open >= 0) f << ", \"children\": [";
+            f << "\n";
+        } else {
+            f << "}";
+            for (int d = open; d > n.depth; --d) f << "]}";
+            f << ",\n";
+        }
+        open = n.depth;
+        f << std::string(2 * (n.depth + 1), ' ') << "{\"tag\": " << jsonEscape(n.tag.c_str());
+        if (!n.id.empty()) f << ", \"id\": " << jsonEscape(n.id.c_str());
+        if (n.obj) {
+            lv_area_t a;
+            lv_obj_get_coords(n.obj, &a);
+            f << ", \"x\": " << a.x1 << ", \"y\": " << a.y1 << ", \"w\": " << lv_area_get_width(&a)
+              << ", \"h\": " << lv_area_get_height(&a);
+            if (hiddenInTree(n.obj)) f << ", \"hidden\": true";
+        }
+    }
+    if (open >= 0) {
+        f << "}";
+        for (int d = open; d > 0; --d) f << "]}";
+        f << "\n";
+    }
+    f << "]";
+}
+
 }  // namespace
 
 Robot::Robot(Panel& panel, Advance advance, std::string out_dir, RobotHooks hooks)
@@ -558,6 +598,10 @@ bool Robot::saveTree(const std::string& path) {
     dumpObj(f, lv_screen_active(), 0, hooks_.nameOf);
     f << ",\n\"top\":\n";
     dumpObj(f, lv_layer_top(), 0, hooks_.nameOf);
+    if (hooks_.domNodes) {
+        f << ",\n\"dom\": ";
+        dumpDom(f, hooks_.domNodes());
+    }
     f << "\n}\n";
     return true;
 }

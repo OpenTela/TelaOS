@@ -61,6 +61,7 @@ def drawn(shots, app):
         return None
     tree.pop("mem", None)      # memory: the screens report has it
     tree.pop("time_ms", None)  # when, not what
+    tree.pop("dom", None)      # the elements as a script sees them: what the judge reads, not what is drawn
     return tree, png
 
 
