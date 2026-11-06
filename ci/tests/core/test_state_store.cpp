@@ -1,7 +1,9 @@
 /**
  * Test: State Store
- * All variable types, define/get/set, reset, onChange, type conversion
+ * All variable types, define/get/set, reset, onChange, type conversion; a float as text, "%.2f",
+ * whole however large
  */
+#include <cfloat>
 #include <cstdio>
 #include <cstring>
 #include <string>
@@ -101,6 +103,39 @@ int main() {
         s.defineString("val", "3.14");
         float v = s.getFloat("val");
         if (v > 3.13f && v < 3.15f) PASS(); else { FAIL(""); printf("      got %.2f\n", v); }
+    }
+
+    // A float as text: "%.2f", the digits of the largest too (a 32-byte buffer cut them)
+    auto printed = [](float v) {
+        char buf[64];
+        snprintf(buf, sizeof(buf), "%.2f", v);
+        return std::string(buf);
+    };
+
+    TEST("float as text: 22.50") {
+        Store s("test");
+        s.defineFloat("temp", 22.5f);
+        if (s.getString("temp") == "22.50") PASS(); else FAIL(s.getString("temp").c_str());
+    }
+
+    TEST("float 1e35 as text: all 36 digits") {
+        Store s("test");
+        s.defineFloat("big", 1e35f);
+        const std::string got = s.getString("big").c_str();
+        if (got == printed(1e35f) && got.find('.') == 36) PASS(); else FAIL(got.c_str());
+    }
+
+    TEST("the largest float, negative: 43 characters") {
+        Store s("test");
+        s.defineFloat("min", -FLT_MAX);
+        const std::string got = s.getString("min").c_str();
+        if (got == printed(-FLT_MAX) && got.size() == 43) PASS(); else FAIL(got.c_str());
+    }
+
+    TEST("floatToString: as getString") {
+        if (std::string(Store::floatToString(FLT_MAX).c_str()) == printed(FLT_MAX) &&
+            Store::floatToString(3.14159f) == "3.14")
+            PASS(); else FAIL("");
     }
 
     // === has / count ===

@@ -288,7 +288,33 @@ public:
     }
     
     // ============ UTILS ============
-    
+
+    // A value as {var} shows it; a float with two decimals, "%.2f"
+    static P::String valueToString(const VarValue& v) {
+        return std::visit([](auto&& val) -> P::String {
+            using T = std::decay_t<decltype(val)>;
+            if constexpr (std::is_same_v<T, P::String>) {
+                return val;
+            } else if constexpr (std::is_same_v<T, int>) {
+                char buf[16];
+                snprintf(buf, sizeof(buf), "%d", val);
+                return buf;
+            } else if constexpr (std::is_same_v<T, bool>) {
+                return val ? "true" : "false";
+            } else if constexpr (std::is_same_v<T, float>) {
+                return floatToString(val);
+            }
+            return "";
+        }, v);
+    }
+
+    // "%.2f" of any float: the largest, 3.4e38, has 39 digits before the point
+    static P::String floatToString(float v) {
+        char buf[48];
+        snprintf(buf, sizeof(buf), "%.2f", v);
+        return buf;
+    }
+
     static const char* typeToString(VarType t) {
         switch (t) {
             case VarType::Bool: return "bool";
@@ -329,26 +355,6 @@ private:
     P::Map<P::String, P::Array<P::String>> m_arrays;
     std::function<void(const P::String&, const VarValue&)> m_onChange;
     const char* m_tag = "Store";
-    
-    static P::String valueToString(const VarValue& v) {
-        return std::visit([](auto&& val) -> P::String {
-            using T = std::decay_t<decltype(val)>;
-            if constexpr (std::is_same_v<T, P::String>) {
-                return val;
-            } else if constexpr (std::is_same_v<T, int>) {
-                char buf[16];
-                snprintf(buf, sizeof(buf), "%d", val);
-                return buf;
-            } else if constexpr (std::is_same_v<T, bool>) {
-                return val ? "true" : "false";
-            } else if constexpr (std::is_same_v<T, float>) {
-                char buf[32];
-                snprintf(buf, sizeof(buf), "%.2f", val);
-                return buf;
-            }
-            return "";
-        }, v);
-    }
 };
 
 // ============ C API ============

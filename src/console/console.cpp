@@ -93,9 +93,7 @@ static Result execUi(std::string_view cmd, JsonArray args) {
             } else if (v.is<int>()) {
                 value = std::to_string(v.as<int>()).c_str();
             } else if (v.is<float>() || v.is<double>()) {
-                char buf[32];
-                snprintf(buf, sizeof(buf), "%.2f", v.as<float>());
-                value = buf;
+                value = Store::floatToString(v.as<float>());
             } else if (v.is<bool>()) {
                 value = v.as<bool>() ? "true" : "false";
             }
