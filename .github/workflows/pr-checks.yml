@@ -116,6 +116,14 @@ jobs:
           path: ~/.cache/ccache
           key: ccache-sim-${{ runner.os }}-${{ github.sha }}
           restore-keys: ccache-sim-${{ runner.os }}-
+      # The judge (sim/tools/judge.py): one Playwright version, so the same Chromium every run.
+      # Without it the report says the compatibility was not measured; the screens go on
+      - name: Chromium for the judge
+        continue-on-error: true
+        run: |
+          python3 -m venv ~/judge
+          ~/judge/bin/pip install --quiet playwright==1.63.0
+          ~/judge/bin/python -m playwright install --with-deps chromium
 
       - name: Build, photograph, compare
         id: screens
@@ -124,7 +132,9 @@ jobs:
           if [ "$SAME_REPO" = "true" ]; then
             url="https://raw.githubusercontent.com/${GITHUB_REPOSITORY}/sim-screens/pr-${PR}/${HEAD_SHA}"
           fi
-          python3 head/sim/tools/sim_screens.py --head head --base base --out out --pages 300 \
+          py=python3
+          if [ -x ~/judge/bin/python ]; then py=~/judge/bin/python; fi
+          "$py" head/sim/tools/sim_screens.py --head head --base base --out out --pages 300 \
             --image-url "$url" --base-label "${BASE_SHA::7}" --head-label "${HEAD_SHA::7}" \
             || echo "failed=1" >> "$GITHUB_OUTPUT"
 
@@ -140,6 +150,7 @@ jobs:
           path: |
             out/report.md
             out/status.json
+            out/judge.json
             out/publish/
             out/shots-head/
             out/tests/

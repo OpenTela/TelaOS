@@ -20,7 +20,8 @@
 //   > <console line>         type a line into the firmware serial console (TelaOS)
 //   shot <name>              save <out>/<name>.png
 //   tree <name>              save <out>/<name>.json: widget tree with boxes, values and
-//                            the ids the app gave its elements ("name")
+//                            the ids the app gave its elements ("name"); the app's elements
+//                            as its script sees them, with the boxes of their objects ("dom")
 //   log <text> | quit
 #pragma once
 
@@ -32,6 +33,14 @@
 
 namespace Sim {
 
+// An element of the app (TelaOS: UI::Dom) and the object that draws it; depth 0: a page
+struct DomNode {
+    std::string tag;  // lower case
+    std::string id;
+    const lv_obj_t* obj = nullptr;  // none of its own: <b> in a paragraph
+    int depth = 0;
+};
+
 // What the firmware under test exposes to the robot. Empty hooks = feature unavailable.
 struct RobotHooks {
     std::function<lv_obj_t*(const std::string& id)> findById;
@@ -42,6 +51,8 @@ struct RobotHooks {
     // The watch's heaps: JSON for `tree` and `mem`, one figure for `expect mem.<figure>`
     std::function<std::string()> memJson;
     std::function<bool(const std::string& figure, double& value)> memValue;
+    // The app's elements in the page order, each after its parent: `tree` writes them ("dom")
+    std::function<std::vector<DomNode>()> domNodes;
 };
 
 class Robot {

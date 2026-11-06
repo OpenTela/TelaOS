@@ -115,6 +115,13 @@ Node parentOf(Node n);  // 0: a page, or the top of what is out of the document
 // No script holds n any more: if it is out of the document, its objects go
 void release(Node n);
 
+// The elements in the page order, for tools: the simulator's robot writes them out with `tree`.
+// The simulator is built against older firmware too (the base of a PR): it looks for UI_DOM_WALK
+#define UI_DOM_WALK 1
+Node firstChild(Node n);     // n = 0: the first page
+Node nextSibling(Node n);    // 0: n is the last one in its parent (a page: the last page)
+lv_obj_t* objectOf(Node n);  // its own object; nullptr: it has none (<b> in a paragraph)
+
 // ---- Events (addEventListener) ----
 
 // An event on its way up the elements, as a listener sees it
