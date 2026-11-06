@@ -530,21 +530,21 @@ const lv_font_t* runFont(const Style& st, const lv_font_t* around) {
     return Font::get(size, bold);
 }
 
-int fontForHtmlSize(const P::String& size) {  // <font size="1..7">
+// <font size="1..7">, "+1", "-1" (of 3): the sizes a browser gives them, x-small to xxx-large
+int fontForHtmlSize(const P::String& size) {
     if (size.empty()) return 0;
+    static constexpr int kPx[] = {10, 13, 16, 18, 24, 32, 48};
     int v = atoi(size.c_str());
-    if (size[0] == '+') v = 3 + v;
-    else if (size[0] == '-') v = 3 + v;  // atoi keeps the sign
-    if (v <= 4) return UI::Font::SMALL;
-    if (v == 5) return UI::Font::MEDIUM;
-    if (v == 6) return UI::Font::LARGE;
-    return UI::Font::XLARGE;
+    if (size[0] == '+' || size[0] == '-') v = 3 + v;  // atoi keeps the sign
+    return kPx[std::min(std::max(v, 1), 7) - 1];
 }
 
 // blockFont: the font size of the text the run is in (h1: 48), 0 for the default.
 // uaFont: the size the element has when no rule of the page sizes it (an icon: 24), 0 for none.
 Style derive(const Style& base, const TagRef& t, uint8_t look, int blockFont, int uaFont = 0) {
     Style s = base;
+    // em and % in font-size, and <big>: of the font the run is in
+    const float parentPx = static_cast<float>(base.font > 0 ? base.font : blockFont > 0 ? blockFont : UI::Font::SMALL);
     switch (look) {
         case L_STRONG: s.weight = kWeightBold; break;  // b, strong: the bold face, as in a browser
         case L_EM: case L_DIM: case L_RT: s.color = kDim; break;
@@ -554,7 +554,7 @@ Style derive(const Style& base, const TagRef& t, uint8_t look, int blockFont, in
         case L_MARK: s.color = kMark; break;
         case L_UNDER: s.decor |= kUnderline; break;
         case L_STRIKE: s.decor |= kStrike; break;
-        case L_BIG: s.font = UI::Font::MEDIUM; break;
+        case L_BIG: s.font = static_cast<int>(parentPx * 1.2f + 0.5f); break;  // font-size: larger, as Chromium
         case L_LINK: {
             s.href = attr(t, "href");
             s.onclick = attr(t, "onclick");
@@ -580,8 +580,6 @@ Style derive(const Style& base, const TagRef& t, uint8_t look, int blockFont, in
     UI::Css::findAttr(el.attrs, "id", el.id);
     UI::Css::findAttr(el.attrs, "class", el.classes);
     const P::String style = attr(t, "style");
-    // em and % in font-size: of the font the run is in
-    const float parentPx = static_cast<float>(base.font > 0 ? base.font : blockFont > 0 ? blockFont : UI::Font::SMALL);
     bool sized = false;
     for (const UI::CssDecl& d : UI::Css::instance().cascade(el, style)) {
         if (d.name == "color") {

@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """make_fonts.py — the fonts beside the four firmware fonts.
 
-    python3 scripts/make_fonts.py [ext] [icons] [bold]     # all three by default
+    python3 scripts/make_fonts.py [ext] [sizes] [icons] [bold]     # all four by default
 
 ext — src/font/UbuntuExt_{16,32,48,72}px.c, the glyphs of other languages. Ubuntu_16px …
 Ubuntu_72px (src/font/) have 213 glyphs: ASCII, Russian and a few signs. The glyphs of the other
@@ -9,17 +9,24 @@ European languages come from the same face, Ubuntu Regular 0.83 (fonts/ubuntu/),
 of each size: UbuntuExt_*px. UI::Font makes it the fallback of the first, so a glyph the first
 does not have is drawn from the second, and the 213 glyphs stay as they are, pixel for pixel.
 
-icons — data/system/fonts/Icons_{16,32,48,72}px.bin and Icons.txt: Material Symbols Outlined
+sizes — data/system/fonts/Ubuntu_{12,14,18,20,24,28,36,40}px.bin: the sizes between the four of
+the firmware, so font-size: 20px is drawn at 20px. The same face and the same 650 glyphs as
+Ubuntu_*px and UbuntuExt_*px together, in one font of each size, on the lines a font of the 213
+glyphs of Ubuntu_*px would have: as the four of the firmware. Files on LittleFS: UI::Font loads the
+one of a size when text of that size is first drawn, with the icons of the size behind it.
+
+icons — data/system/fonts/Icons_<px>px.bin of every size, and Icons.txt: Material Symbols Outlined
 (Google, Apache 2.0: fonts/material-symbols/) — the icons of docs/ICONS.md, under the codes of the
 font, and Unicode signs text writes as they are (✓ ← ★ ♥) drawn with the icon of the same
 meaning, filled where Unicode draws the sign solid. They are files on LittleFS, not code: UI::Font
-loads them at start and puts them between the two fonts of the same size. Icons.txt (name, code)
-is what <span class="material-symbols-outlined">home</span> looks up.
+loads those of the four sizes of the firmware at start and puts them between the two fonts of the
+same size; those of the sizes between come with their text. Icons.txt (name, code) is what
+<span class="material-symbols-outlined">home</span> looks up.
 
-bold — data/system/fonts/UbuntuBold_{16,32,48,72}px.bin: Ubuntu Bold 0.83 (fonts/ubuntu/), the
-same 650 glyphs Ubuntu_*px and UbuntuExt_*px draw together, in one font of each size. Files on
-LittleFS too: UI::Font loads the one of a size when text of that size first asks for bold (<b>,
-<strong>, headings, font-weight), and puts the icons of the size behind it.
+bold — data/system/fonts/UbuntuBold_<px>px.bin of every size: Ubuntu Bold 0.83 (fonts/ubuntu/),
+the same 650 glyphs, on the lines of the regular face of the size. Files on LittleFS too: UI::Font
+loads the one of a size when text of that size first asks for bold (<b>, <strong>, headings,
+font-weight), and puts the icons of the size behind it.
 
 Not part of the build: the generated files are committed. Needs fontTools (pip) and lv_font_conv
 1.5 (npm); LV_FONT_CONV names the lv_font_conv to run (default: lv_font_conv). icons also needs
@@ -43,7 +50,10 @@ from fontTools.varLib import instancer
 ROOT = Path(__file__).resolve().parent.parent
 FACE = "fonts/ubuntu/Ubuntu-Regular.ttf"
 BOLD = "fonts/ubuntu/Ubuntu-Bold.ttf"
-SIZES = (16, 32, 48, 72)
+SIZES = (16, 32, 48, 72)  # Ubuntu_*px and UbuntuExt_*px, in flash
+# The sizes between, files on LittleFS: kSizes of src/utils/font.cpp is SIZES and these
+BETWEEN = (12, 14, 18, 20, 24, 28, 36, 40)
+ALL = tuple(sorted(SIZES + BETWEEN))
 
 # What Ubuntu_*px already have (their cmaps): not drawn twice
 MAIN = (set(range(0x20, 0x7F))
@@ -179,7 +189,7 @@ def icons(tool):
     with tempfile.TemporaryDirectory() as tmp:
         # The variable font pinned to one look each, outlined and filled, with only what is drawn
         cut = [static(font, glyphs | {codes[n] for n in signs.values()}, fill, Path(tmp)) for fill in (0, 1)]
-        for size in SIZES:
+        for size in ALL:
             cmd = [tool, "--font", str(cut[0]), "-r", ranges(glyphs)]
             for fill in (0, 1):
                 if fill:
@@ -191,7 +201,7 @@ def icons(tool):
                     "-o", str(out / f"Icons_{size}px.bin")]
             subprocess.run(cmd, cwd=ROOT, check=True)
     (out / "Icons.txt").write_text("".join(f"{n} {codes[n]:x}\n" for n in sorted(ICONS)))
-    print(f"{len(ICONS)} icons and {len(signs)} signs in {len(SIZES)} fonts: data/system/fonts/")
+    print(f"{len(ICONS)} icons and {len(signs)} signs in {len(ALL)} fonts: data/system/fonts/")
 
 
 def static(font, codes, fill, tmp):
@@ -209,49 +219,85 @@ def static(font, codes, fill, tmp):
     return path
 
 
-def bold(tool):
+def text_codes(face):
+    """(codes, borrowed) of the 650 glyphs Ubuntu_*px and UbuntuExt_*px draw together, as `face`
+    has them: what a font of one size between, or bold, draws."""
     regular = TTFont(ROOT / FACE).getBestCmap()
-    cmap = TTFont(ROOT / BOLD).getBestCmap()
-    text = {c for c in MAIN | WANT if c in regular}  # what Ubuntu_*px and UbuntuExt_*px draw
+    cmap = TTFont(ROOT / face).getBestCmap()
+    text = {c for c in MAIN | WANT if c in regular}
     codes = {c for c in text if c in cmap}
     borrowed = {code: glyph for code, glyph in BORROW.items() if code not in cmap and glyph in cmap}
     missing = text - codes - set(borrowed)
     if missing:
-        sys.exit("bold: the face has no " + " ".join(f"U+{c:04X}" for c in sorted(missing)))
+        sys.exit(f"{face}: no " + " ".join(f"U+{c:04X}" for c in sorted(missing)))
+    return codes, borrowed
+
+
+def text_font(tool, face, codes, borrowed, size, path):
+    cmd = [tool, "--font", face, "-r", ranges(codes)]
+    for code, glyph in sorted(borrowed.items()):
+        cmd += ["-r", f"0x{glyph:X}=>0x{code:X}"]
+    cmd += ["--size", str(size), "--bpp", "2", "--format", "bin", "--no-compress", "-o", str(path)]
+    subprocess.run(cmd, cwd=ROOT, check=True)
+
+
+def sizes(tool):
+    codes, borrowed = text_codes(FACE)
     out = ROOT / "data/system/fonts"
     out.mkdir(parents=True, exist_ok=True)
-    for size in SIZES:
-        cmd = [tool, "--font", BOLD, "-r", ranges(codes)]
-        for code, glyph in sorted(borrowed.items()):
-            cmd += ["-r", f"0x{glyph:X}=>0x{code:X}"]
-        cmd += ["--size", str(size), "--bpp", "2", "--format", "bin", "--no-compress",
-                "-o", str(out / f"UbuntuBold_{size}px.bin")]
-        subprocess.run(cmd, cwd=ROOT, check=True)
-        same_line(out / f"UbuntuBold_{size}px.bin", size)
-    print(f"{len(codes) + len(borrowed)} glyphs in {len(SIZES)} fonts: data/system/fonts/UbuntuBold_*px.bin")
+    for size in BETWEEN:
+        path = out / f"Ubuntu_{size}px.bin"
+        text_font(tool, FACE, codes, borrowed, size, path)
+        set_line(path, regular_line(tool, size))
+    print(f"{len(codes) + len(borrowed)} glyphs in {len(BETWEEN)} fonts: data/system/fonts/Ubuntu_*px.bin")
 
 
-def same_line(path, size):
-    """The line of the regular face of the size (line_height and base_line of Ubuntu_*px), written
-    into the head of a binary font: lv_font_conv takes the line from the glyphs it draws, and text
-    turning bold must not move its lines."""
-    c = (ROOT / f"src/font/Ubuntu_{size}px.c").read_text()
-    line = int(re.search(r"\.line_height = (\d+)", c).group(1))
-    base = int(re.search(r"\.base_line = (\d+)", c).group(1))
+def bold(tool):
+    codes, borrowed = text_codes(BOLD)
+    out = ROOT / "data/system/fonts"
+    out.mkdir(parents=True, exist_ok=True)
+    for size in ALL:
+        path = out / f"UbuntuBold_{size}px.bin"
+        text_font(tool, BOLD, codes, borrowed, size, path)
+        set_line(path, regular_line(tool, size))
+    print(f"{len(codes) + len(borrowed)} glyphs in {len(ALL)} fonts: data/system/fonts/UbuntuBold_*px.bin")
+
+
+def regular_line(tool, size):
+    """(ascent, descent) of the regular face of the size, as LVGL reads them from a binary font
+    (line_height = ascent - descent, base_line = -descent): those of Ubuntu_*px for the four of the
+    firmware, and for a size between those a font of the same 213 glyphs would have. lv_font_conv
+    takes the line from the glyphs it draws: the 650 would make the lines of the sizes between taller
+    than the four's, and text turning bold must not move its lines."""
+    if size in SIZES:
+        c = (ROOT / f"src/font/Ubuntu_{size}px.c").read_text()
+        line = int(re.search(r"\.line_height = (\d+)", c).group(1))
+        base = int(re.search(r"\.base_line = (\d+)", c).group(1))
+        return line - base, -base
+    with tempfile.TemporaryDirectory() as tmp:
+        path = Path(tmp) / "main.bin"
+        text_font(tool, FACE, MAIN, {}, size, path)
+        return struct.unpack_from("<Hh", path.read_bytes(), 16)
+
+
+def set_line(path, line):
+    """The line (ascent, descent) written into the head of a binary font (lv_binfont_loader.c)."""
     data = bytearray(path.read_bytes())
     assert data[4:8] == b"head", path
-    struct.pack_into("<Hh", data, 16, line - base, -base)  # ascent, descent (lv_binfont_loader.c)
+    struct.pack_into("<Hh", data, 16, *line)
     path.write_bytes(bytes(data))
 
 
 def main(argv):
-    parts = argv[1:] or ["ext", "icons", "bold"]
-    if any(p not in ("ext", "icons", "bold") for p in parts):
+    parts = argv[1:] or ["ext", "sizes", "icons", "bold"]
+    if any(p not in ("ext", "sizes", "icons", "bold") for p in parts):
         print(__doc__.strip().splitlines()[2].strip())
         return 2
     tool = os.environ.get("LV_FONT_CONV", "lv_font_conv")
     if "ext" in parts:
         ext(tool)
+    if "sizes" in parts:
+        sizes(tool)
     if "icons" in parts:
         icons(tool)
     if "bold" in parts:

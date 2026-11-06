@@ -33,20 +33,23 @@ public:
     static constexpr int LARGE = 48;
     static constexpr int XLARGE = 72;
     
+    // The size get() draws for a requested one: the nearest of 12, 14, 16, 18, 20, 24, 28, 32, 36,
+    // 40, 48 and 72, the larger of two as near (22 → 24)
     static int nearest(int requested);
-    // The font of a size (the next one not smaller of the four). bold: the bold face, a file on
-    // LittleFS loaded the first time it is asked for; without the file, the regular one.
+    // The font of the nearest size. 16, 32, 48 and 72 are in flash; the sizes between, the bold
+    // faces and the icons are files on LittleFS, each loaded the first time it is asked for. Without
+    // the file of a size, the nearest size in flash; bold without its file: the regular face.
     static const lv_font_t* get(int size = SMALL, bool bold = false);
     static const lv_font_t* defaultFont();
-    // The size of a font get() gives (16, 32, 48, 72), bold or not; SMALL for any other font or none
+    // The size of a font get() gives (12 … 72), bold or not; SMALL for any other font or none
     static int sizeOf(const lv_font_t* font);
     // Whether a font is a bold face get() gives
     static bool isBold(const lv_font_t* font);
 
     // The fonts kept as files on LittleFS, data/system/fonts/ (scripts/make_fonts.py): the icon
-    // font of each size goes between Ubuntu_*px and UbuntuExt_*px, its names into iconCode().
-    // Once, after LittleFS is mounted; a file that is not there leaves its glyphs out. The bold
-    // faces wait until get() asks for one.
+    // font of each size in flash goes between Ubuntu_*px and UbuntuExt_*px, its names into
+    // iconCode(). Once, after LittleFS is mounted; a file that is not there leaves its glyphs out.
+    // The other files wait until get() asks for their size.
     static void loadFiles();
     // The code of an icon by its Material Symbols name ("home"); 0 if there is no such icon
     static uint32_t iconCode(std::string_view name);

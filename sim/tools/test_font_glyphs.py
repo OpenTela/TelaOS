@@ -1,13 +1,15 @@
-"""The glyphs of the firmware fonts, read from their cmaps: src/font/*.c and the icon fonts kept
-as files, data/system/fonts/*.bin.
+"""The glyphs of the firmware fonts, read from their cmaps: src/font/*.c and the fonts kept as
+files, data/system/fonts/*.bin.
 
     python3 -m unittest sim/tools/test_font_glyphs.py
 
 Ubuntu_*px keep their 213 glyphs; UbuntuExt_*px, their fallbacks (scripts/make_fonts.py), add the
 other languages and draw nothing twice. Every letter of the html_tags «langs» page is in one of them.
 Icons_*px (loaded from LittleFS) have every icon of Icons.txt and the signs apps write, and are in
-the format the firmware reads; every character of the apps and fixtures has a glyph. UbuntuBold_*px
-(LittleFS too) draw what the regular fonts draw together, on the same lines.
+the format the firmware reads; every character of the apps and fixtures has a glyph. The sizes
+between the four (Ubuntu_<px>px.bin, LittleFS too) are the sizes UI::Font draws, and draw what
+the four draw, on lines that grow with the size. UbuntuBold_*px draw what the regular fonts draw,
+on the same lines. Icons and bold come in every size.
 """
 
 import re
@@ -18,7 +20,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[2]
 FONTS = ROOT / "src" / "font"
 FILE_FONTS = ROOT / "data" / "system" / "fonts"
-SIZES = (16, 32, 48, 72)
+SIZES = (16, 32, 48, 72)  # in flash
 FIXTURES = ROOT / "sim" / "tests" / "fixtures"
 LANGS_PAGE = FIXTURES / "apps" / "html_tags" / "html_tags.bax"
 # font_header_bin_t of lib/lvgl/src/font/lv_binfont_loader.c, after the "head" label
@@ -79,6 +81,35 @@ def bin_font(path):
     return head, codes, subtables
 
 
+def between_sizes():
+    """BETWEEN of scripts/make_fonts.py: the sizes kept as files."""
+    text = (ROOT / "scripts" / "make_fonts.py").read_text("utf-8")
+    return tuple(int(v) for v in re.search(r"^BETWEEN = \(([\d, ]+)\)", text, re.M).group(1).split(","))
+
+
+def firmware_sizes():
+    """kSizes of src/utils/font.cpp: the sizes UI::Font draws."""
+    text = (ROOT / "src" / "utils" / "font.cpp").read_text("utf-8")
+    body = re.search(r"constexpr int kSizes\[\] = \{(.*?)\};", text, re.S).group(1)
+    named = {"Font::SMALL": 16, "Font::MEDIUM": 32, "Font::LARGE": 48, "Font::XLARGE": 72}
+    return tuple(named[v] if v in named else int(v) for v in (s.strip() for s in body.split(",")))
+
+
+BETWEEN = between_sizes()
+ALL = tuple(sorted(SIZES + BETWEEN))
+
+
+def flash_line(size):
+    """(line_height, base_line) of Ubuntu_<size>px.c"""
+    c = (FONTS / f"Ubuntu_{size}px.c").read_text("utf-8")
+    return (int(re.search(r"\.line_height = (\d+)", c).group(1)), int(re.search(r"\.base_line = (\d+)", c).group(1)))
+
+
+def bin_line(head):
+    """(line_height, base_line) LVGL takes from a binary font (lv_binfont_loader.c)"""
+    return head["ascent"] - head["descent"], -head["descent"]
+
+
 def icon_names():
     """{name: code} of Icons.txt, the names UI::Font::iconCode() looks up."""
     out = {}
@@ -123,7 +154,7 @@ class FontGlyphs(unittest.TestCase):
 class IconFonts(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
-        cls.fonts = {s: bin_font(FILE_FONTS / f"Icons_{s}px.bin") for s in SIZES}
+        cls.fonts = {s: bin_font(FILE_FONTS / f"Icons_{s}px.bin") for s in ALL}
         cls.names = icon_names()
         cls.text = codepoints(FONTS / "Ubuntu_16px.c") | codepoints(FONTS / "UbuntuExt_16px.c")
 
@@ -158,10 +189,34 @@ class IconFonts(unittest.TestCase):
         self.assertEqual(missing, {})
 
 
+class SizeFonts(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        cls.fonts = {s: bin_font(FILE_FONTS / f"Ubuntu_{s}px.bin") for s in BETWEEN}
+        cls.text = codepoints(FONTS / "Ubuntu_16px.c") | codepoints(FONTS / "UbuntuExt_16px.c")
+
+    def test_the_firmware_draws_the_sizes_the_script_makes(self):
+        self.assertEqual(firmware_sizes(), ALL)
+        self.assertEqual(set(SIZES) & set(BETWEEN), set())
+
+    def test_the_firmware_can_read_them(self):
+        for s, (head, _, subtables) in self.fonts.items():
+            self.assertEqual((head["font_size"], head["bits_per_pixel"], head["compression_id"]), (s, 2, 0))
+            self.assertEqual([t for t in subtables if t[0] == 0 and t[2] > 255], [], s)
+
+    def test_they_draw_what_the_four_draw(self):
+        for s, (_, codes, _) in self.fonts.items():
+            self.assertEqual(sorted(hex(c) for c in self.text ^ codes), [], s)
+
+    def test_lines_grow_with_the_size(self):
+        lines = [flash_line(s)[0] if s in SIZES else bin_line(self.fonts[s][0])[0] for s in ALL]
+        self.assertEqual(lines, sorted(set(lines)), list(zip(ALL, lines)))
+
+
 class BoldFonts(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
-        cls.fonts = {s: bin_font(FILE_FONTS / f"UbuntuBold_{s}px.bin") for s in SIZES}
+        cls.fonts = {s: bin_font(FILE_FONTS / f"UbuntuBold_{s}px.bin") for s in ALL}
 
     def test_the_firmware_can_read_them(self):
         for s, (head, _, subtables) in self.fonts.items():
@@ -170,16 +225,16 @@ class BoldFonts(unittest.TestCase):
 
     def test_they_draw_what_the_regular_faces_draw(self):
         for s, (_, codes, _) in self.fonts.items():
-            regular = codepoints(FONTS / f"Ubuntu_{s}px.c") | codepoints(FONTS / f"UbuntuExt_{s}px.c")
+            if s in SIZES:
+                regular = codepoints(FONTS / f"Ubuntu_{s}px.c") | codepoints(FONTS / f"UbuntuExt_{s}px.c")
+            else:
+                regular = bin_font(FILE_FONTS / f"Ubuntu_{s}px.bin")[1]
             self.assertEqual(sorted(hex(c) for c in regular ^ codes), [], s)
 
     def test_text_turning_bold_keeps_its_lines(self):
-        # LVGL: line_height = ascent - descent, base_line = -descent (lv_binfont_loader.c)
         for s, (head, _, _) in self.fonts.items():
-            c = (FONTS / f"Ubuntu_{s}px.c").read_text("utf-8")
-            line = int(re.search(r"\.line_height = (\d+)", c).group(1))
-            base = int(re.search(r"\.base_line = (\d+)", c).group(1))
-            self.assertEqual((head["ascent"] - head["descent"], -head["descent"]), (line, base), s)
+            regular = flash_line(s) if s in SIZES else bin_line(bin_font(FILE_FONTS / f"Ubuntu_{s}px.bin")[0])
+            self.assertEqual(bin_line(head), regular, s)
 
 
 if __name__ == "__main__":
