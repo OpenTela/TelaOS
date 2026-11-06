@@ -873,6 +873,17 @@ float fontPxOf(lv_obj_t* o) {
 
 // font: 32 (TelaOS) or font: bold 12px/1.5 Arial (CSS): its size in px, 0 if it has none. A bare
 // number among several parts is a weight (700), not a size.
+// The weight in a font shorthand, before its size: font: bold 16px, font: 600 1em; 0 if none
+int fontShorthandWeight(std::string_view value) {
+    const P::Array<std::string_view> parts = cssParts(value);
+    if (parts.size() < 2) return 0;  // font: 16px, or a system font name
+    for (std::string_view p : parts) {
+        if (const int w = cssFontWeight(p)) return w;
+        if (!p.empty() && (std::isdigit(static_cast<unsigned char>(p[0])) || p[0] == '.')) break;  // the size
+    }
+    return 0;
+}
+
 int fontShorthandSize(std::string_view value, float parentPx) {
     const P::Array<std::string_view> parts = cssParts(value);
     if (parts.size() == 1) return cssFontSize(parts[0], parentPx);
@@ -1331,12 +1342,16 @@ void Css::applyProps(Widget& w, const P::Array<CssDecl>& decls, uint16_t state) 
     // in font-size itself, em is the parent's
     const float parentEm = fontPxOf(lv_obj_get_parent(o));
     int fontPx = 0;
+    int weight = 0;  // font-weight, or the weight of font: bold 16px
     for (const CssDecl& d : decls) {
         if (!base) break;
         int px = 0;
+        int w = 0;
         if (d.name == "font-size") px = cssFontSize(d.value, parentEm);
-        else if (d.name == "font") px = fontShorthandSize(d.value, parentEm);
+        else if (d.name == "font-weight") w = cssFontWeight(d.value);
+        else if (d.name == "font") px = fontShorthandSize(d.value, parentEm), w = fontShorthandWeight(d.value);
         if (px > 0) fontPx = px;  // the later one wins; one that does not read is left out
+        if (w > 0) weight = w;
     }
     const float em = fontPx > 0 ? static_cast<float>(UI::Font::nearest(fontPx)) : fontPxOf(o);
 
@@ -1434,7 +1449,12 @@ void Css::applyProps(Widget& w, const P::Array<CssDecl>& decls, uint16_t state) 
     applyCssText(o, decls, em, state);       // text-decoration, letter-spacing, line-height, one line
     applyCssTransform(o, decls, em, state);  // translate, scale, rotate
     if (!base) return;
-    if (fontPx > 0) w.applyFont(fontPx);
+    if (fontPx > 0 || weight > 0) {
+        // the face: the weight given, or the one the element has (font-size keeps a heading bold)
+        const lv_font_t* now = lv_obj_get_style_text_font(o, LV_PART_MAIN);
+        const bool bold = weight > 0 ? weight >= 600 : UI::Font::isBold(now);
+        w.applyFont(fontPx > 0 ? fontPx : UI::Font::sizeOf(now), bold);
+    }
 
     // Apply text-valign AFTER height/font are set
     if (!deferredTextValign.empty())

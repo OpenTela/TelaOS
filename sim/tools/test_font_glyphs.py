@@ -6,7 +6,8 @@ as files, data/system/fonts/*.bin.
 Ubuntu_*px keep their 213 glyphs; UbuntuExt_*px, their fallbacks (scripts/make_fonts.py), add the
 other languages and draw nothing twice. Every letter of the html_tags «langs» page is in one of them.
 Icons_*px (loaded from LittleFS) have every icon of Icons.txt and the signs apps write, and are in
-the format the firmware reads; every character of the apps and fixtures has a glyph.
+the format the firmware reads; every character of the apps and fixtures has a glyph. UbuntuBold_*px
+(LittleFS too) draw what the regular fonts draw together, on the same lines.
 """
 
 import re
@@ -155,6 +156,30 @@ class IconFonts(unittest.TestCase):
                 if ord(ch) not in have and ch != "﻿":
                     missing.setdefault(ch, p.relative_to(ROOT).as_posix())
         self.assertEqual(missing, {})
+
+
+class BoldFonts(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        cls.fonts = {s: bin_font(FILE_FONTS / f"UbuntuBold_{s}px.bin") for s in SIZES}
+
+    def test_the_firmware_can_read_them(self):
+        for s, (head, _, subtables) in self.fonts.items():
+            self.assertEqual((head["font_size"], head["bits_per_pixel"], head["compression_id"]), (s, 2, 0))
+            self.assertEqual([t for t in subtables if t[0] == 0 and t[2] > 255], [], s)
+
+    def test_they_draw_what_the_regular_faces_draw(self):
+        for s, (_, codes, _) in self.fonts.items():
+            regular = codepoints(FONTS / f"Ubuntu_{s}px.c") | codepoints(FONTS / f"UbuntuExt_{s}px.c")
+            self.assertEqual(sorted(hex(c) for c in regular ^ codes), [], s)
+
+    def test_text_turning_bold_keeps_its_lines(self):
+        # LVGL: line_height = ascent - descent, base_line = -descent (lv_binfont_loader.c)
+        for s, (head, _, _) in self.fonts.items():
+            c = (FONTS / f"Ubuntu_{s}px.c").read_text("utf-8")
+            line = int(re.search(r"\.line_height = (\d+)", c).group(1))
+            base = int(re.search(r"\.base_line = (\d+)", c).group(1))
+            self.assertEqual((head["ascent"] - head["descent"], -head["descent"]), (line, base), s)
 
 
 if __name__ == "__main__":

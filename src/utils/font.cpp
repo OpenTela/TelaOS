@@ -22,7 +22,23 @@ namespace UI {
 
 namespace {
 
-#if !defined(LVGL_MOCK_ENABLED)
+constexpr int kSizes[] = {Font::SMALL, Font::MEDIUM, Font::LARGE, Font::XLARGE};
+
+// The place of a size of get() in kSizes: the next one not smaller
+int slot(int px) {
+    return px <= Font::SMALL ? 0 : px <= Font::MEDIUM ? 1 : px <= Font::LARGE ? 2 : 3;
+}
+
+// The icon names of Icons.txt, sorted by name as the file is: name → code
+P::Array<std::pair<P::String, uint32_t>> s_icons;
+
+#if defined(LVGL_MOCK_ENABLED)
+// No files in the mock: stand-ins of the bold faces, so tests see which face the engine asks for
+lv_font_t s_mockBold[4] = {{Font::SMALL}, {Font::MEDIUM}, {Font::LARGE}, {Font::XLARGE}};
+
+const lv_font_t* boldFont(int i) { return &s_mockBold[i]; }
+const lv_font_t* loadedBold(int i) { return &s_mockBold[i]; }
+#else
 // A glyph Ubuntu_*px does not have (ä, Ł, Ω, Ґ, №, ≤…) is drawn from UbuntuExt_*px of the
 // same size. Set before main(): the launcher takes &Ubuntu_*px directly, not through get().
 const bool s_fallbacks = [] {
@@ -32,14 +48,41 @@ const bool s_fallbacks = [] {
     Ubuntu_72px.fallback = &UbuntuExt_72px;
     return true;
 }();
-#endif
 
-// The icon names of Icons.txt, sorted by name as the file is: name → code
-P::Array<std::pair<P::String, uint32_t>> s_icons;
+// The fonts of files, by size: the icons (loadFiles) and the bold faces (loaded when first asked
+// for; tried once, so a file that is not there stays nullptr)
+lv_font_t* s_iconFonts[4] = {};
+lv_font_t* s_bold[4] = {};
+bool s_boldTried[4] = {};
 
-#if !defined(LVGL_MOCK_ENABLED)
-// The four icon fonts take 300 KB of PSRAM: loaded only with room for them and some to spare
+// A font file takes up to 400 KB of PSRAM: loaded only with room for it and much to spare
 constexpr size_t kFilesRoom = 1024 * 1024;
+
+// data/system/fonts/<file> (lv_binfont_create), into PSRAM: fonts stay loaded for good, and DRAM
+// is the heap that runs short. Without room there (a board without PSRAM) the file is left out:
+// LVGL stops on an allocation that fails.
+lv_font_t* loadFont(const P::String& file) {
+    if (heap_caps_get_largest_free_block(MALLOC_CAP_SPIRAM) < kFilesRoom) {
+        LOG_W(Log::UI, "font: no room in PSRAM for %s", file.c_str());
+        return nullptr;
+    }
+    const uint32_t start = millis();
+    lv_font_t* font = nullptr;
+    {
+        MemoryManager::InPsram inPsram;
+        font = lv_binfont_create((P::String(SYS_LVGL_PREFIX SYS_FONTS) + file).c_str());
+    }
+    if (!font) {
+        LOG_W(Log::UI, "font: no " SYS_FONTS "%s (pio run -t uploadfs)", file.c_str());
+        return nullptr;
+    }
+    LOG_I(Log::UI, "font: %s in %u ms", file.c_str(), static_cast<unsigned>(millis() - start));
+    return font;
+}
+
+P::String fileName(const char* face, int px) {
+    return P::String(face) + "_" + std::to_string(px).c_str() + "px.bin";
+}
 
 // Icons.txt: a line per icon, "home e9b2"
 void loadIconNames() {
@@ -70,43 +113,36 @@ void loadIconNames() {
     }
     std::sort(s_icons.begin(), s_icons.end());  // the file is sorted; a hand-edited one may not be
 }
+
+// UbuntuBold_<px>px.bin, the bold face of a size, the first time text of that size is bold. Its
+// glyphs are those of Ubuntu_*px and UbuntuExt_*px together; the icons of the size are behind it.
+const lv_font_t* boldFont(int i) {
+    if (!s_boldTried[i]) {
+        s_boldTried[i] = true;
+        s_bold[i] = loadFont(fileName("UbuntuBold", kSizes[i]));
+        if (s_bold[i]) s_bold[i]->fallback = s_iconFonts[i];
+    }
+    return s_bold[i];
+}
+
+const lv_font_t* loadedBold(int i) { return s_bold[i]; }
 #endif
 
 }  // namespace
 
 void Font::loadFiles() {
 #if !defined(LVGL_MOCK_ENABLED)
-    // In PSRAM: they stay loaded for good, and DRAM is the heap that runs short. Without room
-    // there (a board without PSRAM) they are left out: LVGL stops on an allocation that fails.
-    if (heap_caps_get_largest_free_block(MALLOC_CAP_SPIRAM) < kFilesRoom) {
-        LOG_W(Log::UI, "font: no room in PSRAM, icon fonts not loaded");
-        return;
-    }
-    MemoryManager& memory = MemoryManager::instance();
-    const MemoryManager::Mode mode = memory.mode();
-    memory.setMode(MemoryManager::PSRAM);
-    struct Size {
-        int px;
-        lv_font_t& text;
-        const lv_font_t& ext;
-    };
-    const Size sizes[] = {{SMALL, Ubuntu_16px, UbuntuExt_16px}, {MEDIUM, Ubuntu_32px, UbuntuExt_32px},
-                          {LARGE, Ubuntu_48px, UbuntuExt_48px}, {XLARGE, Ubuntu_72px, UbuntuExt_72px}};
-    for (const Size& s : sizes) {
-        const P::String file = P::String("Icons_") + std::to_string(s.px).c_str() + "px.bin";
-        const uint32_t start = millis();
-        lv_font_t* icons = lv_binfont_create((P::String(SYS_LVGL_PREFIX SYS_FONTS) + file).c_str());
-        if (!icons) {
-            LOG_W(Log::UI, "font: no " SYS_FONTS "%s (pio run -t uploadfs): no icons at %dpx", file.c_str(), s.px);
-            continue;
-        }
+    lv_font_t* text[] = {&Ubuntu_16px, &Ubuntu_32px, &Ubuntu_48px, &Ubuntu_72px};
+    const lv_font_t* ext[] = {&UbuntuExt_16px, &UbuntuExt_32px, &UbuntuExt_48px, &UbuntuExt_72px};
+    for (int i = 0; i < 4; ++i) {
+        lv_font_t* icons = loadFont(fileName("Icons", kSizes[i]));
+        if (!icons) continue;
         // Icons hold codes no text font has (their own, ✓ ← ⚙): text → icons → other languages
-        icons->fallback = &s.ext;
-        s.text.fallback = icons;
-        LOG_I(Log::UI, "font: %s in %u ms", file.c_str(), static_cast<unsigned>(millis() - start));
+        icons->fallback = ext[i];
+        text[i]->fallback = icons;
+        s_iconFonts[i] = icons;
     }
     loadIconNames();
-    memory.setMode(mode);
     LOG_I(Log::UI, "font: %u icon names", static_cast<unsigned>(s_icons.size()));
 #endif
 }
@@ -120,18 +156,18 @@ uint32_t Font::iconCode(std::string_view name) {
 }
 
 int Font::nearest(int requested) {
-    if (requested <= 16) return 16;
-    if (requested <= 32) return 32;
-    if (requested <= 48) return 48;
-    return 72;
+    return kSizes[slot(requested)];
 }
 
-const lv_font_t* Font::get(int size) {
-    switch (nearest(size)) {
-        case 16: return &Ubuntu_16px;
-        case 32: return &Ubuntu_32px;
-        case 48: return &Ubuntu_48px;
-        case 72: return &Ubuntu_72px;
+const lv_font_t* Font::get(int size, bool bold) {
+    const int i = slot(size);
+    if (bold) {
+        if (const lv_font_t* b = boldFont(i)) return b;  // no file: the regular face
+    }
+    switch (i) {
+        case 1: return &Ubuntu_32px;
+        case 2: return &Ubuntu_48px;
+        case 3: return &Ubuntu_72px;
         default: return &Ubuntu_16px;
     }
 }
@@ -141,10 +177,20 @@ const lv_font_t* Font::defaultFont() {
 }
 
 int Font::sizeOf(const lv_font_t* font) {
+    for (int i = 0; i < 4; ++i) {
+        if (font && font == loadedBold(i)) return kSizes[i];
+    }
     if (font == &Ubuntu_32px) return MEDIUM;
     if (font == &Ubuntu_48px) return LARGE;
     if (font == &Ubuntu_72px) return XLARGE;
     return SMALL;
+}
+
+bool Font::isBold(const lv_font_t* font) {
+    for (int i = 0; i < 4; ++i) {
+        if (font && font == loadedBold(i)) return true;
+    }
+    return false;
 }
 
 } // namespace UI

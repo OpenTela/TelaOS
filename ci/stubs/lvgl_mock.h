@@ -22,6 +22,7 @@ struct Widget {
     uint32_t color = 0;      // text color
     uint32_t bgcolor = 0;    // background color
     int fontSize = 0;
+    const void* font = nullptr;  // the lv_font_t set on it (lv_obj_get_style_text_font gives it back)
     int radius = 0;
     int opacity = 255;       // 0-255 (lv_obj_set_style_opa, and bg_opa as well)
     int bgOpa = -1;          // lv_obj_set_style_bg_opa; -1: not set

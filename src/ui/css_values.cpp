@@ -307,6 +307,16 @@ int cssFontSize(std::string_view text, float parentPx) {
     return px > 0 ? static_cast<int>(px) : 0;
 }
 
+int cssFontWeight(std::string_view text) {
+    text = trimmed(text);
+    if (equalsNoCase(text, "normal") || equalsNoCase(text, "lighter")) return 400;
+    if (equalsNoCase(text, "bold") || equalsNoCase(text, "bolder")) return 700;
+    size_t i = 0;
+    float v = 0;
+    if (!cssNumber(text, i, v) || i != text.size() || v < 1 || v > 1000) return 0;
+    return static_cast<int>(v);
+}
+
 bool cssColor(std::string_view text, CssColor& out) {
     text = trimmed(text);
     if (text.empty()) return false;

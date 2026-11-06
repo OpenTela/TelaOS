@@ -3,10 +3,10 @@
  * widget_markdown.h — Markdown renderer widget using lv_spangroup
  *
  * Parses a subset of Markdown and renders via LVGL spans:
- *   # H1        → font 48
- *   ## H2       → font 32
- *   ### H3+     → font 16 (bold color)
- *   **bold**    → accent color
+ *   # H1        → font 48, bold
+ *   ## H2       → font 32, bold
+ *   ### H3+     → font 16, bold (header color)
+ *   **bold**    → bold, as <strong> in HTML (accent= colors it)
  *   *italic*    → dimmed color
  *   `code`      → code color
  *   - list item → "  • item"
@@ -30,7 +30,7 @@ struct Markdown : Widget {
     uint32_t    color       = 0xFFFFFF;   // default text color
     uint32_t    h1Color     = 0xFFFFFF;   // header 1 color
     uint32_t    h2Color     = 0xDDDDDD;   // header 2 color
-    uint32_t    accentColor = 0x4FC3F7;   // bold text color
+    uint32_t    accentColor = NO_COLOR;   // bold text color (accent=); none: the text color
     uint32_t    dimColor    = 0xAAAAAA;   // italic text color
     uint32_t    codeColor   = 0x81C784;   // code text color
     uint32_t    bgcolor     = NO_COLOR;
@@ -116,17 +116,17 @@ struct Markdown : Widget {
             if (line.size() >= 4 && line[0] == '#' && line[1] == '#' && line[2] == '#' && line[3] == ' ') {
                 // ### H3
                 P::String text(line.data() + 4, line.size() - 4);
-                addSpan(text, Font::get(UI::Font::SMALL), h2Color);
+                addSpan(text, Font::get(UI::Font::SMALL, true), h2Color);
             }
             else if (line.size() >= 3 && line[0] == '#' && line[1] == '#' && line[2] == ' ') {
                 // ## H2
                 P::String text(line.data() + 3, line.size() - 3);
-                addSpan(text, Font::get(UI::Font::MEDIUM), h2Color);
+                addSpan(text, Font::get(UI::Font::MEDIUM, true), h2Color);
             }
             else if (line.size() >= 2 && line[0] == '#' && line[1] == ' ') {
                 // # H1
                 P::String text(line.data() + 2, line.size() - 2);
-                addSpan(text, Font::get(UI::Font::LARGE), h1Color);
+                addSpan(text, Font::get(UI::Font::LARGE, true), h1Color);
             }
             else if (line.size() >= 2 && (line[0] == '-' || (line[0] == '*' && line[1] == ' ')) && line[1] == ' ') {
                 // - list item or * list item
@@ -199,7 +199,7 @@ private:
                 size_t end = text.find("**", i);
                 if (end != P::String::npos) {
                     P::String bold(text.data() + i, end - i);
-                    addSpan(bold, Font::get(UI::Font::SMALL), accentColor);
+                    addSpan(bold, Font::get(UI::Font::SMALL, true), accentColor != NO_COLOR ? accentColor : color);
                     i = end + 2;
                 } else {
                     buf += "**"; // no closing, keep literal
