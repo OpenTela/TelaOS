@@ -1,6 +1,16 @@
 #include "hal/sdcard.h"
 #include "utils/log_config.h"
 
+#if !defined(LVGL_MOCK_ENABLED)
+// Outside namespace Sd: inside it, device.h would declare an Sd::Device the firmware has not
+#include "esp_vfs_fat.h"
+#include "sdmmc_cmd.h"
+#include "driver/sdspi_host.h"
+#include "driver/spi_common.h"
+#include "ff.h"  // FATFS direct API (f_getfree) — works on IDF 4.4 and 5.x
+#include "hal/device.h"
+#endif
+
 namespace Sd {
 
 static const char* TAG = "SD";
@@ -16,13 +26,6 @@ bool info(uint64_t& t, uint64_t& f) { t = 0; f = 0; return false; }
 
 #else
 // -------- Device build (ESP-IDF FATFS over SPI) --------
-#include "esp_vfs_fat.h"
-#include "sdmmc_cmd.h"
-#include "driver/sdspi_host.h"
-#include "driver/spi_common.h"
-#include "ff.h"  // FATFS direct API (f_getfree) — works on IDF 4.4 and 5.x
-#include "hal/device.h"
-
 static sdmmc_card_t* s_card    = nullptr;
 static bool          s_mounted = false;
 static int           s_spiHost = -1;

@@ -86,11 +86,11 @@ static bool verifyHash() {
         return false;
     }
 
-    static const char* HEX = "0123456789abcdef";
+    static const char* const kDigits = "0123456789abcdef";  // not HEX: Arduino's macro (Print.h)
     char hex[65];
     for (int i = 0; i < 32; i++) {
-        hex[i * 2]     = HEX[digest[i] >> 4];
-        hex[i * 2 + 1] = HEX[digest[i] & 0x0F];
+        hex[i * 2]     = kDigits[digest[i] >> 4];
+        hex[i * 2 + 1] = kDigits[digest[i] & 0x0F];
     }
     hex[64] = '\0';
 
