@@ -124,8 +124,11 @@ struct DropdownChoice {  // <select> with <option disabled>
     P::Array<bool> disabled;
     uint16_t chosen = 0;  // the last option that could be chosen
 };
-static P::Map<const lv_obj_t*, SliderStep> s_sliderSteps;
-static P::Map<const lv_obj_t*, DropdownChoice> s_dropdownChoices;
+// Never destroyed, as UI::Dom's tree: the widgets that go at the simulator's exit, after the
+// statics, still find them
+static P::Map<const lv_obj_t*, SliderStep>& s_sliderSteps = *P::create<P::Map<const lv_obj_t*, SliderStep>>().release();
+static P::Map<const lv_obj_t*, DropdownChoice>& s_dropdownChoices =
+    *P::create<P::Map<const lv_obj_t*, DropdownChoice>>().release();
 
 static void forget_widget_state(lv_event_t* e) {
     const auto* obj = static_cast<const lv_obj_t*>(lv_event_get_user_data(e));
