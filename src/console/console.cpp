@@ -833,30 +833,24 @@ static Result execLog(std::string_view cmd, JsonArray args) {
         return r;
     }
     
-    // Parse level
-    Log::Level level = Log::Info;
-    const std::string_view levelStr = args.size() > 0 ? std::string_view(argStr(args, 0)) : cmd;
-    
-    if (!levelNamed(levelStr, true, level)) {
-        // First arg is category
-        const LogCategory* cat = nullptr;
-        for (const auto& c : kLogCategories) {
-            if (cmd == c.name) cat = &c;
+    // log <category> [level]: that category only; no level is info
+    for (const auto& c : kLogCategories) {
+        if (cmd != c.name) continue;
+        Log::Level level = Log::Info;
+        if (args.size() > 0 && !levelNamed(argStr(args, 0), true, level)) {
+            return Result::errInvalid("Unknown level");
         }
-        if (!cat) return Result::errInvalid("Unknown category");
-        
-        // Second arg is level: full names only, anything else leaves info
-        levelNamed(argStr(args, 0, "info"), false, level);
-        
-        Log::set(cat->cat, level);
-        
+        Log::set(c.cat, level);
+
         auto r = Result::ok();
-        r.data["category"] = cat->name;
+        r.data["category"] = c.name;
         r.data["level"] = Log::levelName(level);
         return r;
     }
-    
-    // Set all categories
+
+    // log <level>: every category
+    Log::Level level = Log::Info;
+    if (!levelNamed(cmd, true, level)) return Result::errInvalid("Unknown category");
     for (const auto& c : kLogCategories) Log::set(c.cat, level);
     
     auto r = Result::ok();
