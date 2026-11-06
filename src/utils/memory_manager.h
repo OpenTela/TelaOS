@@ -31,6 +31,18 @@ public:
     
     void resetPressure() { m_dramLow = false; m_allocCount = 0; }
 
+    /// While one lives, everything goes to PSRAM (what stays allocated for good: fonts loaded from
+    /// files). The mode comes back after it, and what the manager knows of DRAM pressure stays.
+    class InPsram {
+    public:
+        InPsram() : m_prev(instance().m_mode) { instance().m_mode = PSRAM; }
+        ~InPsram() { instance().m_mode = m_prev; }
+        InPsram(const InPsram&) = delete;
+        InPsram& operator=(const InPsram&) = delete;
+    private:
+        Mode m_prev;
+    };
+
     void* alloc(size_t size);
     void* realloc(void* p, size_t size);
     void  free(void* p);

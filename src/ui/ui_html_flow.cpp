@@ -55,7 +55,7 @@ namespace {
 
 constexpr uint32_t kText = 0xFFFFFF;
 constexpr uint32_t kH2 = 0xDDDDDD;
-constexpr uint32_t kAccent = 0x4FC3F7;   // strong, b, links, dt
+constexpr uint32_t kAccent = 0x4FC3F7;   // links, dt
 constexpr uint32_t kDim = 0xAAAAAA;      // em, i, small, markers, captions
 constexpr uint32_t kCode = 0x81C784;     // code, kbd, samp
 constexpr uint32_t kMark = 0xFFD54F;     // mark, meter next to its optimum
@@ -71,6 +71,10 @@ constexpr int kBodyPad = 8;    // HTML body margin
 
 constexpr uint8_t kUnderline = 1;
 constexpr uint8_t kStrike = 2;
+
+// Style::weight: inherited, or the face a run asks for (font-weight 1–500, 600–1000)
+constexpr uint8_t kWeightNormal = 1;
+constexpr uint8_t kWeightBold = 2;
 
 // ============ Tag table ============
 
@@ -475,31 +479,36 @@ struct Style {  // inline run style
     uint32_t color = kInherit;
     uint8_t opa = LV_OPA_COVER;  // the color's alpha: rgba(), #RRGGBBAA
     int font = 0;
+    uint8_t weight = 0;  // 0: as the text around, kWeightNormal, kWeightBold
     uint8_t decor = 0;
     int8_t shift = 0;  // sup: -1 (raised), sub: +1 (lowered)
     P::String href;
     P::String onclick;
     bool same(const Style& o) const {
-        return color == o.color && opa == o.opa && font == o.font && decor == o.decor && shift == o.shift &&
+        return color == o.color && opa == o.opa && font == o.font && weight == o.weight && decor == o.decor &&
+               shift == o.shift &&
                href == o.href && onclick == o.onclick;
     }
     bool plain() const {
-        return color == kInherit && opa == LV_OPA_COVER && !font && !decor && !shift && href.empty() && onclick.empty();
+        return color == kInherit && opa == LV_OPA_COVER && !font && !weight && !decor && !shift && href.empty() &&
+               onclick.empty();
     }
     bool link() const { return !href.empty() || !onclick.empty(); }
 };
 
 struct TextLook {  // block text look
     int font = 0;
+    bool bold = false;
     uint32_t color = kInherit;
     int align = -1;
 };
 
 TextLook lookFor(const char* n) {
     TextLook l;
-    if (is(n, "h1")) l.font = UI::Font::LARGE, l.color = kText;
-    else if (is(n, "h2")) l.font = UI::Font::MEDIUM, l.color = kH2;
-    else if (n[0] == 'h' && n[1] >= '3' && n[1] <= '6' && !n[2]) l.font = UI::Font::SMALL, l.color = kH2;
+    // Headings are bold, as in a browser
+    if (is(n, "h1")) l.font = UI::Font::LARGE, l.color = kText, l.bold = true;
+    else if (is(n, "h2")) l.font = UI::Font::MEDIUM, l.color = kH2, l.bold = true;
+    else if (n[0] == 'h' && n[1] >= '3' && n[1] <= '6' && !n[2]) l.font = UI::Font::SMALL, l.color = kH2, l.bold = true;
     else if (is(n, "dt")) l.color = kAccent;
     else if (is(n, "caption")) l.color = kDim, l.align = LV_TEXT_ALIGN_CENTER;
     else if (is(n, "figcaption") || is(n, "legend")) l.color = kDim;
@@ -507,9 +516,18 @@ TextLook lookFor(const char* n) {
 }
 
 void applyLook(lv_obj_t* o, const TextLook& l) {
-    if (l.font) lv_obj_set_style_text_font(o, Font::get(l.font), LV_PART_MAIN);
+    if (l.font) lv_obj_set_style_text_font(o, Font::get(l.font, l.bold), LV_PART_MAIN);
     if (l.color != kInherit) lv_obj_set_style_text_color(o, lv_color_hex(l.color), LV_PART_MAIN);
     if (l.align >= 0) lv_obj_set_style_text_align(o, static_cast<lv_text_align_t>(l.align), LV_PART_MAIN);
+}
+
+// The font of a run: its own size and weight, or those of the text around it (around: the font
+// its object inherits); nullptr when it has neither and simply takes that font
+const lv_font_t* runFont(const Style& st, const lv_font_t* around) {
+    if (!st.font && !st.weight) return nullptr;
+    const int size = st.font ? st.font : UI::Font::sizeOf(around);
+    const bool bold = st.weight ? st.weight == kWeightBold : UI::Font::isBold(around);
+    return Font::get(size, bold);
 }
 
 int fontForHtmlSize(const P::String& size) {  // <font size="1..7">
@@ -528,7 +546,7 @@ int fontForHtmlSize(const P::String& size) {  // <font size="1..7">
 Style derive(const Style& base, const TagRef& t, uint8_t look, int blockFont, int uaFont = 0) {
     Style s = base;
     switch (look) {
-        case L_STRONG: s.color = kAccent; break;
+        case L_STRONG: s.weight = kWeightBold; break;  // b, strong: the bold face, as in a browser
         case L_EM: case L_DIM: case L_RT: s.color = kDim; break;
         case L_SUB: s.color = kDim, s.shift = 1; break;
         case L_SUP: s.color = kDim, s.shift = -1; break;
@@ -555,7 +573,7 @@ Style derive(const Style& base, const TagRef& t, uint8_t look, int blockFont, in
         default: break;
     }
     // Style sheet rules for this element (nav a, .menu a, a.btn) and its style="". A run of text has
-    // no object of its own, so it takes what a run can show: color, font size, decoration.
+    // no object of its own, so it takes what a run can show: color, font size and weight, decoration.
     UI::CssElement el;
     el.tag = t.name;
     el.attrs = rawAttrs(t);
@@ -574,6 +592,8 @@ Style derive(const Style& base, const TagRef& t, uint8_t look, int blockFont, in
             }
         } else if (d.name == "font-size") {
             if (const int px = UI::cssFontSize(d.value, parentPx); px > 0) s.font = px, sized = true;
+        } else if (d.name == "font-weight") {
+            if (const int w = UI::cssFontWeight(d.value)) s.weight = w >= 600 ? kWeightBold : kWeightNormal;
         } else if (d.name == "text-decoration" || d.name == "text-decoration-line") {
             const P::String v = lower(d.value);
             if (v.find("none") != P::String::npos) s.decor = 0;
@@ -963,7 +983,9 @@ void fillSpans(lv_obj_t* sg, const P::Array<Seg::Item>& items) {
         lv_style_t* s = lv_span_get_style(span);
         if (it.st.color != kInherit) lv_style_set_text_color(s, lv_color_hex(it.st.color));
         if (it.st.opa < LV_OPA_COVER) lv_style_set_text_opa(s, it.st.opa);
-        if (it.st.font) lv_style_set_text_font(s, Font::get(it.st.font));
+        if (const lv_font_t* f = runFont(it.st, lv_obj_get_style_text_font(sg, LV_PART_MAIN))) {
+            lv_style_set_text_font(s, f);
+        }
         if (it.st.decor) {
             lv_style_set_text_decor(s, static_cast<lv_text_decor_t>(
                                            ((it.st.decor & kUnderline) ? LV_TEXT_DECOR_UNDERLINE : 0) |
@@ -1066,7 +1088,9 @@ void Seg::asWords() {
             lv_label_set_text(w, live ? render_template(word.c_str()).c_str() : word.c_str());
             if (it.st.color != kInherit) lv_obj_set_style_text_color(w, lv_color_hex(it.st.color), LV_PART_MAIN);
             if (it.st.opa < LV_OPA_COVER) lv_obj_set_style_text_opa(w, it.st.opa, LV_PART_MAIN);
-            if (it.st.font) lv_obj_set_style_text_font(w, Font::get(it.st.font), LV_PART_MAIN);
+            if (const lv_font_t* f = runFont(it.st, lv_obj_get_style_text_font(w, LV_PART_MAIN))) {
+                lv_obj_set_style_text_font(w, f, LV_PART_MAIN);
+            }
 #if !defined(LVGL_MOCK_ENABLED)
             if (it.st.decor) {
                 lv_obj_set_style_text_decor(w, static_cast<lv_text_decor_t>(
@@ -1974,8 +1998,21 @@ void fallbackElement(const TagRef& t, lv_obj_t* box, const Ctx& ctx) {
 
 // ---- Table cells TelaOS does not know ----
 
+// Whether a rule of the page or style="" gives t a font weight
+bool cssSetsWeight(const TagRef& t) {
+    UI::CssElement el;
+    el.tag = t.name;
+    el.attrs = rawAttrs(t);
+    UI::Css::findAttr(el.attrs, "id", el.id);
+    UI::Css::findAttr(el.attrs, "class", el.classes);
+    for (const UI::CssDecl& d : UI::Css::instance().cascade(el, attr(t, "style"))) {
+        if (d.name == "font-weight" || d.name == "font") return true;
+    }
+    return false;
+}
+
 void thElement(const TagRef& t, lv_obj_t* parent) {
-    // same as TelaOS <td>, header look: accent, centered
+    // same as TelaOS <td>, header look: bold (unless the page gives a weight) and centered
     P::String s = "<td";
     s.append(t.astart, t.aend - t.astart);
     s += ">";
@@ -1986,7 +2023,10 @@ void thElement(const TagRef& t, lv_obj_t* parent) {
         parse_children(s.c_str(), static_cast<int>(s.size()), parent);
     }
     if (lv_obj_t* td = lv_obj_get_child(parent, -1)) {
-        lv_obj_set_style_text_color(td, lv_color_hex(kAccent), LV_PART_MAIN);
+        if (!cssSetsWeight(t)) {
+            const lv_font_t* f = lv_obj_get_style_text_font(td, LV_PART_MAIN);
+            lv_obj_set_style_text_font(td, Font::get(UI::Font::sizeOf(f), true), LV_PART_MAIN);
+        }
         lv_obj_set_style_text_align(td, LV_TEXT_ALIGN_CENTER, LV_PART_MAIN);
     }
 }

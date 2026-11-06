@@ -818,6 +818,7 @@ inline void lv_obj_set_style_text_font(lv_obj_t* obj, const lv_font_t* font, int
 #ifdef LVGL_MOCK_ENABLED
     if (obj && obj->mock_widget && font) {
         obj->mock_widget->fontSize = font->line_height;
+        obj->mock_widget->font = font;
     }
 #endif
 }
@@ -968,7 +969,14 @@ inline void lv_obj_set_style_outline_color(lv_obj_t* obj, lv_color_t c, int sel)
 inline int lv_obj_get_style_pad_left(lv_obj_t* obj, int) { return (obj && obj->mock_widget) ? obj->mock_widget->padLeft : 0; }
 inline int lv_obj_get_style_pad_right(lv_obj_t* obj, int) { return (obj && obj->mock_widget) ? obj->mock_widget->padRight : 0; }
 inline int lv_obj_get_style_pad_column(lv_obj_t* obj, int) { return (obj && obj->mock_widget) ? obj->mock_widget->padColumn : 0; }
-inline const lv_font_t* lv_obj_get_style_text_font(lv_obj_t*, int) { return nullptr; }
+// The font set on the object itself; the mock does not inherit styles, so none: nullptr
+inline const lv_font_t* lv_obj_get_style_text_font(lv_obj_t* obj, int) {
+#ifdef LVGL_MOCK_ENABLED
+    if (obj && obj->mock_widget) return static_cast<const lv_font_t*>(obj->mock_widget->font);
+#endif
+    (void)obj;
+    return nullptr;
+}
 
 // Label
 inline void lv_label_set_text_fmt(lv_obj_t*, const char*, ...) {}

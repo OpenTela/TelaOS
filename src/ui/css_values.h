@@ -38,6 +38,10 @@ bool cssCoord(std::string_view text, float em, int32_t screen, int32_t& px);
 // font-size takes them; 0 if it does not read or is not positive
 int cssFontSize(std::string_view text, float parentPx);
 
+// A font weight, 1 to 1000: normal 400, bold 700; bolder 700 and lighter 400 — with the two faces
+// the watch has, what a browser draws for them whatever the parent's; 0 if it does not read
+int cssFontWeight(std::string_view text);
+
 // A color and its alpha
 struct CssColor {
     uint32_t rgb = 0;     // 0xRRGGBB

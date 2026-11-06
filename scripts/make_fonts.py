@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """make_fonts.py — the fonts beside the four firmware fonts.
 
-    python3 scripts/make_fonts.py [ext] [icons]     # both by default
+    python3 scripts/make_fonts.py [ext] [icons] [bold]     # all three by default
 
 ext — src/font/UbuntuExt_{16,32,48,72}px.c, the glyphs of other languages. Ubuntu_16px …
 Ubuntu_72px (src/font/) have 213 glyphs: ASCII, Russian and a few signs. The glyphs of the other
@@ -16,6 +16,11 @@ meaning, filled where Unicode draws the sign solid. They are files on LittleFS, 
 loads them at start and puts them between the two fonts of the same size. Icons.txt (name, code)
 is what <span class="material-symbols-outlined">home</span> looks up.
 
+bold — data/system/fonts/UbuntuBold_{16,32,48,72}px.bin: Ubuntu Bold 0.83 (fonts/ubuntu/), the
+same 650 glyphs Ubuntu_*px and UbuntuExt_*px draw together, in one font of each size. Files on
+LittleFS too: UI::Font loads the one of a size when text of that size first asks for bold (<b>,
+<strong>, headings, font-weight), and puts the icons of the size behind it.
+
 Not part of the build: the generated files are committed. Needs fontTools (pip) and lv_font_conv
 1.5 (npm); LV_FONT_CONV names the lv_font_conv to run (default: lv_font_conv). icons also needs
 the font it is made from, 10 MB and not in the repository: MATERIAL_SYMBOLS names its .ttf, with
@@ -24,6 +29,8 @@ its .codepoints beside it, both from MATERIAL_URL.
 
 import hashlib
 import os
+import re
+import struct
 import subprocess
 import sys
 import tempfile
@@ -35,6 +42,7 @@ from fontTools.varLib import instancer
 
 ROOT = Path(__file__).resolve().parent.parent
 FACE = "fonts/ubuntu/Ubuntu-Regular.ttf"
+BOLD = "fonts/ubuntu/Ubuntu-Bold.ttf"
 SIZES = (16, 32, 48, 72)
 
 # What Ubuntu_*px already have (their cmaps): not drawn twice
@@ -201,9 +209,44 @@ def static(font, codes, fill, tmp):
     return path
 
 
+def bold(tool):
+    regular = TTFont(ROOT / FACE).getBestCmap()
+    cmap = TTFont(ROOT / BOLD).getBestCmap()
+    text = {c for c in MAIN | WANT if c in regular}  # what Ubuntu_*px and UbuntuExt_*px draw
+    codes = {c for c in text if c in cmap}
+    borrowed = {code: glyph for code, glyph in BORROW.items() if code not in cmap and glyph in cmap}
+    missing = text - codes - set(borrowed)
+    if missing:
+        sys.exit("bold: the face has no " + " ".join(f"U+{c:04X}" for c in sorted(missing)))
+    out = ROOT / "data/system/fonts"
+    out.mkdir(parents=True, exist_ok=True)
+    for size in SIZES:
+        cmd = [tool, "--font", BOLD, "-r", ranges(codes)]
+        for code, glyph in sorted(borrowed.items()):
+            cmd += ["-r", f"0x{glyph:X}=>0x{code:X}"]
+        cmd += ["--size", str(size), "--bpp", "2", "--format", "bin", "--no-compress",
+                "-o", str(out / f"UbuntuBold_{size}px.bin")]
+        subprocess.run(cmd, cwd=ROOT, check=True)
+        same_line(out / f"UbuntuBold_{size}px.bin", size)
+    print(f"{len(codes) + len(borrowed)} glyphs in {len(SIZES)} fonts: data/system/fonts/UbuntuBold_*px.bin")
+
+
+def same_line(path, size):
+    """The line of the regular face of the size (line_height and base_line of Ubuntu_*px), written
+    into the head of a binary font: lv_font_conv takes the line from the glyphs it draws, and text
+    turning bold must not move its lines."""
+    c = (ROOT / f"src/font/Ubuntu_{size}px.c").read_text()
+    line = int(re.search(r"\.line_height = (\d+)", c).group(1))
+    base = int(re.search(r"\.base_line = (\d+)", c).group(1))
+    data = bytearray(path.read_bytes())
+    assert data[4:8] == b"head", path
+    struct.pack_into("<Hh", data, 16, line - base, -base)  # ascent, descent (lv_binfont_loader.c)
+    path.write_bytes(bytes(data))
+
+
 def main(argv):
-    parts = argv[1:] or ["ext", "icons"]
-    if any(p not in ("ext", "icons") for p in parts):
+    parts = argv[1:] or ["ext", "icons", "bold"]
+    if any(p not in ("ext", "icons", "bold") for p in parts):
         print(__doc__.strip().splitlines()[2].strip())
         return 2
     tool = os.environ.get("LV_FONT_CONV", "lv_font_conv")
@@ -211,6 +254,8 @@ def main(argv):
         ext(tool)
     if "icons" in parts:
         icons(tool)
+    if "bold" in parts:
+        bold(tool)
     return 0
 
 

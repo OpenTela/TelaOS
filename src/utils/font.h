@@ -34,14 +34,19 @@ public:
     static constexpr int XLARGE = 72;
     
     static int nearest(int requested);
-    static const lv_font_t* get(int size = SMALL);
+    // The font of a size (the next one not smaller of the four). bold: the bold face, a file on
+    // LittleFS loaded the first time it is asked for; without the file, the regular one.
+    static const lv_font_t* get(int size = SMALL, bool bold = false);
     static const lv_font_t* defaultFont();
-    // The size of a font get() gives (16, 32, 48, 72); SMALL for any other font or none
+    // The size of a font get() gives (16, 32, 48, 72), bold or not; SMALL for any other font or none
     static int sizeOf(const lv_font_t* font);
+    // Whether a font is a bold face get() gives
+    static bool isBold(const lv_font_t* font);
 
     // The fonts kept as files on LittleFS, data/system/fonts/ (scripts/make_fonts.py): the icon
     // font of each size goes between Ubuntu_*px and UbuntuExt_*px, its names into iconCode().
-    // Once, after LittleFS is mounted; a file that is not there leaves its glyphs out.
+    // Once, after LittleFS is mounted; a file that is not there leaves its glyphs out. The bold
+    // faces wait until get() asks for one.
     static void loadFiles();
     // The code of an icon by its Material Symbols name ("home"); 0 if there is no such icon
     static uint32_t iconCode(std::string_view name);
@@ -54,5 +59,5 @@ private:
 
 // Legacy access
 namespace Font {
-    inline const lv_font_t* get(int size) { return UI::Font::get(size); }
+    inline const lv_font_t* get(int size, bool bold = false) { return UI::Font::get(size, bold); }
 }
