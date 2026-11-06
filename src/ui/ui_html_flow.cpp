@@ -65,7 +65,6 @@ constexpr uint32_t kRule = 0x555555;     // hr, borders, bar track
 constexpr uint32_t kPanel = 0x222222;    // dialog, placeholders
 constexpr uint32_t kInherit = 0xFF000000;
 
-constexpr int kIndent = 20;    // the content of <details>
 constexpr int kBlockIndent = 40;  // a browser's: blockquote, figure on both sides; dd on the side lines start
 constexpr int kListPad = 40;   // a list's padding on the side its lines start: a browser's 40px
 constexpr int kMarkerGap = 5;  // a marker and its item: the space after "1." of a browser's marker
@@ -2249,24 +2248,38 @@ bool findChild(const TagRef& t, const char* name, TagRef& out) {
     return false;
 }
 
+// The marker of a <summary> inside it, before its text, as a browser's list-style: inside: the
+// room it takes is a browser's disclosure marker and the space after it, 1.06em (16.94px in 16px)
+void summaryMarker(lv_obj_t* marker, lv_obj_t* text, bool rtl) {
+    if (!text) return;
+    const lv_font_t* font = lv_obj_get_style_text_font(text, LV_PART_MAIN);
+    lv_obj_set_style_text_font(marker, font, LV_PART_MAIN);
+    const int room = (UI::Font::sizeOf(font) * 106 + 50) / 100;
+    const int before = rtl ? lv_obj_get_style_pad_right(text, LV_PART_MAIN) : lv_obj_get_style_pad_left(text, LV_PART_MAIN);
+    if (rtl) lv_obj_set_style_pad_right(text, before + room, LV_PART_MAIN);
+    else lv_obj_set_style_pad_left(text, before + room, LV_PART_MAIN);
+    lv_obj_align(marker, rtl ? LV_ALIGN_TOP_RIGHT : LV_ALIGN_TOP_LEFT, rtl ? -before : before,
+                 lv_obj_get_style_pad_top(text, LV_PART_MAIN));
+}
+
 void detailsElement(const TagRef& t, lv_obj_t* box, const Ctx& ctx) {
     lv_obj_t* d = newBox(box);
     applyGlobal(t, d);
     const bool open = has(t, "open");
+    const bool rtl = rtlIn(t, box);
 
+    // The summary's line: its text from the line's start, the marker over the room it leaves
     lv_obj_t* head = plainObj(d);
     lv_obj_set_width(head, lv_pct(100));
     lv_obj_set_height(head, LV_SIZE_CONTENT);
-    lv_obj_set_flex_flow(head, LV_FLEX_FLOW_ROW);
-    lv_obj_set_style_pad_column(head, 8, LV_PART_MAIN);
+    lv_obj_set_flex_flow(head, LV_FLEX_FLOW_COLUMN);
     UI::letOverflow(head);
+    lv_obj_t* title = newBox(head);
+    setContentBox(head, title);  // its text is the summary's, without the marker
     lv_obj_t* marker = lv_label_create(head);
+    lv_obj_add_flag(marker, LV_OBJ_FLAG_IGNORE_LAYOUT);
     lv_label_set_text(marker, open ? "\xE2\x80\x93" : "+");
     lv_obj_set_style_text_color(marker, lv_color_hex(kAccent), LV_PART_MAIN);
-    lv_obj_t* title = newBox(head);
-    lv_obj_set_width(title, 0);
-    lv_obj_set_flex_grow(title, 1);
-    setContentBox(head, title);  // its text is the summary's, without the marker
 
     Inside in(t);
     TagRef sum;
@@ -2279,9 +2292,9 @@ void detailsElement(const TagRef& t, lv_obj_t* box, const Ctx& ctx) {
     } else {
         newTextLabel(title, "Details");
     }
+    summaryMarker(marker, lv_obj_get_child(title, 0), rtl);
 
-    lv_obj_t* body = newBox(d);
-    lv_obj_set_style_pad_left(body, kIndent, LV_PART_MAIN);
+    lv_obj_t* body = newBox(d);  // no indent, as in a browser
     if (!open) lv_obj_add_flag(body, LV_OBJ_FLAG_HIDDEN);
     Seg seg(body, ctx);
     if (hasSummary) {

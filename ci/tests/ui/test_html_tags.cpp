@@ -183,6 +183,7 @@ static const char* APP_BLOCKS = R"HTML(
   <section id="sec"><header>Head</header><article><p>Body</p></article><footer>Foot</footer></section>
   <details id="det"><summary>More</summary><p>Secret</p></details>
   <details id="det2" open><summary>Open</summary><p>Shown</p></details>
+  <details id="det3" open dir="rtl"><summary>Right</summary><p>Shown right</p></details>
   <dialog id="dlg"><p>Modal</p></dialog>
   <dialog id="dlg2" open><p>Visible modal</p></dialog>
   <table id="tbl">
@@ -472,6 +473,17 @@ int main() {
     expectTrue("<details> closed: body hidden", byText("Secret") && !shown(byText("Secret")));
     expectTrue("<details> closed: summary shown", byText("More") && shown(byText("More")));
     expectTrue("<details open>: body shown", byText("Shown") && shown(byText("Shown")));
+    {
+        // a browser's: the marker is inside the summary, before its text (16.94px in 16px text);
+        // what is in <details> is not indented
+        const MW* sum = byText("Open");
+        expectTrue("<summary>: its text 17px in, the marker in that room", sum && sum->padLeft == 17 && sum->padRight == 0);
+        const MW* right = byText("Right");
+        expectTrue("<summary> in dir=rtl: the room on the right", right && right->padRight == 17 && right->padLeft == 0);
+        int indent = 0;
+        for (const MW* w = byText("Shown"); w && w != byId("det2"); w = w->parent) indent += w->padLeft;
+        expectTrue("<details> content: not indented", byText("Shown") && indent == 0);
+    }
     expectTrue("<dialog> closed: hidden", byText("Modal") && !shown(byText("Modal")));
     expectTrue("<dialog open>: shown", byText("Visible modal") && shown(byText("Visible modal")));
     expectText("table: <caption>, <thead>/<th>, <td> text", "tbl", "Cities City Moscow");
