@@ -205,6 +205,7 @@ class Words(unittest.TestCase):
     def test_how_it_moved(self):
         text = "\n".join(judge.lines(self.result(True), self.result(False)))
         self.assertIn("**1 из 3, 33%** (было 0 из 3, 0%)", text)
+        self.assertIn("- По отдельности, из 2 рамок: x 100% · y 100% (было 50%) · ширина 100% · высота 50% (было 0%)", text)
         self.assertIn("- Теперь совпадает: 1 — `main` · `p#a`", text)
         self.assertNotIn("Перестало", text)
         text = "\n".join(judge.lines(self.result(False), self.result(True)))

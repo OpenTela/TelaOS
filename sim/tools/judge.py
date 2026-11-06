@@ -402,8 +402,12 @@ def lines(head, base=None, details=20):
     if base:
         out += turned(head, base, True) + turned(head, base, False)
     b = head["boxes"]
-    dims = " · ".join(f"{word} {percent(head['dims'][key], b)}" for key, word in DIMS)
-    out.append(f"- По отдельности, из {b} рамок: {dims}")
+
+    def dim(key, word):
+        now = percent(head["dims"][key], b)
+        was = percent(base["dims"][key], base["boxes"]) if base else now
+        return f"{word} {now}" + (f" (было {was})" if was != now else "")
+    out.append(f"- По отдельности, из {b} рамок: " + " · ".join(dim(key, word) for key, word in DIMS))
     for word, d, k in patterns(head["verdicts"]):
         out.append(f"- {word.capitalize()} на часах {'больше' if d > 0 else 'меньше'} на {abs(d)} px — у {k}")
     for page, why in sorted(head["skipped"].items()):
