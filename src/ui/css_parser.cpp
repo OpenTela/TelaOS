@@ -884,6 +884,17 @@ int fontShorthandWeight(std::string_view value) {
     return 0;
 }
 
+// The style in the font shorthand: font: italic bold 16px sans-serif; 0 for none
+int fontShorthandStyle(std::string_view value) {
+    const P::Array<std::string_view> parts = cssParts(value);
+    if (parts.size() < 2) return 0;
+    for (std::string_view p : parts) {
+        if (equalsNoCase(p, "italic") || equalsNoCase(p, "oblique")) return kCssItalic;
+        if (!p.empty() && (std::isdigit(static_cast<unsigned char>(p[0])) || p[0] == '.')) break;  // the size
+    }
+    return 0;
+}
+
 int fontShorthandSize(std::string_view value, float parentPx) {
     const P::Array<std::string_view> parts = cssParts(value);
     if (parts.size() == 1) return cssFontSize(parts[0], parentPx);
@@ -1343,15 +1354,22 @@ void Css::applyProps(Widget& w, const P::Array<CssDecl>& decls, uint16_t state) 
     const float parentEm = fontPxOf(lv_obj_get_parent(o));
     int fontPx = 0;
     int weight = 0;  // font-weight, or the weight of font: bold 16px
+    int style = 0;   // font-style, or the style of font: italic 16px
     for (const CssDecl& d : decls) {
         if (!base) break;
         int px = 0;
         int w = 0;
+        int s = 0;
         if (d.name == "font-size") px = cssFontSize(d.value, parentEm);
         else if (d.name == "font-weight") w = cssFontWeight(d.value);
-        else if (d.name == "font") px = fontShorthandSize(d.value, parentEm), w = fontShorthandWeight(d.value);
+        else if (d.name == "font-style") s = cssFontStyle(d.value);
+        else if (d.name == "font") {
+            px = fontShorthandSize(d.value, parentEm), w = fontShorthandWeight(d.value);
+            s = fontShorthandStyle(d.value);
+        }
         if (px > 0) fontPx = px;  // the later one wins; one that does not read is left out
         if (w > 0) weight = w;
+        if (s > 0) style = s;
     }
     const float em = fontPx > 0 ? static_cast<float>(UI::Font::nearest(fontPx)) : fontPxOf(o);
 
@@ -1449,11 +1467,13 @@ void Css::applyProps(Widget& w, const P::Array<CssDecl>& decls, uint16_t state) 
     applyCssText(o, decls, em, state);       // text-decoration, letter-spacing, line-height, one line
     applyCssTransform(o, decls, em, state);  // translate, scale, rotate
     if (!base) return;
-    if (fontPx > 0 || weight > 0) {
-        // the face: the weight given, or the one the element has (font-size keeps a heading bold)
+    if (fontPx > 0 || weight > 0 || style > 0) {
+        // the face: the weight and style given, or those the element has (font-size keeps a
+        // heading bold, <address> italic)
         const lv_font_t* now = lv_obj_get_style_text_font(o, LV_PART_MAIN);
         const bool bold = weight > 0 ? weight >= 600 : UI::Font::isBold(now);
-        w.applyFont(fontPx > 0 ? fontPx : UI::Font::sizeOf(now), bold);
+        const bool italic = style > 0 ? style == kCssItalic : UI::Font::isItalic(now);
+        w.applyFont(fontPx > 0 ? fontPx : UI::Font::sizeOf(now), bold, italic);
     }
 
     // Apply text-valign AFTER height/font are set

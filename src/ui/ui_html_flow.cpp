@@ -56,7 +56,7 @@ namespace {
 constexpr uint32_t kText = 0xFFFFFF;
 constexpr uint32_t kH2 = 0xDDDDDD;
 constexpr uint32_t kAccent = 0x4FC3F7;   // links, dt
-constexpr uint32_t kDim = 0xAAAAAA;      // em, i, small, markers, captions
+constexpr uint32_t kDim = 0xAAAAAA;      // small, sub, sup, markers, captions
 constexpr uint32_t kCode = 0x81C784;     // code, kbd, samp
 constexpr uint32_t kMark = 0xFFD54F;     // mark, meter next to its optimum
 constexpr uint32_t kBad = 0xE57373;      // meter far from its optimum
@@ -75,6 +75,10 @@ constexpr uint8_t kStrike = 2;
 // Style::weight: inherited, or the face a run asks for (font-weight 1–500, 600–1000)
 constexpr uint8_t kWeightNormal = 1;
 constexpr uint8_t kWeightBold = 2;
+
+// Style::slant: inherited, or upright (font-style: normal) or italic (italic, oblique)
+constexpr uint8_t kSlantNormal = 1;
+constexpr uint8_t kSlantItalic = 2;
 
 // ============ Tag table ============
 
@@ -480,18 +484,18 @@ struct Style {  // inline run style
     uint8_t opa = LV_OPA_COVER;  // the color's alpha: rgba(), #RRGGBBAA
     int font = 0;
     uint8_t weight = 0;  // 0: as the text around, kWeightNormal, kWeightBold
+    uint8_t slant = 0;   // 0: as the text around, kSlantNormal, kSlantItalic
     uint8_t decor = 0;
     int8_t shift = 0;  // sup: -1 (raised), sub: +1 (lowered)
     P::String href;
     P::String onclick;
     bool same(const Style& o) const {
-        return color == o.color && opa == o.opa && font == o.font && weight == o.weight && decor == o.decor &&
-               shift == o.shift &&
-               href == o.href && onclick == o.onclick;
+        return color == o.color && opa == o.opa && font == o.font && weight == o.weight && slant == o.slant &&
+               decor == o.decor && shift == o.shift && href == o.href && onclick == o.onclick;
     }
     bool plain() const {
-        return color == kInherit && opa == LV_OPA_COVER && !font && !weight && !decor && !shift && href.empty() &&
-               onclick.empty();
+        return color == kInherit && opa == LV_OPA_COVER && !font && !weight && !slant && !decor && !shift &&
+               href.empty() && onclick.empty();
     }
     bool link() const { return !href.empty() || !onclick.empty(); }
 };
@@ -521,13 +525,14 @@ void applyLook(lv_obj_t* o, const TextLook& l) {
     if (l.align >= 0) lv_obj_set_style_text_align(o, static_cast<lv_text_align_t>(l.align), LV_PART_MAIN);
 }
 
-// The font of a run: its own size and weight, or those of the text around it (around: the font
-// its object inherits); nullptr when it has neither and simply takes that font
+// The font of a run: its own size, weight and slant, or those of the text around it (around: the
+// font its object inherits); nullptr when it has none and simply takes that font
 const lv_font_t* runFont(const Style& st, const lv_font_t* around) {
-    if (!st.font && !st.weight) return nullptr;
+    if (!st.font && !st.weight && !st.slant) return nullptr;
     const int size = st.font ? st.font : UI::Font::sizeOf(around);
     const bool bold = st.weight ? st.weight == kWeightBold : UI::Font::isBold(around);
-    return Font::get(size, bold);
+    const bool italic = st.slant ? st.slant == kSlantItalic : UI::Font::isItalic(around);
+    return Font::get(size, bold, italic);
 }
 
 // <font size="1..7">, "+1", "-1" (of 3): the sizes a browser gives them, x-small to xxx-large
@@ -547,7 +552,8 @@ Style derive(const Style& base, const TagRef& t, uint8_t look, int blockFont, in
     const float parentPx = static_cast<float>(base.font > 0 ? base.font : blockFont > 0 ? blockFont : UI::Font::SMALL);
     switch (look) {
         case L_STRONG: s.weight = kWeightBold; break;  // b, strong: the bold face, as in a browser
-        case L_EM: case L_DIM: case L_RT: s.color = kDim; break;
+        case L_EM: s.slant = kSlantItalic; break;  // i, em, cite, var, dfn: the italic face, as in a browser
+        case L_DIM: case L_RT: s.color = kDim; break;
         case L_SUB: s.color = kDim, s.shift = 1; break;
         case L_SUP: s.color = kDim, s.shift = -1; break;
         case L_CODE: s.color = kCode; break;
@@ -592,6 +598,8 @@ Style derive(const Style& base, const TagRef& t, uint8_t look, int blockFont, in
             if (const int px = UI::cssFontSize(d.value, parentPx); px > 0) s.font = px, sized = true;
         } else if (d.name == "font-weight") {
             if (const int w = UI::cssFontWeight(d.value)) s.weight = w >= 600 ? kWeightBold : kWeightNormal;
+        } else if (d.name == "font-style") {
+            if (const int f = UI::cssFontStyle(d.value)) s.slant = f == UI::kCssItalic ? kSlantItalic : kSlantNormal;
         } else if (d.name == "text-decoration" || d.name == "text-decoration-line") {
             const P::String v = lower(d.value);
             if (v.find("none") != P::String::npos) s.decor = 0;
@@ -1367,8 +1375,9 @@ void blockElement(const TagRef& t, lv_obj_t* box, const Ctx& ctx) {
     } else if (is(n, "figure")) {
         lv_obj_set_style_pad_left(b, 16, LV_PART_MAIN);
         lv_obj_set_style_pad_right(b, 16, LV_PART_MAIN);
-    } else if (is(n, "address")) {
-        lv_obj_set_style_text_color(b, lv_color_hex(kDim), LV_PART_MAIN);
+    } else if (is(n, "address")) {  // italic, as in a browser
+        const lv_font_t* f = lv_obj_get_style_text_font(b, LV_PART_MAIN);
+        lv_obj_set_style_text_font(b, Font::get(UI::Font::sizeOf(f), UI::Font::isBold(f), true), LV_PART_MAIN);
     } else if (is(n, "center")) {
         lv_obj_set_style_text_align(b, LV_TEXT_ALIGN_CENTER, LV_PART_MAIN);
     }
@@ -2025,7 +2034,7 @@ void thElement(const TagRef& t, lv_obj_t* parent) {
     if (lv_obj_t* td = lv_obj_get_child(parent, -1)) {
         if (!cssSetsWeight(t)) {
             const lv_font_t* f = lv_obj_get_style_text_font(td, LV_PART_MAIN);
-            lv_obj_set_style_text_font(td, Font::get(UI::Font::sizeOf(f), true), LV_PART_MAIN);
+            lv_obj_set_style_text_font(td, Font::get(UI::Font::sizeOf(f), true, UI::Font::isItalic(f)), LV_PART_MAIN);
         }
         lv_obj_set_style_text_align(td, LV_TEXT_ALIGN_CENTER, LV_PART_MAIN);
     }

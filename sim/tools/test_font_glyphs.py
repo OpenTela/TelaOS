@@ -8,8 +8,9 @@ other languages and draw nothing twice. Every letter of the html_tags «langs» 
 Icons_*px (loaded from LittleFS) have every icon of Icons.txt and the signs apps write, and are in
 the format the firmware reads; every character of the apps and fixtures has a glyph. The sizes
 between the four (Ubuntu_<px>px.bin, LittleFS too) are the sizes UI::Font draws, and draw what
-the four draw, on lines that grow with the size. UbuntuBold_*px draw what the regular fonts draw,
-on the same lines. Icons and bold come in every size.
+the four draw, on lines that grow with the size. UbuntuBold_*px, UbuntuItalic_*px and
+UbuntuBoldItalic_*px draw what the regular fonts draw, on the same lines. Icons and the faces come
+in every size.
 """
 
 import re
@@ -213,28 +214,32 @@ class SizeFonts(unittest.TestCase):
         self.assertEqual(lines, sorted(set(lines)), list(zip(ALL, lines)))
 
 
-class BoldFonts(unittest.TestCase):
+# The faces beside the regular one, files of every size (scripts/make_fonts.py bold, italic)
+FACES = ("UbuntuBold", "UbuntuItalic", "UbuntuBoldItalic")
+
+
+class FaceFonts(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
-        cls.fonts = {s: bin_font(FILE_FONTS / f"UbuntuBold_{s}px.bin") for s in ALL}
+        cls.fonts = {(face, s): bin_font(FILE_FONTS / f"{face}_{s}px.bin") for face in FACES for s in ALL}
 
     def test_the_firmware_can_read_them(self):
-        for s, (head, _, subtables) in self.fonts.items():
-            self.assertEqual((head["font_size"], head["bits_per_pixel"], head["compression_id"]), (s, 2, 0))
-            self.assertEqual([t for t in subtables if t[0] == 0 and t[2] > 255], [], s)
+        for (face, s), (head, _, subtables) in self.fonts.items():
+            self.assertEqual((head["font_size"], head["bits_per_pixel"], head["compression_id"]), (s, 2, 0), face)
+            self.assertEqual([t for t in subtables if t[0] == 0 and t[2] > 255], [], (face, s))
 
     def test_they_draw_what_the_regular_faces_draw(self):
-        for s, (_, codes, _) in self.fonts.items():
+        for (face, s), (_, codes, _) in self.fonts.items():
             if s in SIZES:
                 regular = codepoints(FONTS / f"Ubuntu_{s}px.c") | codepoints(FONTS / f"UbuntuExt_{s}px.c")
             else:
                 regular = bin_font(FILE_FONTS / f"Ubuntu_{s}px.bin")[1]
-            self.assertEqual(sorted(hex(c) for c in regular ^ codes), [], s)
+            self.assertEqual(sorted(hex(c) for c in regular ^ codes), [], (face, s))
 
-    def test_text_turning_bold_keeps_its_lines(self):
-        for s, (head, _, _) in self.fonts.items():
+    def test_text_changing_face_keeps_its_lines(self):
+        for (face, s), (head, _, _) in self.fonts.items():
             regular = flash_line(s) if s in SIZES else bin_line(bin_font(FILE_FONTS / f"Ubuntu_{s}px.bin")[0])
-            self.assertEqual(bin_line(head), regular, s)
+            self.assertEqual(bin_line(head), regular, (face, s))
 
 
 if __name__ == "__main__":

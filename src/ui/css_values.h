@@ -42,6 +42,12 @@ int cssFontSize(std::string_view text, float parentPx);
 // the watch has, what a browser draws for them whatever the parent's; 0 if it does not read
 int cssFontWeight(std::string_view text);
 
+// A font style: normal, or italic (italic, oblique and an angle after it: what a browser draws when
+// the font has an italic face and no oblique one); 0 if it does not read
+constexpr int kCssNormal = 1;
+constexpr int kCssItalic = 2;
+int cssFontStyle(std::string_view text);
+
 // A color and its alpha
 struct CssColor {
     uint32_t rgb = 0;     // 0xRRGGBB

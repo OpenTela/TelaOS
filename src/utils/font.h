@@ -36,15 +36,17 @@ public:
     // The size get() draws for a requested one: the nearest of 12, 14, 16, 18, 20, 24, 28, 32, 36,
     // 40, 48 and 72, the larger of two as near (22 → 24)
     static int nearest(int requested);
-    // The font of the nearest size. 16, 32, 48 and 72 are in flash; the sizes between, the bold
-    // faces and the icons are files on LittleFS, each loaded the first time it is asked for. Without
-    // the file of a size, the nearest size in flash; bold without its file: the regular face.
-    static const lv_font_t* get(int size = SMALL, bool bold = false);
+    // The font of the nearest size. 16, 32, 48 and 72 are in flash; the sizes between, the bold,
+    // italic and bold italic faces and the icons are files on LittleFS, each loaded the first time
+    // it is asked for. Without the file of a size, the nearest size in flash; without the file of a
+    // face, the nearest face there is: bold italic, bold, italic, regular.
+    static const lv_font_t* get(int size = SMALL, bool bold = false, bool italic = false);
     static const lv_font_t* defaultFont();
     // The size of a font get() gives (12 … 72), bold or not; SMALL for any other font or none
     static int sizeOf(const lv_font_t* font);
-    // Whether a font is a bold face get() gives
+    // Whether a font get() gives is bold (bold italic too), italic (bold italic too)
     static bool isBold(const lv_font_t* font);
+    static bool isItalic(const lv_font_t* font);
 
     // The fonts kept as files on LittleFS, data/system/fonts/ (scripts/make_fonts.py): the icon
     // font of each size in flash goes between Ubuntu_*px and UbuntuExt_*px, its names into
@@ -62,5 +64,7 @@ private:
 
 // Legacy access
 namespace Font {
-    inline const lv_font_t* get(int size, bool bold = false) { return UI::Font::get(size, bold); }
+    inline const lv_font_t* get(int size, bool bold = false, bool italic = false) {
+        return UI::Font::get(size, bold, italic);
+    }
 }

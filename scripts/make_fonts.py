@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """make_fonts.py — the fonts beside the four firmware fonts.
 
-    python3 scripts/make_fonts.py [ext] [sizes] [icons] [bold]     # all four by default
+    python3 scripts/make_fonts.py [ext] [sizes] [icons] [bold] [italic]     # all by default
 
 ext — src/font/UbuntuExt_{16,32,48,72}px.c, the glyphs of other languages. Ubuntu_16px …
 Ubuntu_72px (src/font/) have 213 glyphs: ASCII, Russian and a few signs. The glyphs of the other
@@ -28,6 +28,10 @@ the same 650 glyphs, on the lines of the regular face of the size. Files on Litt
 loads the one of a size when text of that size first asks for bold (<b>, <strong>, headings,
 font-weight), and puts the icons of the size behind it.
 
+italic — data/system/fonts/UbuntuItalic_<px>px.bin and UbuntuBoldItalic_<px>px.bin of every size:
+Ubuntu Italic and Ubuntu Bold Italic 0.83, as bold — the same glyphs, on the lines of the regular
+face, loaded when text first asks for them (<i>, <em>, <cite>, font-style: italic).
+
 Not part of the build: the generated files are committed. Needs fontTools (pip) and lv_font_conv
 1.5 (npm); LV_FONT_CONV names the lv_font_conv to run (default: lv_font_conv). icons also needs
 the font it is made from, 10 MB and not in the repository: MATERIAL_SYMBOLS names its .ttf, with
@@ -50,6 +54,8 @@ from fontTools.varLib import instancer
 ROOT = Path(__file__).resolve().parent.parent
 FACE = "fonts/ubuntu/Ubuntu-Regular.ttf"
 BOLD = "fonts/ubuntu/Ubuntu-Bold.ttf"
+ITALIC = "fonts/ubuntu/Ubuntu-Italic.ttf"
+BOLD_ITALIC = "fonts/ubuntu/Ubuntu-BoldItalic.ttf"
 SIZES = (16, 32, 48, 72)  # Ubuntu_*px and UbuntuExt_*px, in flash
 # The sizes between, files on LittleFS: kSizes of src/utils/font.cpp is SIZES and these
 BETWEEN = (12, 14, 18, 20, 24, 28, 36, 40)
@@ -252,15 +258,25 @@ def sizes(tool):
     print(f"{len(codes) + len(borrowed)} glyphs in {len(BETWEEN)} fonts: data/system/fonts/Ubuntu_*px.bin")
 
 
-def bold(tool):
-    codes, borrowed = text_codes(BOLD)
+def faces(tool, styled):
+    """The faces of every size: [(the .ttf, the name of its files)], on the lines of the regular."""
     out = ROOT / "data/system/fonts"
     out.mkdir(parents=True, exist_ok=True)
-    for size in ALL:
-        path = out / f"UbuntuBold_{size}px.bin"
-        text_font(tool, BOLD, codes, borrowed, size, path)
-        set_line(path, regular_line(tool, size))
-    print(f"{len(codes) + len(borrowed)} glyphs in {len(ALL)} fonts: data/system/fonts/UbuntuBold_*px.bin")
+    for face, name in styled:
+        codes, borrowed = text_codes(face)
+        for size in ALL:
+            path = out / f"{name}_{size}px.bin"
+            text_font(tool, face, codes, borrowed, size, path)
+            set_line(path, regular_line(tool, size))
+        print(f"{len(codes) + len(borrowed)} glyphs in {len(ALL)} fonts: data/system/fonts/{name}_*px.bin")
+
+
+def bold(tool):
+    faces(tool, [(BOLD, "UbuntuBold")])
+
+
+def italic(tool):
+    faces(tool, [(ITALIC, "UbuntuItalic"), (BOLD_ITALIC, "UbuntuBoldItalic")])
 
 
 def regular_line(tool, size):
@@ -289,8 +305,8 @@ def set_line(path, line):
 
 
 def main(argv):
-    parts = argv[1:] or ["ext", "sizes", "icons", "bold"]
-    if any(p not in ("ext", "sizes", "icons", "bold") for p in parts):
+    parts = argv[1:] or ["ext", "sizes", "icons", "bold", "italic"]
+    if any(p not in ("ext", "sizes", "icons", "bold", "italic") for p in parts):
         print(__doc__.strip().splitlines()[2].strip())
         return 2
     tool = os.environ.get("LV_FONT_CONV", "lv_font_conv")
@@ -302,6 +318,8 @@ def main(argv):
         icons(tool)
     if "bold" in parts:
         bold(tool)
+    if "italic" in parts:
+        italic(tool)
     return 0
 
 
