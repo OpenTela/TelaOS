@@ -41,6 +41,8 @@
 #include <cstring>
 #include <memory>
 #include <sstream>
+#include <string>
+#include <string_view>
 
 static const char *TAG = "ui_html";
 
@@ -50,9 +52,19 @@ namespace {
 constexpr size_t MAX_PAGES_PER_GROUP = 4;
 constexpr size_t MAX_PAGE_CONTENTS = 64;
 
-constexpr size_t TAG_BUF_LEN = 32;
-constexpr size_t PATTERN_BUF_LEN = 48;
+constexpr size_t TAG_NAME_MAX = 31;  // a template's tag name is read up to this many characters
 constexpr size_t VAR_NAME_LEN = 32;
+
+// The first `what` in `text` at or after `from` (a pointer into it), or nullptr: strstr on a view
+const char* findIn(std::string_view text, const char* from, std::string_view what) {
+    const size_t at = text.find(what, static_cast<size_t>(from - text.data()));
+    return at == std::string_view::npos ? nullptr : text.data() + at;
+}
+
+// The text from p up to end begins with `prefix`
+bool startsWith(const char* p, const char* end, std::string_view prefix) {
+    return p < end && std::string_view(p, static_cast<size_t>(end - p)).substr(0, prefix.size()) == prefix;
+}
 
 } // anonymous namespace
 
@@ -475,7 +487,7 @@ static void parse_system(const UI::ParsedElement& root) {
 
 // Parse <templates> section from raw HTML
 // Helper: trim body, lowercase key, store template
-static void store_template(const char* id, const char* bodyStart, const char* bodyEnd) {
+static void store_template(const P::String& id, const char* bodyStart, const char* bodyEnd) {
     while (bodyStart < bodyEnd && isspace((unsigned char)*bodyStart)) bodyStart++;
     const char* trimEnd = bodyEnd;
     while (trimEnd > bodyStart && isspace((unsigned char)*(trimEnd - 1))) trimEnd--;
@@ -483,22 +495,23 @@ static void store_template(const char* id, const char* bodyStart, const char* bo
     P::String key = id;
     for (char& c : key) c = tolower((unsigned char)c);
     g_core.app().setTemplate(key, P::String(bodyStart, trimEnd - bodyStart));
-    LOG_I(Log::UI, "template: %s -> %d bytes", id, (int)(trimEnd - bodyStart));
+    LOG_I(Log::UI, "template: %s -> %d bytes", id.c_str(), (int)(trimEnd - bodyStart));
 }
 
 static void parse_templates(const char* html) {
-    const char* tplSection = strstr(html, "<templates>");
-    if (!tplSection) tplSection = strstr(html, "<templates ");
+    const std::string_view text(html);
+    const char* tplSection = findIn(text, html, "<templates>");
+    if (!tplSection) tplSection = findIn(text, html, "<templates ");
     if (!tplSection) return;
     
-    const char* sectionEnd = strstr(tplSection, "</templates>");
+    const char* sectionEnd = findIn(text, tplSection, "</templates>");
     if (!sectionEnd) return;
     
     if (!isOsV2()) {
         // v1: <template id="Name">body</template>
         const char* p = tplSection;
         while (p < sectionEnd) {
-            const char* tstart = strstr(p, "<template ");
+            const char* tstart = findIn(text, p, "<template ");
             if (!tstart || tstart >= sectionEnd) break;
             
             const char* astart = tstart + 10;
@@ -513,10 +526,10 @@ static void parse_templates(const char* html) {
             }
             
             const char* bodyStart = aend + 1;
-            const char* bodyEnd = strstr(bodyStart, "</template>");
+            const char* bodyEnd = findIn(text, bodyStart, "</template>");
             if (!bodyEnd || bodyEnd > sectionEnd) break;
             
-            store_template(id.c_str(), bodyStart, bodyEnd);
+            store_template(id, bodyStart, bodyEnd);
             p = bodyEnd + 11;
         }
     } else {
@@ -532,13 +545,11 @@ static void parse_templates(const char* html) {
             }
             
             p++;
-            char tagBuf[TAG_BUF_LEN];
-            int ti = 0;
-            while (p < sectionEnd && !isspace((unsigned char)*p) && *p != '>' && *p != '/' && ti < TAG_BUF_LEN - 1) {
-                tagBuf[ti++] = *p++;
+            P::String tag;
+            while (p < sectionEnd && !isspace((unsigned char)*p) && *p != '>' && *p != '/' && tag.size() < TAG_NAME_MAX) {
+                tag += *p++;
             }
-            tagBuf[ti] = '\0';
-            if (!tagBuf[0] || !isupper((unsigned char)tagBuf[0])) {
+            if (tag.empty() || !isupper((unsigned char)tag[0])) {
                 while (p < sectionEnd && *p != '>') p++;
                 if (p < sectionEnd) p++;
                 continue;
@@ -548,14 +559,13 @@ static void parse_templates(const char* html) {
             if (p >= sectionEnd) break;
             p++;
             
-            char closePat[PATTERN_BUF_LEN];
-            snprintf(closePat, sizeof(closePat), "</%s>", tagBuf);
+            const P::String closePat = "</" + tag + ">";
             const char* bodyStart = p;
-            const char* bodyEnd = strstr(p, closePat);
+            const char* bodyEnd = findIn(text, p, closePat);
             if (!bodyEnd || bodyEnd > sectionEnd) break;
             
-            store_template(tagBuf, bodyStart, bodyEnd);
-            p = bodyEnd + strlen(closePat);
+            store_template(tag, bodyStart, bodyEnd);
+            p = bodyEnd + closePat.size();
         }
     }
     
@@ -645,7 +655,7 @@ static P::String expand_for(const char* p, const char* end, const char** pp) {
     p++; // skip @
     
     // Expect "for("
-    if (strncmp(p, "for(", 4) != 0) {
+    if (!startsWith(p, end, "for(")) {
         *pp = p;
         return "";
     }
@@ -659,7 +669,7 @@ static P::String expand_for(const char* p, const char* end, const char** pp) {
     
     // Expect "in"
     while (p < end && isspace((unsigned char)*p)) p++;
-    if (strncmp(p, "in", 2) != 0) {
+    if (!startsWith(p, end, "in")) {
         LOG_E(Log::UI, "@for: expected 'in' after variable '%s'", varName.c_str());
         *pp = p;
         return "";
@@ -686,7 +696,7 @@ static P::String expand_for(const char* p, const char* end, const char** pp) {
     
     // Optional "step N"
     while (p < end && isspace((unsigned char)*p)) p++;
-    if (strncmp(p, "step", 4) == 0) {
+    if (startsWith(p, end, "step")) {
         p += 4;
         while (p < end && isspace((unsigned char)*p)) p++;
         step = atoi(p);
@@ -732,9 +742,7 @@ static P::String expand_for(const char* p, const char* end, const char** pp) {
     // Expand: substitute {var} for each value
     P::String result;
     for (int i = rangeStart; i <= rangeEnd; i += step) {
-        char valBuf[16];
-        snprintf(valBuf, sizeof(valBuf), "%d", i);
-        P::String expanded = substitute_var(body, varName, P::String(valBuf));
+        P::String expanded = substitute_var(body, varName, P::String(std::to_string(i)));
         result += expanded;
     }
     
@@ -749,7 +757,7 @@ static P::String expand_all_for(const P::String& html) {
     
     while (p < end) {
         // Look for @for
-        if (*p == '@' && p + 4 < end && strncmp(p + 1, "for(", 4) == 0) {
+        if (*p == '@' && p + 4 < end && startsWith(p + 1, end, "for(")) {
             const char* next = nullptr;
             P::String expanded = expand_for(p, end, &next);
             result += expanded;
@@ -776,15 +784,13 @@ static P::String expand_all_templates(const P::String& html) {
             const char* t = tagStart;
             
             // Read tag name
-            char tagBuf[TAG_BUF_LEN];
-            int ti = 0;
-            while (t < end && !isspace((unsigned char)*t) && *t != '>' && *t != '/' && ti < TAG_BUF_LEN - 1) {
-                tagBuf[ti++] = tolower((unsigned char)*t++);
+            P::String tag;
+            while (t < end && !isspace((unsigned char)*t) && *t != '>' && *t != '/' && tag.size() < TAG_NAME_MAX) {
+                tag += static_cast<char>(tolower((unsigned char)*t++));
             }
-            tagBuf[ti] = '\0';
             
             // Look up template
-            if (const P::String* tpl = g_core.app().findTemplate(P::String(tagBuf))) {
+            if (const P::String* tpl = g_core.app().findTemplate(tag)) {
                 // Found template — parse attributes (skip quoted values)
                 const char* astart = t;
                 while (t < end && *t != '>') {
@@ -809,22 +815,18 @@ static P::String expand_all_templates(const P::String& html) {
                     t += 2; // skip />
                 } else if (*t == '>') {
                     t++; // skip >
-                    // Find closing tag </TagName>
-                    char closePat[PATTERN_BUF_LEN];
-                    snprintf(closePat, sizeof(closePat), "</%s>", tagBuf);
-                    // Also try original case
+                    // Find closing tag </TagName>, its name in any case
                     const char* closePos = nullptr;
-                    // Search case-insensitive for closing tag
                     const char* sp = t;
                     while (sp < end) {
                         if (*sp == '<' && *(sp + 1) == '/') {
                             // Compare tag name case-insensitively
                             const char* cp = sp + 2;
-                            const char* tp = tagBuf;
-                            while (*tp && cp < end && tolower((unsigned char)*cp) == *tp) {
-                                cp++; tp++;
+                            size_t matched = 0;
+                            while (matched < tag.size() && cp < end && tolower((unsigned char)*cp) == tag[matched]) {
+                                cp++; matched++;
                             }
-                            if (*tp == '\0' && cp < end && *cp == '>') {
+                            if (matched == tag.size() && cp < end && *cp == '>') {
                                 closePos = cp + 1;
                                 break;
                             }
@@ -1049,31 +1051,34 @@ void ui_set_state(const char *name, const char *value) {
 // Supports dotted paths {player.x} and array access {items[0]}
 P::String render_template(const char *tpl) {
     P::String result;
-    const char *p = tpl;
+    const std::string_view text(tpl);
+    size_t i = 0;
     
-    while (*p) {
-        if (*p == '{') {
-            const char *close = strchr(p, '}');
-            if (close && (close - p) < VAR_NAME_LEN) {
-                P::String varname(p + 1, close - p - 1);
+    while (i < text.size()) {
+        if (text[i] == '{') {
+            const size_t close = text.find('}', i);
+            if (close != std::string_view::npos && close - i < VAR_NAME_LEN) {
+                P::String varname(text.substr(i + 1, close - i - 1));
                 result += resolve_binding(varname);
-                p = close + 1;
+                i = close + 1;
             } else {
-                result += *p++;
+                result += text[i++];
             }
         } else {
-            result += *p++;
+            result += text[i++];
         }
     }
     return decodeEntities(result);
 }
 
 // Check if template contains {varname}
-static bool template_has_var(const char *tpl, const char *varname) {
-    if (!tpl || !tpl[0] || !varname || !varname[0]) return false;
-    char search[PATTERN_BUF_LEN];
-    snprintf(search, sizeof(search), "{%s}", varname);
-    return strstr(tpl, search) != nullptr;
+static bool template_has_var(std::string_view tpl, const char *varname) {
+    if (!varname || !varname[0]) return false;
+    const std::string_view name(varname);
+    for (size_t at = tpl.find(name); at != std::string_view::npos; at = tpl.find(name, at + 1)) {
+        if (at > 0 && tpl[at - 1] == '{' && at + name.size() < tpl.size() && tpl[at + name.size()] == '}') return true;
+    }
+    return false;
 }
 
 // Update all g_core.app().elements that bind to this variable
@@ -1142,13 +1147,13 @@ static void ui_update_bindings_internal(const char *varname, const char *value) 
                 lv_obj_t *child = lv_obj_get_child(obj, 0);
                 if (child) {
                     const char* cur = lv_label_get_text(child);
-                    if (!cur || strcmp(cur, rendered.c_str()) != 0) {
+                    if (!cur || std::string_view(cur) != rendered.c_str()) {
                         lv_label_set_text(child, rendered.c_str());
                     }
                 }
             } else {
                 const char* cur = lv_label_get_text(obj);
-                if (!cur || strcmp(cur, rendered.c_str()) != 0) {
+                if (!cur || std::string_view(cur) != rendered.c_str()) {
                     lv_label_set_text(obj, rendered.c_str());
                 }
             }
@@ -1216,7 +1221,7 @@ static void ui_update_bindings_internal(const char *varname, const char *value) 
             } else if (lv_obj_check_type(obj, &lv_textarea_class)) {
                 // Skip if text is already the same - prevents cursor reset during typing
                 const char* current = lv_textarea_get_text(obj);
-                if (!current || strcmp(current, value) != 0) {
+                if (!current || std::string_view(current) != value) {
                     lv_textarea_set_text(obj, value);
                 }
             } else if (g_core.app().elements[i]->is_dropdown) {
@@ -1243,13 +1248,12 @@ static void ui_update_bindings_internal(const char *varname, const char *value) 
         // and patch just that one button's text — no rebuild.
         if (g_core.app().elements[i]->is_list &&
             !g_core.app().elements[i]->bind.empty()) {
-            const char* lb = strchr(varname, '[');
-            if (lb) {
-                size_t prefixLen = (size_t)(lb - varname);
+            const std::string_view name(varname);
+            const size_t lb = name.find('[');
+            if (lb != std::string_view::npos) {
                 const P::String& bindName = g_core.app().elements[i]->bind;
-                if (bindName.size() == prefixLen &&
-                    strncmp(varname, bindName.c_str(), prefixLen) == 0) {
-                    int idx0 = atoi(lb + 1);
+                if (name.substr(0, lb) == std::string_view(bindName)) {
+                    int idx0 = atoi(varname + lb + 1);
                     lv_obj_t* listObj = g_core.app().elements[i]->w.handle;
                     uint32_t cnt = lv_obj_get_child_cnt(listObj);
                     if (idx0 >= 0 && idx0 < (int)cnt) {
@@ -1262,14 +1266,16 @@ static void ui_update_bindings_internal(const char *varname, const char *value) 
         
         // Update visibility with visibleBind=varname
         if (!g_core.app().elements[i]->visibleBind.empty() && g_core.app().elements[i]->visibleBind == varname) {
-            bool visible = (strcmp(value, "true") == 0 || strcmp(value, "1") == 0);
+            const std::string_view v(value);
+            bool visible = (v == "true" || v == "1");
             UI::setVisible(g_core.app().elements[i]->box(), visible);
             LOG_V(Log::UI, "Visibility update: %s -> %s", g_core.app().elements[i]->id.c_str(), visible ? "visible" : "hidden");
         }
 
         // Update disabled state with disabled="{varname}"
         if (!g_core.app().elements[i]->disabledBind.empty() && g_core.app().elements[i]->disabledBind == varname) {
-            bool disabled = (strcmp(value, "true") == 0 || strcmp(value, "1") == 0);
+            const std::string_view v(value);
+            bool disabled = (v == "true" || v == "1");
             lv_obj_t* obj_d = g_core.app().elements[i]->box().handle;
             if (obj_d) {
                 if (disabled) lv_obj_add_state(obj_d, LV_STATE_DISABLED);
@@ -1348,12 +1354,13 @@ void ui_show_page_internal(const char *path) {
     if (*p == '/') p++;
     
     // Check if path contains / (group/page format)
-    const char *slash = strchr(p, '/');
+    const std::string_view rest(p);
+    const size_t slash = rest.find('/');
     
-    if (slash) {
+    if (slash != std::string_view::npos) {
         // Path is group/page
-        P::String group_id(p, slash - p);
-        P::String page_id = slash + 1;
+        P::String group_id(rest.substr(0, slash));
+        P::String page_id(rest.substr(slash + 1));
         
         int grp_idx = find_group_index(group_id.c_str());
         if (grp_idx < 0) {
@@ -1450,12 +1457,13 @@ void navigate(const char *href) {
     if (!href || href[0] != '/') return;
     LOG_I(Log::UI, "navigate: %s", href);
     const char *target = href + 1;
+    const std::string_view to(target);
     
-    if (strcmp(target, "next") == 0) {
+    if (to == "next") {
         if (g_core.app().currentPage() < g_core.app().pagesCount() - 1) {
             ui_show_page_internal(g_core.app().pageId(g_core.app().currentPage() + 1).c_str());
         }
-    } else if (strcmp(target, "prev") == 0 || strcmp(target, "back") == 0) {
+    } else if (to == "prev" || to == "back") {
         if (g_core.app().currentPage() > 0) {
             ui_show_page_internal(g_core.app().pageId(g_core.app().currentPage() - 1).c_str());
         }
@@ -1539,11 +1547,12 @@ void create_tabs(const char* astart, const char* aend, const char* content, lv_o
     }
     
     // Parse <tab> children
+    const std::string_view text(content);
     const char* p = content;
-    const char* end = content + strlen(content);
+    const char* end = content + text.size();
     
     while (p < end) {
-        const char* tstart = strstr(p, "<tab");
+        const char* tstart = findIn(text, p, "<tab");
         if (!tstart || tstart >= end) break;
         
         const char* ta = tstart + 4; // skip "<tab"
@@ -1564,7 +1573,7 @@ void create_tabs(const char* astart, const char* aend, const char* content, lv_o
         if (title.empty()) title = "Tab";
         
         // Find </tab>
-        const char* tab_close = strstr(ta, "</tab>");
+        const char* tab_close = findIn(text, ta, "</tab>");
         if (!tab_close || tab_close > end) break;
         
         // Create tab
