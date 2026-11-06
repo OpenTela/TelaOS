@@ -21,6 +21,7 @@ expect @gone :hidden
 expect @tick on
 expect @fixed "fixed"
 expect @box "replaced"
+expect @readLive "read: 1 b"
 shot dom_01_start
 
 scroll @btn

@@ -1068,6 +1068,7 @@ void Seg::asSpans() {
         const P::String tpl(owner_->cstart, owner_->cend - owner_->cstart);
         const Ctx ctx = ctx_;
         auto update = [sg, ctx](const P::String& rendered) {
+            UI::Dom::Pause again;  // its <b>, <a>... are recorded once, by the walk that read it first
             Seg tmp(nullptr, ctx);
             walk(rendered.c_str(), rendered.c_str() + rendered.size(), tmp, Style{}, true);
             fillSpans(sg, tmp.items());
