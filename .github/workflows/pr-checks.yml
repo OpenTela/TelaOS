@@ -6,7 +6,8 @@
 #
 # The simulator job builds sim/ against the PR base and against the PR, photographs every
 # page of every app on both, and posts one comment: what changed, before / after / diff.
-# Pictures live in the sim-screens branch (one commit, no history), removed on PR close.
+# Pictures live in the sim-screens branch (one commit, no history). A merged PR keeps them, so
+# its comment still shows what it changed; a PR closed without merging has them removed.
 # PRs from forks get the same report in the job summary and the artifact, without pictures.
 name: PR checks
 
@@ -147,8 +148,10 @@ jobs:
           retention-days: 14
           if-no-files-found: ignore
 
+      # Only with the report that links them: a run cancelled halfway (the PR merged under it)
+      # must not replace the pictures the comment shows
       - name: Pictures to the sim-screens branch
-        if: always() && env.SAME_REPO == 'true' && hashFiles('out/publish/**') != ''
+        if: always() && env.SAME_REPO == 'true' && hashFiles('out/publish/**') != '' && hashFiles('out/report.md') != ''
         env:
           TOKEN: ${{ github.token }}
         run: |
@@ -182,6 +185,7 @@ jobs:
     name: Remove PR screens
     if: >-
       github.event_name == 'pull_request' && github.event.action == 'closed' &&
+      !github.event.pull_request.merged &&
       github.event.pull_request.head.repo.full_name == github.repository
     runs-on: ubuntu-24.04
     timeout-minutes: 5

@@ -4,9 +4,10 @@
 #
 #   publish_screens.sh <remote-url> <pr> <sha> <dir>   put <dir> at pr-<pr>/<sha>/
 #                                                     (replaces that PR's previous run)
-#   publish_screens.sh <remote-url> <pr>               remove pr-<pr>/ (PR closed)
+#   publish_screens.sh <remote-url> <pr>               remove pr-<pr>/ (PR closed without
+#                                                     merging; a merged PR keeps its pictures)
 #
-# The branch is one commit without history: old pictures do not pile up in the repository.
+# The branch is one commit without history: replaced pictures do not pile up in the repository.
 # Other PRs may publish at the same time: --force-with-lease refuses to overwrite theirs,
 # and the script starts again from the new tip.
 set -euo pipefail
@@ -31,12 +32,12 @@ for attempt in 1 2 3 4 5 6 7 8 9 10; do
         git -C "$work" clean -qfdx
     elif [ -n "$sha" ]; then
         git -C "$work" checkout -q --orphan "$branch"
-        printf 'Simulator screenshots of open pull requests, written by CI (sim/tools/publish_screens.sh).\n' \
-            > "$work/README.md"
     else
         exit 0  # nothing published yet, nothing to remove
     fi
 
+    printf 'Simulator screenshots of pull requests, open and merged, written by CI (sim/tools/publish_screens.sh).\n' \
+        > "$work/README.md"
     rm -rf "${work:?}/pr-$pr"
     if [ -n "$sha" ]; then
         mkdir -p "$work/pr-$pr/$sha"
