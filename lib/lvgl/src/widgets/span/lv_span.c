@@ -818,7 +818,12 @@ static void lv_draw_span(lv_obj_t * obj, lv_layer_t * layer)
 
     /* return if no draw area */
     lv_area_t clip_area;
-    if(!lv_area_intersect(&clip_area, &coords, &layer->_clip_area))  return;
+    /*TelaOS: what glyphs draw past the lines (an accent, a descender) is drawn, as a label draws it:
+     *the clip is the content grown by the object's extra draw size, not the content alone*/
+    lv_area_t text_area = coords;
+    const int32_t room = lv_obj_get_ext_draw_size(obj);
+    lv_area_increase(&text_area, room, room);
+    if(!lv_area_intersect(&clip_area, &text_area, &layer->_clip_area))  return;
     const lv_area_t clip_area_ori = layer->_clip_area;
     layer->_clip_area = clip_area;
 

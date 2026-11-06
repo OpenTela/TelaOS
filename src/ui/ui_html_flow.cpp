@@ -1032,6 +1032,23 @@ void Seg::asLabel() {
 }
 
 #if LV_USE_SPAN
+// Room for what a glyph draws past its line — an accent above the first line, a descender below the
+// last — as LVGL gives a label: a quarter of the tallest line of the spans. Lines are a browser's
+// (scripts/make_fonts.py lines), and a browser does not cut the glyphs that stick out of them either
+void glyphRoom(lv_event_t* e) {
+    lv_obj_t* sg = lv_event_get_current_target_obj(e);
+    int32_t line = lv_font_get_line_height(lv_obj_get_style_text_font(sg, LV_PART_MAIN));
+    const uint32_t n = lv_spangroup_get_span_count(sg);
+    for (uint32_t i = 0; i < n; ++i) {
+        lv_span_t* span = lv_spangroup_get_child(sg, static_cast<int32_t>(i));
+        lv_style_value_t v;
+        if (span && lv_style_get_prop(lv_span_get_style(span), LV_STYLE_TEXT_FONT, &v) == LV_STYLE_RES_FOUND && v.ptr) {
+            line = std::max(line, lv_font_get_line_height(static_cast<const lv_font_t*>(v.ptr)));
+        }
+    }
+    lv_event_set_ext_draw_size(e, line / 4);
+}
+
 void fillSpans(lv_obj_t* sg, const P::Array<Seg::Item>& items) {
     while (lv_spangroup_get_span_count(sg) > 0) lv_spangroup_delete_span(sg, lv_spangroup_get_child(sg, 0));
     for (const auto& it : items) {
@@ -1051,6 +1068,7 @@ void fillSpans(lv_obj_t* sg, const P::Array<Seg::Item>& items) {
         }
     }
     lv_spangroup_refr_mode(sg);
+    lv_obj_refresh_ext_draw_size(sg);  // the fonts of the spans are new: glyphRoom
 }
 #endif
 
@@ -1058,6 +1076,7 @@ void fillSpans(lv_obj_t* sg, const P::Array<Seg::Item>& items) {
 void Seg::asSpans() {
 #if LV_USE_SPAN
     lv_obj_t* sg = lv_spangroup_create(box_);
+    lv_obj_add_event_cb(sg, glyphRoom, LV_EVENT_REFR_EXT_DRAW_SIZE, nullptr);
     lv_obj_set_width(sg, lv_pct(100));
     lv_spangroup_set_mode(sg, LV_SPAN_MODE_BREAK);
     // The look and the element's CSS first: a run that is only bold (<b> in <h1>) takes the size of

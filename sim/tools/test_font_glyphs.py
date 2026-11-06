@@ -8,11 +8,12 @@ other languages and draw nothing twice. Every letter of the html_tags «langs» 
 Icons_*px (loaded from LittleFS) have every icon of Icons.txt and the signs apps write, and are in
 the format the firmware reads; every character of the apps and fixtures has a glyph. The sizes
 between the four (Ubuntu_<px>px.bin, LittleFS too) are the sizes UI::Font draws, and draw what
-the four draw, on lines that grow with the size. UbuntuBold_*px, UbuntuItalic_*px and
-UbuntuBoldItalic_*px draw what the regular fonts draw, on the same lines. Icons and the faces come
-in every size.
+the four draw. UbuntuBold_*px, UbuntuItalic_*px and UbuntuBoldItalic_*px draw what the regular fonts
+draw. Every text font has the line of a browser (line-height: normal, from the face's hhea): the
+same for every face of a size, taller for a larger size. Icons and the faces come in every size.
 """
 
+import math
 import re
 import struct
 import unittest
@@ -109,6 +110,19 @@ def flash_line(size):
 def bin_line(head):
     """(line_height, base_line) LVGL takes from a binary font (lv_binfont_loader.c)"""
     return head["ascent"] - head["descent"], -head["descent"]
+
+
+def browser_line(size, face=ROOT / "fonts" / "ubuntu" / "Ubuntu-Regular.ttf"):
+    """(line_height, base_line) of a browser's line-height: normal, read from the .ttf itself:
+    ascent, descent and line gap of hhea at the size, each rounded half up as Chromium does; half the
+    gap above the text, the rest below"""
+    data = Path(face).read_bytes()
+    tables = {data[12 + 16 * i:16 + 16 * i]: struct.unpack_from(">I", data, 20 + 16 * i)[0]
+              for i in range(struct.unpack_from(">H", data, 4)[0])}
+    upem, = struct.unpack_from(">H", data, tables[b"head"] + 18)
+    ascent, descent, gap = struct.unpack_from(">hhh", data, tables[b"hhea"] + 4)
+    a, d, g = (math.floor(v * size / upem + 0.5) for v in (ascent, -descent, gap))
+    return a + d + g, d + g - g // 2
 
 
 def icon_names():
@@ -212,6 +226,20 @@ class SizeFonts(unittest.TestCase):
     def test_lines_grow_with_the_size(self):
         lines = [flash_line(s)[0] if s in SIZES else bin_line(self.fonts[s][0])[0] for s in ALL]
         self.assertEqual(lines, sorted(set(lines)), list(zip(ALL, lines)))
+
+    def test_lines_are_a_browsers(self):
+        # What Chromium lays out for <p style="font-size: Npx"> in Ubuntu (sim/tools/judge.py)
+        self.assertEqual([browser_line(s)[0] for s in ALL], [13, 16, 18, 21, 24, 28, 32, 37, 42, 46, 55, 83])
+        for s in ALL:
+            mine = flash_line(s) if s in SIZES else bin_line(self.fonts[s][0])
+            self.assertEqual(mine, browser_line(s), s)
+        for s in SIZES:
+            ext = (FONTS / f"UbuntuExt_{s}px.c").read_text("utf-8")
+            self.assertEqual((int(re.search(r"\.line_height = (\d+)", ext).group(1)),
+                              int(re.search(r"\.base_line = (\d+)", ext).group(1))), browser_line(s), s)
+        for face in ("Bold", "Italic", "BoldItalic"):  # the faces have the regular's metrics
+            self.assertEqual([browser_line(s, ROOT / "fonts" / "ubuntu" / f"Ubuntu-{face}.ttf") for s in ALL],
+                             [browser_line(s) for s in ALL], face)
 
 
 # The faces beside the regular one, files of every size (scripts/make_fonts.py bold, italic)
