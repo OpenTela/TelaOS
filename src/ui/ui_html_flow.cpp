@@ -66,8 +66,10 @@ constexpr uint32_t kPanel = 0x222222;    // dialog, placeholders
 constexpr uint32_t kInherit = 0xFF000000;
 
 constexpr int kGap = 8;        // between blocks
-constexpr int kGapList = 4;    // between list items
-constexpr int kIndent = 20;    // dd, blockquote, nested lists
+constexpr int kGapList = 4;    // in <details>
+constexpr int kIndent = 20;    // dd, blockquote
+constexpr int kListPad = 40;   // a list's padding on the side its lines start: a browser's 40px
+constexpr int kMarkerGap = 5;  // a marker and its item: the space after "1." of a browser's marker
 constexpr int kBodyPad = 8;    // HTML body margin
 
 constexpr uint8_t kUnderline = 1;
@@ -1489,18 +1491,30 @@ P::String olMarker(int n, char type) {
     return decimal(n) + ".";
 }
 
+// What an item draws out of its box: its marker, in the list's padding (LVGL draws the children of
+// an object only so far out of it)
+void markerRoom(lv_event_t* e) { lv_event_set_ext_draw_size(e, kListPad + kMarkerGap); }
+
+// An item: its marker outside it, in the list's padding, as a browser's list-style-position:
+// outside; the item is as wide as the list's content
 void listItem(const TagRef& li, lv_obj_t* parent, const Ctx& ctx, const P::String& marker) {
     lv_obj_t* row = plainObj(parent);
     lv_obj_set_width(row, lv_pct(100));
     lv_obj_set_height(row, LV_SIZE_CONTENT);
     lv_obj_set_flex_flow(row, LV_FLEX_FLOW_ROW);
     lv_obj_set_flex_align(row, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_START);
-    lv_obj_set_style_pad_column(row, 6, LV_PART_MAIN);
     UI::letOverflow(row);
+    lv_obj_add_event_cb(row, markerRoom, LV_EVENT_REFR_EXT_DRAW_SIZE, nullptr);
+    lv_obj_refresh_ext_draw_size(row);
     lv_obj_t* m = lv_label_create(row);
     lv_label_set_text(m, marker.c_str());
     lv_obj_set_style_text_color(m, lv_color_hex(kDim), LV_PART_MAIN);
-    lv_obj_t* body = newBox(row, kGapList);
+    lv_obj_add_flag(m, LV_OBJ_FLAG_IGNORE_LAYOUT);
+    lv_obj_set_width(m, kListPad);  // the padding it sits in: a longer marker goes on out of it
+    const bool rtl = rtlIn(li, parent);
+    lv_obj_set_style_text_align(m, rtl ? LV_TEXT_ALIGN_LEFT : LV_TEXT_ALIGN_RIGHT, LV_PART_MAIN);
+    lv_obj_align(m, rtl ? LV_ALIGN_TOP_RIGHT : LV_ALIGN_TOP_LEFT, rtl ? kListPad + kMarkerGap : -(kListPad + kMarkerGap), 0);
+    lv_obj_t* body = newBox(row, 0);  // no room between the lines of an item, as in a browser
     lv_obj_set_width(body, 0);
     lv_obj_set_flex_grow(body, 1);
     applyGlobal(li, row);
@@ -1511,11 +1525,10 @@ void listItem(const TagRef& li, lv_obj_t* parent, const Ctx& ctx, const P::Strin
 }
 
 void listElement(const TagRef& t, lv_obj_t* box, const Ctx& ctx) {
-    lv_obj_t* lb = newBox(box, kGapList);
-    if (ctx.listDepth > 0) {  // nested: indented on the side its lines start
-        if (rtlIn(t, box)) lv_obj_set_style_pad_right(lb, kIndent / 2, LV_PART_MAIN);
-        else lv_obj_set_style_pad_left(lb, kIndent / 2, LV_PART_MAIN);
-    }
+    lv_obj_t* lb = newBox(box, 0);  // items one under another, as in a browser: no room between
+    // 40px on the side its lines start, every list, nested ones too: the markers sit in it
+    if (rtlIn(t, box)) lv_obj_set_style_pad_right(lb, kListPad, LV_PART_MAIN);
+    else lv_obj_set_style_pad_left(lb, kListPad, LV_PART_MAIN);
     applyGlobal(t, lb);
     const bool ordered = is(t.name, "ol");
     P::String type = attr(t, "type");
