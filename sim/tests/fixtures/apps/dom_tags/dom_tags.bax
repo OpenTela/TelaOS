@@ -33,6 +33,8 @@
       <p id="gone">this line hides</p>
       <p id="count">Count: {count}</p>
       <p id="fixed">Count: {count}</p>
+      <p id="liveB">Count <b>{count}</b> now</p>
+      <p id="readLive">-</p>
       <div id="box"><p>Inside: {count}</p><label>two</label></div>
       <input type="checkbox" id="tick" label="Remember">
       <button id="btn" onclick="tap">Tap</button>
@@ -107,6 +109,7 @@ el("spans").textContent = "new text"
 el("gone"):setAttribute("hidden", "")
 el("fixed").textContent = "fixed"
 el("box").textContent = "replaced"
+el("readLive").textContent = "read: " .. #el("liveB"):querySelectorAll("b") .. " b"
 el("tick"):setAttribute("checked", "")
 
 function tap()
