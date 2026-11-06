@@ -421,9 +421,14 @@ int main() {
                 if (c->text == "2") twos.push_back(c);
             }
         }
-        expectTrue("<sup> drawn higher, <sub> lower", twos.size() == 2 && twos[0]->translateY < 0 &&
-                   twos[1]->translateY > 0);
-        expectTrue("the line makes room for them", byId("e") && byId("e")->padTop > 0 && byId("e")->padBottom > 0);
+        expectTrue("<sup>, <sub>: smaller, 14px in 16px text (13.33 in a browser)",
+                   twos.size() == 2 && twos[0]->fontSize == 14 && twos[1]->fontSize == 14);
+        // a browser's: up a third of the text around and 1px, down a fifth and 1px (16px: 6.33, 4.2);
+        // the mock's words have no baseline to line up, the move is just that
+        expectTrue("<sup> 6px up, <sub> 4px down",
+                   twos.size() == 2 && twos[0]->translateY == -6 && twos[1]->translateY == 4);
+        expectTrue("the line makes room above for <sup>; below, the moved <sub> is in its height",
+                   byId("e") && byId("e")->padTop > 0 && byId("e")->padBottom == 0);
     }
     expectText("<bdo dir=rtl>: letters right to left, Cyrillic too", "bdo", "Hello, Привет!");
     expectTrue("dir=rtl: the line sits at the right", byId("rtl") && byId("rtl")->textAlignH == 2 &&
