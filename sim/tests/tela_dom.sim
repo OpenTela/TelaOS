@@ -6,6 +6,8 @@
 # Page "style": style="" of a label shows, a tap sets el.style and the next takes it off.
 # Page "events": listeners get a tap that goes up, one stopped, a link that stays.
 # Page "tree": a tap adds a row made by createElement, another moves the first row to the end.
+# Page "margins": 16px between lines, the margins of two <p> join. A line hides and the two
+# around it are 16px apart, a class gives the last line 40px above. A tap more: as at first.
 
 wait 300
 > app launch dom_tags
@@ -128,6 +130,26 @@ wait 200
 expect @readTree "read: n1 n2 t1"
 expect @t1 :visible
 shot dom_08_tree
+
+# The body's margin is the heading's, 20px. A line is 18px high, 16px between two
+> ui nav margins
+wait 300
+expect @mTitle :y 0
+expect @m1 :y 48
+expect @m2 :y 82
+expect @m3 :y 116
+expect @m4 :y 150
+tap @mToggle
+wait 200
+expect @m2 :hidden
+expect @m3 :y 82
+expect @m4 :y 140
+shot dom_09_margins
+tap @mToggle
+wait 200
+expect @m2 :visible
+expect @m3 :y 116
+expect @m4 :y 150
 
 expect mem.dram_failed 0
 expect mem.psram_failed 0

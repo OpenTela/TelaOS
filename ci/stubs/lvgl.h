@@ -235,6 +235,7 @@ typedef enum {
     LV_EVENT_CANCEL,
     LV_EVENT_DELETE,
     LV_EVENT_REFR_EXT_DRAW_SIZE,
+    LV_EVENT_LAYOUT_CHANGED,
     LV_EVENT_ALL = 0xFF,
     LV_EVENT_PREPROCESS = 0x8000,  // a flag: the callback runs before the others
 } lv_event_code_t;
@@ -623,6 +624,7 @@ inline void lv_obj_set_flex_align(lv_obj_t* obj, lv_flex_align_t main, lv_flex_a
 inline void lv_obj_set_flex_grow(lv_obj_t* obj, int grow) {
     if (obj && obj->mock_widget) obj->mock_widget->flexGrow = grow;
 }
+inline int lv_obj_get_style_flex_grow(lv_obj_t* obj, int) { return (obj && obj->mock_widget) ? obj->mock_widget->flexGrow : 0; }
 #define lv_obj_set_flex_flow lv_obj_set_flex_flow
 #define lv_obj_set_flex_align lv_obj_set_flex_align
 #define lv_obj_set_flex_grow lv_obj_set_flex_grow
@@ -837,9 +839,9 @@ inline void lv_obj_set_style_border_width(lv_obj_t* obj, int v, int sel) { MOCK_
 inline void lv_obj_set_style_border_color(lv_obj_t* obj, lv_color_t c, int sel) { MOCK_STYLE("border_color", borderColor, c.full); }
 inline void lv_obj_set_style_border_opa(lv_obj_t* obj, int v, int sel) { MOCK_STYLE("border_opa", borderOpa, v); }
 inline void lv_obj_set_style_border_side(lv_obj_t* obj, lv_border_side_t v, int sel) { MOCK_STYLE("border_side", borderSide, v); }
-inline void lv_obj_set_style_margin_top(lv_obj_t* obj, int v, int) { MOCK_SET(marginTop, v); }
+inline void lv_obj_set_style_margin_top(lv_obj_t* obj, int v, int) { MOCK_SET(marginTop, v); MOCK_SET(hasMarginTop, true); }
 inline void lv_obj_set_style_margin_right(lv_obj_t* obj, int v, int) { MOCK_SET(marginRight, v); }
-inline void lv_obj_set_style_margin_bottom(lv_obj_t* obj, int v, int) { MOCK_SET(marginBottom, v); }
+inline void lv_obj_set_style_margin_bottom(lv_obj_t* obj, int v, int) { MOCK_SET(marginBottom, v); MOCK_SET(hasMarginBottom, true); }
 inline void lv_obj_set_style_margin_left(lv_obj_t* obj, int v, int) { MOCK_SET(marginLeft, v); }
 inline void lv_obj_set_style_outline_opa(lv_obj_t* obj, int v, int sel) { MOCK_STYLE("outline_opa", outlineOpa, v); }
 inline void lv_obj_set_style_outline_pad(lv_obj_t* obj, int v, int sel) { MOCK_STYLE("outline_pad", outlinePad, v); }
@@ -876,6 +878,12 @@ inline lv_flex_align_t lv_obj_get_style_flex_main_place(lv_obj_t* obj, int) { re
 inline lv_flex_align_t lv_obj_get_style_flex_cross_place(lv_obj_t* obj, int) { return static_cast<lv_flex_align_t>(MOCK_GET(flexCrossAlign, 0)); }
 inline lv_flex_align_t lv_obj_get_style_flex_track_place(lv_obj_t* obj, int) { return static_cast<lv_flex_align_t>(MOCK_GET(flexTrackAlign, 0)); }
 inline int lv_obj_get_style_width(lv_obj_t* obj, int) { return MOCK_GET(w, 0); }
+inline lv_border_side_t lv_obj_get_style_border_side(lv_obj_t* obj, int) {
+    const int side = MOCK_GET(borderSide, -1);
+    return static_cast<lv_border_side_t>(side < 0 ? LV_BORDER_SIDE_FULL : side);
+}
+inline int lv_obj_get_style_border_width(lv_obj_t* obj, int) { return MOCK_GET(borderWidth, 0); }
+inline void lv_obj_mark_layout_as_dirty(lv_obj_t*) {}  // the mock lays nothing out
 inline int lv_obj_get_style_height(lv_obj_t* obj, int) { return MOCK_GET(h, 0); }
 inline void lv_obj_set_style_translate_x(lv_obj_t* obj, int v, int sel) { MOCK_STYLE("translate_x", translateX, v); }
 inline void lv_obj_set_style_text_decor(lv_obj_t* obj, lv_text_decor_t v, int sel) { MOCK_STYLE("text_decor", textDecor, static_cast<int>(v)); }
@@ -898,7 +906,9 @@ enum {
     LV_STYLE_SHADOW_COLOR, LV_STYLE_SHADOW_OPA,
     LV_STYLE_TEXT_COLOR, LV_STYLE_TEXT_OPA, LV_STYLE_OPA, LV_STYLE_RADIUS,
     LV_STYLE_BORDER_SIDE, LV_STYLE_TEXT_DECOR, LV_STYLE_TEXT_LETTER_SPACE,
-    LV_STYLE_LAST_BUILT_IN_PROP = LV_STYLE_TEXT_LETTER_SPACE
+    LV_STYLE_LAST_BUILT_IN_PROP = LV_STYLE_TEXT_LETTER_SPACE,
+    // set and read one at a time (the margins of HTML blocks); css_undo.cpp's mock walks none of them
+    LV_STYLE_MARGIN_TOP, LV_STYLE_MARGIN_BOTTOM, LV_STYLE_PAD_TOP, LV_STYLE_PAD_BOTTOM
 };
 typedef struct {
     const lv_style_prop_t* props;
@@ -1037,6 +1047,8 @@ inline int* mockField(LvglMock::Widget* w, lv_style_prop_t prop, int& unset) {
         case LV_STYLE_RADIUS: unset = 0; return &w->radius;
         case LV_STYLE_TEXT_DECOR: unset = -1; return &w->textDecor;
         case LV_STYLE_TEXT_LETTER_SPACE: unset = 0; return &w->letterSpace;
+        case LV_STYLE_PAD_TOP: unset = 0; return &w->padTop;
+        case LV_STYLE_PAD_BOTTOM: unset = 0; return &w->padBottom;
         default: return nullptr;
     }
 }
@@ -1061,6 +1073,10 @@ inline lv_style_res_t lv_obj_get_local_style_prop(lv_obj_t* obj, lv_style_prop_t
     } else if (prop == LV_STYLE_BORDER_COLOR) {
         if (!w->borderColor) return LV_STYLE_RES_NOT_FOUND;
         value = w->borderColor;
+    } else if (prop == LV_STYLE_MARGIN_TOP || prop == LV_STYLE_MARGIN_BOTTOM) {
+        const bool top = prop == LV_STYLE_MARGIN_TOP;
+        if (!(top ? w->hasMarginTop : w->hasMarginBottom)) return LV_STYLE_RES_NOT_FOUND;
+        value = top ? w->marginTop : w->marginBottom;
     } else {
         int unset = 0;
         const int* f = mockField(w, prop, unset);
@@ -1074,6 +1090,23 @@ inline lv_style_res_t lv_obj_get_local_style_prop(lv_obj_t* obj, lv_style_prop_t
     (void)obj; (void)prop; (void)v; (void)sel;
     return LV_STYLE_RES_NOT_FOUND;
 #endif
+}
+
+// The value a property has on the object: the mock knows its own margins and paddings
+inline lv_style_value_t lv_obj_get_style_prop(lv_obj_t* obj, int part, lv_style_prop_t prop) {
+    lv_style_value_t v{};
+#ifdef LVGL_MOCK_ENABLED
+    if (obj && obj->mock_widget && part == LV_PART_MAIN) {
+        const LvglMock::Widget* w = obj->mock_widget;
+        if (prop == LV_STYLE_MARGIN_TOP) v.num = w->marginTop;
+        else if (prop == LV_STYLE_MARGIN_BOTTOM) v.num = w->marginBottom;
+        else if (prop == LV_STYLE_PAD_TOP) v.num = w->padTop;
+        else if (prop == LV_STYLE_PAD_BOTTOM) v.num = w->padBottom;
+    }
+#else
+    (void)obj; (void)part; (void)prop;
+#endif
+    return v;
 }
 
 inline bool lv_obj_remove_local_style_prop(lv_obj_t* obj, lv_style_prop_t prop, lv_style_selector_t sel) {
@@ -1093,6 +1126,8 @@ inline bool lv_obj_remove_local_style_prop(lv_obj_t* obj, lv_style_prop_t prop, 
     if (prop == LV_STYLE_TEXT_COLOR) { w->hasColor = false; w->color = 0; return true; }
     if (prop == LV_STYLE_BG_COLOR) { w->hasBgcolor = false; w->bgcolor = 0; return true; }
     if (prop == LV_STYLE_BORDER_COLOR) { w->borderColor = 0; return true; }
+    if (prop == LV_STYLE_MARGIN_TOP) { w->hasMarginTop = false; w->marginTop = 0; return true; }
+    if (prop == LV_STYLE_MARGIN_BOTTOM) { w->hasMarginBottom = false; w->marginBottom = 0; return true; }
     int unset = 0;
     int* f = mockField(w, prop, unset);
     if (!f) return false;
@@ -1116,6 +1151,8 @@ inline void lv_obj_set_local_style_prop(lv_obj_t* obj, lv_style_prop_t prop, lv_
     if (prop == LV_STYLE_TEXT_COLOR) { w->hasColor = true; w->color = static_cast<uint32_t>(value); return; }
     if (prop == LV_STYLE_BG_COLOR) { w->hasBgcolor = true; w->bgcolor = static_cast<uint32_t>(value); return; }
     if (prop == LV_STYLE_BORDER_COLOR) { w->borderColor = static_cast<uint32_t>(value); return; }
+    if (prop == LV_STYLE_MARGIN_TOP) { w->hasMarginTop = true; w->marginTop = static_cast<int>(value); return; }
+    if (prop == LV_STYLE_MARGIN_BOTTOM) { w->hasMarginBottom = true; w->marginBottom = static_cast<int>(value); return; }
     int unset = 0;
     if (int* f = mockField(w, prop, unset)) *f = static_cast<int>(value);
 #else

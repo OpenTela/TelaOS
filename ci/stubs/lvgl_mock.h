@@ -30,6 +30,7 @@ struct Widget {
 
     // Box (CSS margin, border, outline, box-shadow, gradient, overflow)
     int marginTop = 0, marginRight = 0, marginBottom = 0, marginLeft = 0;
+    bool hasMarginTop = false, hasMarginBottom = false;  // set, 0 too (CSS margin: 0)
     int borderWidth = 0;
     uint32_t borderColor = 0;
     int borderOpa = 255;

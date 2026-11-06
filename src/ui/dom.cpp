@@ -460,6 +460,7 @@ void restyleOne(uint32_t i) {
     Entry& e = node(i);
     if (!(e.flags & kStyled) || (e.flags & kGone) || !e.obj) return;
     CssUndo kept;
+    HtmlFlow::marginsAside(e.obj);
     if (e.undo) e.undo->undo(e.obj, kept);
     P::String rendered;
     const CssElement el = cssElement(i, true, rendered);
@@ -473,6 +474,7 @@ void restyleOne(uint32_t i) {
     else e.undo = P::create<CssUndo>(std::move(undo));
     Attr hidden;  // hidden= still says what it says
     if (findAttr(e.attrs, "hidden", hidden) && flagOn(hidden.value)) lv_obj_add_flag(e.obj, LV_OBJ_FLAG_HIDDEN);
+    HtmlFlow::restyled(e.obj, e.tag.c_str());
 }
 
 void restyleTree(uint32_t i) {

@@ -644,6 +644,23 @@ bool Robot::exec(const std::vector<std::string>& a, const std::string& where) {
         std::printf("[robot %6u] drag (%d,%d) → (%d,%d)\n", t, p.x, p.y, q.x, q.y);
         return drag(p, q, argMs(3, 300));
     }
+    // expect @id :x | :y | :w | :h <value | lo..hi>   its box in its parent's content, laid out now
+    if (cmd == "expect" && a.size() >= 3 && (a[2] == ":x" || a[2] == ":y" || a[2] == ":w" || a[2] == ":h")) {
+        if (!need(4) || a[1][0] != '@') return fail("expect @id " + a[2] + " <px>");
+        lv_obj_t* o = findById(a[1].substr(1));
+        if (!o) return fail("no widget " + a[1]);
+        lv_obj_update_layout(o);
+        const int v = a[2] == ":x" ? lv_obj_get_x(o) : a[2] == ":y" ? lv_obj_get_y(o)
+                    : a[2] == ":w" ? lv_obj_get_width(o) : lv_obj_get_height(o);
+        const std::string actual = std::to_string(v), expected = unquote(a[3]);
+        if (valueMatches(actual, expected)) {
+            ++passed_;
+            std::printf("[robot %6u] ✓ %s %s = %s\n", t, a[1].c_str(), a[2].c_str(), actual.c_str());
+        } else {
+            fail(a[1] + " " + a[2] + " = " + actual + ", expected " + expected);
+        }
+        return true;
+    }
     // expect <@id|"text"> :visible | :hidden
     if (cmd == "expect" && need(3) && (a[2] == ":visible" || a[2] == ":hidden")) {
         lv_obj_t* o = nullptr;
