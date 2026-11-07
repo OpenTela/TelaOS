@@ -3,6 +3,7 @@
 #include "core/core.h"
 #include "utils/task_queue.h"
 #include "core/call_queue.h"
+#include "ble/ble_bridge.h"
 #include "utils/log_config.h"
 #include <cstring>
 
@@ -81,6 +82,7 @@ void ScriptManager::shutdown() {
     m_timerContexts.clear();
     
     CallQueue::shutdown();
+    BLEBridge::dropFetchCallbacks();  // a reply after this would call into the Lua state closed below
     s_engine = nullptr;
     
     if (m_engine) {

@@ -33,4 +33,8 @@ int sendFetchRequest(const char* method, const char* url, const char* body,
                      const P::Array<P::String>& fields,
                      ResponseCallback callback);
 
+/// Forget the callbacks of the fetches still on their way: their replies find none. For when
+/// the app that asked is gone - its callbacks hold its closed Lua state
+void dropFetchCallbacks();
+
 } // namespace BLEBridge
