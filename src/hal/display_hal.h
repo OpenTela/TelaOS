@@ -39,3 +39,4 @@ void display_set_brightness(uint8_t level);
 // TODO: per-board implementation (light sleep + touch wakeup on ESP32, etc.)
 void display_sleep();   // screen off, enter low-power mode: LVGL draws nothing until display_wake()
 void display_wake();    // restore screen, exit low-power mode: what changed meanwhile is drawn first
+bool display_is_asleep();  // between display_sleep() and display_wake()

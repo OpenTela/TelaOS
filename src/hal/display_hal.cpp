@@ -165,6 +165,10 @@ void display_wake() {
     Device::inst().setBrightness(255);
 }
 
+bool display_is_asleep() {
+    return s_asleep;
+}
+
 // ============================================
 // Dynamic buffer management
 // ============================================

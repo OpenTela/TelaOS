@@ -26,6 +26,11 @@ public:
     // ---- Optional storage (default: board has no SD card) ----
     virtual bool mountSdCard() { return false; }
 
+    // ---- Optional power (default: the board does not light-sleep) ----
+    // Light sleep for at most `ms`, or until a touch wakes the chip: false if the board cannot,
+    // and the caller waits as usual. Called with the display asleep (Power::rest)
+    virtual bool lightSleep(uint32_t ms) { (void)ms; return false; }
+
     // ---- Callback providers (called once, result stored by LVGL) ----
     virtual lv_display_flush_cb_t  getFlushCallback() = 0;
     virtual lv_indev_read_cb_t     getTouchCallback() = 0;

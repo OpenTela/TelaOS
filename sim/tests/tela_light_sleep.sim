@@ -1,0 +1,36 @@
+# tela_light_sleep.sim — light sleep, power.light_sleep (docs/POWER.md). The simulator's board
+# sleeps as the T-Watch does: the time goes on, the firmware's loop does not run. The watch may
+# sleep while the display is asleep, without BLE and with no <timer> of the app running.
+
+> sys config power.light_sleep true
+wait 1000
+expect slept.ms 0
+
+# the launcher, 60 s without a touch: the display sleeps, and the chip with it, nap after nap
+wait 62000
+expect slept.ms 2000..3500
+idle asleep 3000
+expect idle.px 0
+expect slept.ms 5000..6500
+
+# a tap wakes it, and the clock is right: 10:09:30 and 67 s
+tap 240,400
+wait 500
+expect "10:10" :visible
+expect slept.ms 5000..6500
+
+# an app with <timer> tags: the display sleeps, the chip does not, or the stopwatch would stop
+> app launch timers
+wait 1000
+tap "Старт"
+wait 63000
+idle asleep_timers 2000
+expect idle.px 0
+expect slept.ms 5000..6500
+expect $sw_ms 64000..66000
+
+# switched off: back in the launcher, the display asleep, the chip awake
+> sys config power.light_sleep false
+> app home
+wait 63000
+expect slept.ms 5000..6500

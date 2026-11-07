@@ -10,5 +10,6 @@ namespace SimTela {
 uint32_t now();                                         // virtual ms since power-on
 void setDelayHook(std::function<void(uint32_t ms)> h);  // runs inside every delay()
 int flashData(const std::string& data_dir);             // data/ → LittleFS, like `pio uploadfs`
+uint64_t sleptMs();                                     // virtual ms the board light-slept
 
 }  // namespace SimTela

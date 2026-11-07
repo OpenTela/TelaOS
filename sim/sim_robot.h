@@ -26,6 +26,7 @@
 //   idle <name> <ms>         <ms> without a touch; what the panel redrew meanwhile into
 //                            <out>/<name>.idle.json: pixels, refreshes, the areas redrawn
 //   expect idle.px <v>       what the last idle saw: idle.px, idle.frames (ranges: 1..20)
+//   expect slept.ms <v>      how long the board light-slept since power-on
 //   log <text> | quit
 #pragma once
 
@@ -57,6 +58,8 @@ struct RobotHooks {
     std::function<bool(const std::string& figure, double& value)> memValue;
     // The app's elements in the page order, each after its parent: `tree` writes them ("dom")
     std::function<std::vector<DomNode>()> domNodes;
+    // Virtual ms the board light-slept since power-on: `expect slept.ms`
+    std::function<uint64_t()> sleptMs;
 };
 
 class Robot {

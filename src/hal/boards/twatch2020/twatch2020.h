@@ -14,6 +14,7 @@ public:
     bool initPanel() override;
     bool initTouch() override;
     void setBrightness(uint8_t level) override;
+    bool lightSleep(uint32_t ms) override;
 
     lv_display_flush_cb_t  getFlushCallback() override;
     lv_indev_read_cb_t     getTouchCallback() override;

@@ -13,6 +13,8 @@
 #include <Arduino.h>
 #include <Wire.h>
 #include <TFT_eSPI.h>
+#include <driver/gpio.h>
+#include <esp_sleep.h>
 
 // ============================================
 // Module-level state
@@ -224,6 +226,23 @@ void TWatch2020::setBrightness(uint8_t level) {
     AXP::setLDO2(level > 0);
     pinMode(PIN_BACKLIGHT, OUTPUT);
     digitalWrite(PIN_BACKLIGHT, level > 0 ? HIGH : LOW);
+}
+
+// Wakes on the timer (when the next LVGL timer is due: the touch is read then too) and on the
+// FT6336's INT, low while a finger is on the glass. Not on an INT low already: a finger still on
+// the glass, or an INT that stays low, would wake the chip at once, every time
+bool TWatch2020::lightSleep(uint32_t ms) {
+    const auto intPin = static_cast<gpio_num_t>(PIN_TOUCH_INT);
+    const bool byTouch = PIN_TOUCH_INT >= 0 && gpio_get_level(intPin) == 1;
+    esp_sleep_enable_timer_wakeup(static_cast<uint64_t>(ms) * 1000);
+    if (byTouch) {
+        gpio_wakeup_enable(intPin, GPIO_INTR_LOW_LEVEL);
+        esp_sleep_enable_gpio_wakeup();
+    }
+    const esp_err_t err = esp_light_sleep_start();
+    if (byTouch) gpio_wakeup_disable(intPin);
+    esp_sleep_disable_wakeup_source(ESP_SLEEP_WAKEUP_ALL);
+    return err == ESP_OK;
 }
 
 lv_display_flush_cb_t TWatch2020::getFlushCallback() {
