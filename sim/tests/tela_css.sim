@@ -66,6 +66,11 @@ wait 200
 expect @tdeco "text-decoration: underline"
 expect @spaced "letter-spacing: 3px"
 expect @tdots :visible
+# text-align places a line of words and widgets as a browser's line box: the middle, the right
+# (inherited from a div), the middle of an rtl line
+expect @midBox :x 60..120
+expect @endBox :x 250..320
+expect @rtlBox :x 150..210
 shot css_06_text
 tap "Back"
 wait 200
