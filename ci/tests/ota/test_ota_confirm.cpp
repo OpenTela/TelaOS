@@ -53,7 +53,17 @@ int main() {
         else FAIL("");
     }
 
-    TEST("flashed over USB (no record in otadata): never confirmed");
+    TEST("flashed over USB (boot_app0.bin: undefined): never confirmed");
+    {
+        OtaMock::reset();
+        OtaMock::runningState = ESP_OTA_IMG_UNDEFINED;
+        OtaConfirm::begin();
+        OtaConfirm::tick(60000);
+        if (OtaMock::markedValid == 0 && !strcmp(OtaConfirm::state(), "undefined")) PASS();
+        else FAIL("");
+    }
+
+    TEST("no record in otadata: never confirmed");
     {
         OtaMock::reset();
         OtaMock::runningKnown = false;

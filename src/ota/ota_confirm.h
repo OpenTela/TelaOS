@@ -26,7 +26,8 @@ void begin();
 void tick(uint32_t nowMs);
 
 /// The running firmware in otadata: "pending", "valid", "new", "invalid", "aborted",
-/// "undefined"; "none" if otadata has no record of it (flashed over USB)
+/// "undefined" (flashed over USB: the otadata of Arduino's boot_app0.bin); "none" if otadata
+/// has no record of it
 const char* state();
 
 /// The partition the bootloader gave up on, "app0" or "app1", or nullptr (as of begin())

@@ -54,7 +54,7 @@ namespace OtaMock {
     // the running firmware and the rollback (esp_ota_get_running_partition and on)
     inline esp_partition_t       running      = { 0x10000, "app0" };
     inline esp_ota_img_states_t  runningState = ESP_OTA_IMG_VALID;
-    inline bool                  runningKnown = true;     // false: no record in otadata (flashed over USB)
+    inline bool                  runningKnown = true;     // false: no record of it in otadata
     inline const esp_partition_t* invalid     = nullptr;  // the one the bootloader gave up on
     inline int                   markedValid  = 0;        // esp_ota_mark_app_valid_cancel_rollback calls
 
