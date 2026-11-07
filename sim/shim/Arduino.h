@@ -134,3 +134,4 @@ inline void SerialClass::print(const String& s) { print(s.c_str()); }
 inline void SerialClass::println(const String& s) { println(s.c_str()); }
 
 #define IRAM_ATTR
+#define RTC_NOINIT_ATTR  // on the watch: RTC memory, kept through a reset

@@ -8,6 +8,10 @@
 #include "core/sys_paths.h"
 #include "ble/bin_receive.h"
 #include "ota/ota_receive.h"
+#include "ota/ota_confirm.h"
+#include "core/crash_log.h"
+#include "core/build_info.h"
+#include <esp_system.h>
 #ifndef NO_BLE
 #include "ble/ble_bridge.h"
 #endif
@@ -25,7 +29,7 @@
 #include <string_view>
 
 // OS version constants
-static constexpr const char* PROTOCOL_VERSION = "2.7";
+static constexpr const char* PROTOCOL_VERSION = "2.8";
 static constexpr const char* OS_VERSION = "0.4.0";
 
 static const char* TAG = "Console";
@@ -314,7 +318,9 @@ static Result execSys(std::string_view cmd, JsonArray args) {
         r.data["chip"] = ESP.getChipModel();
         r.data["freq"] = ESP.getCpuFreqMHz();
         r.data["buf_lines"] = display_get_buffer_lines();
-        
+        r.data["fw"] = BuildInfo::id();
+        r.data["ota"] = OtaConfirm::state();  // the rest of it is in sys crash: one notify holds 252 bytes
+
         auto& mgr = App::Manager::instance();
         if (!mgr.inLauncher() && mgr.currentApp().length() > 0) {
             // Extract name from path: "/apps/calculator/calculator.bax" → "calculator"
@@ -339,6 +345,32 @@ static Result execSys(std::string_view cmd, JsonArray args) {
         return r;
     }
     
+    // sys crash [clear] — how boots ended (CrashLog): /system/crashes.log as text, a JSON line each;
+    // why the last one ended, the partition rolled back from
+    if (cmd == "crash") {
+        const std::string_view what = argStr(args, 0, "");
+        if (what == "clear") {
+            if (!CrashLog::clear()) return Result::errServer("Can't remove the crash log");
+            auto r = Result::ok();
+            r.data["crashes"] = 0;
+            return r;
+        }
+        if (!what.empty()) return Result::errInvalid("Usage: sys crash [clear]");
+
+        const P::String log = CrashLog::read();
+        auto r = Result::ok();
+        r.data["crashes"] = (int)std::count(log.begin(), log.end(), '\n');
+        r.data["reset"] = CrashLog::resetName(esp_reset_reason());
+        if (const char* bad = OtaConfirm::invalidPartition()) r.data["ota_invalid"] = bad;
+        if (!log.empty()) {
+            auto* buf = (uint8_t*)ps_malloc(log.size());
+            if (!buf) return Result::errMemory("Out of memory");
+            memcpy(buf, log.data(), log.size());
+            r.withStringData(buf, log.size());
+        }
+        return r;
+    }
+
     // sys reboot
     if (cmd == "reboot") {
         LOG_W(Log::APP, "Reboot requested");
