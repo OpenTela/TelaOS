@@ -1371,18 +1371,23 @@ void Seg::asSpans() {
     if (owner_ && memchr(owner_->cstart, '{', owner_->cend - owner_->cstart)) {
         const P::String tpl(owner_->cstart, owner_->cend - owner_->cstart);
         const Ctx ctx = ctx_;
-        auto update = [sg, ctx](const P::String& rendered) {
+        auto fill = [sg, ctx](const P::String& rendered) {
             UI::Dom::Pause again;  // its <b>, <a>... are recorded once, by the walk that read it first
             Seg tmp(nullptr, ctx);
             walk(rendered.c_str(), rendered.c_str() + rendered.size(), tmp, Style{}, true);
             fillSpans(sg, tmp.items());
         };
-        update(render_template(tpl.c_str()));
+        fill(render_template(tpl.c_str()));  // in the page's build: the scopes of the paragraph are open
         auto elem = P::create<UI::Element>();
         elem->id = autoId();
         elem->w.handle = sg;
         elem->tpl = tpl;
-        elem->updateFn = update;
+        // later, when a {var} changes, the page is built: its rules see the paragraph's ancestors
+        // again (#now span, .card b), as they did
+        elem->updateFn = [sg, fill](const P::String& rendered) {
+            UI::Dom::Pause again;  // the scopes opened again are elements already recorded
+            UI::Dom::inScopesOf(sg, [&fill, &rendered] { fill(rendered); });
+        };
         g_core.app().elements.push_back(std::move(elem));
     } else {
         fillSpans(sg, items_);
