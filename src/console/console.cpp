@@ -365,7 +365,7 @@ static Result execSys(std::string_view cmd, JsonArray args) {
         if (!log.empty()) {
             auto* buf = (uint8_t*)ps_malloc(log.size());
             if (!buf) return Result::errMemory("Out of memory");
-            memcpy(buf, log.data(), log.size());
+            std::copy(log.begin(), log.end(), buf);
             r.withStringData(buf, log.size());
         }
         return r;

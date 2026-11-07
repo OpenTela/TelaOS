@@ -1,5 +1,6 @@
 #pragma once
 
+#include <array>
 #include <cstdint>
 #include "utils/psram_alloc.h"
 
@@ -24,14 +25,14 @@ namespace CrashLog {
 constexpr const char* kPath = "/system/crashes.log";
 constexpr int kKeep = 10;
 
-/// What a run leaves for the next boot (RTC memory)
+/// What a run leaves for the next boot (RTC memory: plain bytes, the texts end with '\0')
 struct Run {
     uint32_t magic;
-    uint32_t uptimeS;  // how long it ran, to the second
-    char fw[16];       // BuildInfo::id()
-    char part[8];      // the partition it ran from: "app0", "app1"
-    char app[24];      // the app open, "" in the launcher
-    uint32_t sum;      // of all above: a power-off leaves noise
+    uint32_t uptimeS;          // how long it ran, to the second
+    std::array<char, 16> fw;   // BuildInfo::id()
+    std::array<char, 8> part;  // the partition it ran from: "app0", "app1"
+    std::array<char, 24> app;  // the app open, "" in the launcher
+    uint32_t sum;              // of all above: a power-off leaves noise
 };
 
 /// First thing in setup(): keep the last run, start this one

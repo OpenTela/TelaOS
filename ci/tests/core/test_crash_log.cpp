@@ -24,12 +24,15 @@
 #define PASS() do { printf("PASS\n"); passed++; } while(0)
 #define FAIL(msg) printf("FAIL %s\n", msg)
 
+template <size_t N>
+static void put(std::array<char, N>& a, const char* s) { snprintf(a.data(), N, "%s", s); }
+
 static CrashLog::Run run(uint32_t up, const char* app, const char* fw, const char* part) {
     CrashLog::Run r = {};
     r.uptimeS = up;
-    strcpy(r.app, app);
-    strcpy(r.fw, fw);
-    strcpy(r.part, part);
+    put(r.app, app);
+    put(r.fw, fw);
+    put(r.part, part);
     return r;
 }
 

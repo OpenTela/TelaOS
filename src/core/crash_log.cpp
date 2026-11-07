@@ -6,8 +6,8 @@
 #include <esp_ota_ops.h>
 #include <esp_system.h>
 #include <cstddef>
-#include <cstring>
 #include <string>
+#include <string_view>
 
 static const char* TAG = "CrashLog";
 
@@ -29,10 +29,11 @@ static uint32_t sumOf(const Run& r) {  // FNV-1a of all but sum
 
 static void seal() { s_run.sum = sumOf(s_run); }
 
-// Into dst of n bytes: letters, digits, "._-"; anything else as "_" (the line stays plain JSON)
-static void copyName(char* dst, size_t n, const char* src) {
+// Into dst: letters, digits, "._-+"; anything else as "_" (the line stays plain JSON); cut to fit
+template <size_t N>
+static void copyName(std::array<char, N>& dst, std::string_view src) {
     size_t i = 0;
-    for (; src && src[i] && i + 1 < n; i++) {
+    for (; i < src.size() && i + 1 < N; i++) {
         const char c = src[i];
         const bool plain = (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9') ||
                            c == '.' || c == '_' || c == '-' || c == '+';
@@ -45,14 +46,13 @@ void boot() {
     s_haveLast = s_run.magic == kMagic && s_run.sum == sumOf(s_run);
     if (s_haveLast) {
         s_last = s_run;
-        s_last.fw[sizeof(s_last.fw) - 1] = s_last.part[sizeof(s_last.part) - 1] =
-            s_last.app[sizeof(s_last.app) - 1] = '\0';
+        s_last.fw.back() = s_last.part.back() = s_last.app.back() = '\0';
     }
-    memset(&s_run, 0, sizeof(s_run));
+    s_run = Run{};
     s_run.magic = kMagic;
-    copyName(s_run.fw, sizeof(s_run.fw), BuildInfo::id());
+    copyName(s_run.fw, BuildInfo::id());
     const esp_partition_t* running = esp_ota_get_running_partition();
-    copyName(s_run.part, sizeof(s_run.part), running ? running->label : "");
+    copyName(s_run.part, running ? running->label : "");
     seal();
 }
 
@@ -64,20 +64,14 @@ void tick(uint32_t nowMs) {
 }
 
 void setApp(const char* app) {
-    // "/apps/weather/weather.bax" -> "weather": the folder of the file
-    const char* name = app ? app : "";
-    size_t len = strlen(name);
-    if (const char* last = strrchr(name, '/')) {
-        const char* first = last;
-        while (first > name && first[-1] != '/') first--;
-        if (first == last) { name = last + 1; len = strlen(name); }  // "/weather"
-        else { len = static_cast<size_t>(last - first); name = first; }
+    // "/apps/weather/weather.bax" -> "weather": the folder of the file; "/weather" -> "weather"
+    std::string_view name = app ? app : "";
+    if (const size_t last = name.rfind('/'); last != std::string_view::npos) {
+        const std::string_view dir = name.substr(0, last);
+        const size_t prev = dir.rfind('/');
+        name = dir.empty() ? name.substr(last + 1) : dir.substr(prev == std::string_view::npos ? 0 : prev + 1);
     }
-    char buf[sizeof(s_run.app)];
-    const size_t n = len < sizeof(buf) - 1 ? len : sizeof(buf) - 1;
-    memcpy(buf, name, n);
-    buf[n] = '\0';
-    copyName(s_run.app, sizeof(s_run.app), buf);
+    copyName(s_run.app, name);
     seal();
 }
 
@@ -110,9 +104,9 @@ P::String line(int resetReason, const Run* last, bool rolledBack) {
     if (last) {
         out += ",\"up\":";
         out += std::to_string(last->uptimeS).c_str();
-        if (last->app[0]) { out += ",\"app\":\""; out += last->app; out += '"'; }
-        out += ",\"fw\":\""; out += last->fw;
-        out += "\",\"part\":\""; out += last->part; out += '"';
+        if (last->app[0]) { out += ",\"app\":\""; out += last->app.data(); out += '"'; }
+        out += ",\"fw\":\""; out += last->fw.data();
+        out += "\",\"part\":\""; out += last->part.data(); out += '"';
     }
     if (rolledBack) out += ",\"rollback\":true";
     out += '}';
@@ -141,8 +135,9 @@ bool append(const char* path, const P::String& line, int keep) {
     }
     const size_t drop = lines.size() + 1 > static_cast<size_t>(keep) ? lines.size() + 1 - keep : 0;
 
-    if (const char* slash = strrchr(path, '/'); slash && slash != path) {
-        const P::String dir(path, slash - path);
+    const std::string_view file = path;
+    if (const size_t slash = file.rfind('/'); slash != std::string_view::npos && slash > 0) {
+        const P::String dir(file.substr(0, slash));
         if (!LittleFS.exists(dir.c_str())) LittleFS.mkdir(dir.c_str());
     }
     File f = LittleFS.open(path, "w");
@@ -165,8 +160,9 @@ void begin(const char* invalidPart) {
     const int reason = static_cast<int>(esp_reset_reason());
     // Rolled back: the last run's partition is the one the bootloader gave up on, not ours
     const esp_partition_t* running = esp_ota_get_running_partition();
-    const bool rolledBack = s_haveLast && invalidPart && running && strcmp(s_last.part, invalidPart) == 0 &&
-                            strcmp(s_last.part, running->label) != 0;
+    const std::string_view lastPart = s_last.part.data();
+    const bool rolledBack = s_haveLast && invalidPart && running && lastPart == invalidPart &&
+                            lastPart != running->label;
 
     const P::String l = line(reason, s_haveLast ? &s_last : nullptr, rolledBack);
     if (l.empty()) {
