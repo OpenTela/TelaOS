@@ -10,14 +10,16 @@ trees of every screen (the same pixels over another tree: changed unseen), and w
 
     out/report.md        the PR comment: what changed, in words and in pictures
                          (images from --image-url, if given), the watch's memory on every
-                         screen, how much C is left in src/, how the pages of JUDGED lay out
+                         screen, what the screens redraw at rest (idle_report.py), how much C
+                         is left in src/, how the pages of JUDGED lay out
                          against Chromium (judge.py), and with --pages N: N random pages
                          through both builds (sim_pages.py)
     out/judge.json       the judge's verdict on every element of those pages
     out/publish/         before/ after/ diff/ — only the screens that changed
     out/status.json      machine-readable summary
     out/shots-base/ out/shots-head/ out/tests/   everything, for artifacts (a .png and the
-                         widget tree .json of every screen)
+                         widget tree .json of every screen, and .idle.json: what it redrew
+                         at rest)
 
 Exit code 1 if --head does not build or a robot test fails. A changed screen is not a
 failure: it is what a reviewer looks at. Python standard library only; the judge takes
@@ -37,6 +39,7 @@ import zlib
 from pathlib import Path
 
 from code_meter import measure as measure_code, summary as code_summary
+import idle_report
 import judge
 import mem_report
 import sim_pages
@@ -47,6 +50,7 @@ SAME_TREE = "Виджеты те же — изменились только цв
 BOOT_MS = 500     # virtual ms before the first command: the launcher is up
 LAUNCH_MS = 1000  # after "app launch": the app's default page is drawn
 NAV_MS = 400      # after "ui nav": the page is drawn
+IDLE_MS = 2000    # after each screen's picture: at rest, what it redraws by itself (idle_report.py)
 MAX_ROWS = 30     # screens with pictures in the comment; the rest by name
 JUDGED = "html_tags"  # the fixture app whose pages Chromium judges (judge.py)
 
@@ -135,8 +139,9 @@ def bax_pages(app, roots):
 
 
 def snap(name):
-    """The picture of a screen and its widget tree, taken at the same moment."""
-    return [f"shot {name}", f"tree {name}"]
+    """The picture of a screen and its widget tree, taken at the same moment; then IDLE_MS
+    without a touch, and what the screen redrew by itself meanwhile."""
+    return [f"shot {name}", f"tree {name}", f"idle {name} {IDLE_MS}"]
 
 
 def screens_script(app, first, pages):
@@ -383,6 +388,7 @@ def report(entries, tests, meta, url):
         out += [code_summary(*meta["code"]), ""]
     out += meta.get("judge", [])
     out += meta.get("memory", [])
+    out += meta.get("idle", [])
     out += meta.get("pages", [])
 
     in_words = [e for e in changed if e.get("changes")]
@@ -486,8 +492,10 @@ def main():
     if verdict:
         (out / "judge.json").write_text(json.dumps(verdict, indent=1, ensure_ascii=False))
     mem_base, mem_head = mem_report.load(out / "shots-base"), mem_report.load(out / "shots-head")
+    idle_base, idle_head = idle_report.load(out / "shots-base"), idle_report.load(out / "shots-head")
     meta = {"base": args.base_label, "head": args.head_label, "base_built": base_bin is not None or not base,
             "code": code, "memory": mem_report.lines(mem_base, mem_head),
+            "idle": idle_report.lines(idle_base, idle_head),
             "judge": judge.lines(verdict, verdict_base) or judge.unmeasured(), "pages": sim_pages.lines(pages)}
     (out / "report.md").write_text(report(entries, tests, meta, args.image_url.rstrip("/")))
     ok = all(t["ok"] for t in tests)
@@ -497,6 +505,7 @@ def main():
                                                  "screens": counts, "tests": tests, "entries": entries,
                                                  "code": {"head": code[0], "base": code[1]},
                                                  "memory": {"head": mem_head, "base": mem_base},
+                                                 "idle": {"head": idle_head, "base": idle_base},
                                                  "judge": {"head": judge.summary(verdict),
                                                            "base": judge.summary(verdict_base)},
                                                  "pages": sim_pages.summary(pages)},
