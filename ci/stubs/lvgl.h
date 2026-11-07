@@ -1267,6 +1267,8 @@ inline void lv_timer_del(lv_timer_t* t) {
     if (t) ((MockTimer*)t)->deleted = true;
 }
 inline void lv_timer_delete(lv_timer_t* t) { lv_timer_del(t); }
+inline void lv_timer_pause(lv_timer_t*) {}
+inline void lv_timer_resume(lv_timer_t*) {}
 inline void lv_timer_set_repeat_count(lv_timer_t* t, int count) {
     if (t) ((MockTimer*)t)->repeat_count = count;
 }
@@ -1318,6 +1320,9 @@ inline void lv_display_flush_ready(lv_display_t*) {}
 inline void lv_tick_set_cb(uint32_t(*)()) {}
 inline void lv_task_handler() {}
 inline void lv_refr_now(lv_display_t*) {}
+inline void lv_display_enable_invalidation(lv_display_t*, bool) {}
+inline lv_timer_t* lv_display_get_refr_timer(lv_display_t*) { return nullptr; }
+inline lv_obj_t* lv_display_get_screen_active(lv_display_t*) { return nullptr; }
 
 // Input device
 inline lv_indev_t* lv_indev_create() { return nullptr; }
