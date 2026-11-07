@@ -53,10 +53,11 @@ JUDGED = "html_tags"  # the fixture app whose pages Chromium judges (judge.py)
 
 # ============ Firmware: build, list apps, run ============
 
-def build(sim_dir, telaos_dir, build_dir, log):
-    """Configure and build telaos_sim for telaos_dir; returns the binary or None."""
+def build(sim_dir, telaos_dir, build_dir, log, options=()):
+    """Configure and build telaos_sim for telaos_dir; returns the binary or None.
+    options: more cmake -D..., -DTELA_SIM_ASAN=ON say (sim_asan.py)"""
     cfg = ["cmake", "-S", str(sim_dir), "-B", str(build_dir), f"-DTELAOS_DIR={telaos_dir}",
-           "-DCMAKE_BUILD_TYPE=Release"]
+           "-DCMAKE_BUILD_TYPE=Release", *options]
     if shutil.which("ccache"):
         cfg += ["-DCMAKE_C_COMPILER_LAUNCHER=ccache", "-DCMAKE_CXX_COMPILER_LAUNCHER=ccache"]
     if shutil.which("ninja"):
