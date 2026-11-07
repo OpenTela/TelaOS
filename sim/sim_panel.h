@@ -9,6 +9,7 @@
 #include "lvgl.h"
 
 #include <cstdint>
+#include <functional>
 #include <string>
 #include <vector>
 
@@ -41,6 +42,10 @@ public:
     uint32_t flushes() const { return flushes_; }  // flush calls (partial areas)
     bool takeDirty();                              // GRAM changed since last call?
 
+    // While set, called on every flush: the area, and whether it is the last of a refresh
+    using FlushWatch = std::function<void(const lv_area_t& area, bool last)>;
+    void watchFlushes(FlushWatch watch) { watch_ = std::move(watch); }
+
     bool savePng(const std::string& path) const;
 
 private:
@@ -55,6 +60,7 @@ private:
     uint32_t frames_ = 0;
     uint32_t flushes_ = 0;
     bool dirty_ = true;
+    FlushWatch watch_;
 };
 
 }  // namespace Sim
