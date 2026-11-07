@@ -22,6 +22,7 @@ BLE Assistant for TelaOS v1.0
   python ble_assistant.py --scan       # Список BLE устройств
   python ble_assistant.py --addr XX:XX:XX:XX:XX:XX
   python ble_assistant.py --daemon     # Без CLI, только proxy + sync
+  python ble_assistant.py --pair       # Часы с bluetooth.pairing: пара по коду на их экране
 """
 
 import asyncio
@@ -53,7 +54,7 @@ TX_CHAR_UUID = "12345678-1234-5678-1234-56789abcdef1"  # watch -> PC (notify)
 RX_CHAR_UUID = "12345678-1234-5678-1234-56789abcdef2"  # PC -> watch (write)
 BIN_CHAR_UUID = "12345678-1234-5678-1234-56789abcdef3"  # binary chunks
 
-PROTOCOL_VERSION = "2.8"
+PROTOCOL_VERSION = "2.9"
 DEVICE_NAME = "FutureClock"
 
 # -- Global state -----------------------------------------------
@@ -104,9 +105,10 @@ def get_utc_iso():
 
 # -- BLE Communication -----------------------------------------
 class BLEAssistant:
-    def __init__(self, address=None, daemon=False):
+    def __init__(self, address=None, daemon=False, pair=False):
         self.address = address
         self.daemon = daemon
+        self.pair = pair
         self.client = None
         self.connected = False
         self.synced = False
@@ -167,13 +169,39 @@ class BLEAssistant:
         self.connected = True
         log("ok", f"Connected to {addr}")
 
+        # Watch with bluetooth.pairing: it shows a code, the system asks for it (on Linux, the
+        # BlueZ agent: bluetoothctl, agent on). Once bonded, no code: the link encrypts at once
+        if self.pair:
+            log("*", "Pairing: type the code shown on the watch")
+            try:
+                await self.client.pair()
+                log("ok", "Paired")
+            except Exception as e:
+                log("X", f"Pairing failed: {e}")
+                await self._drop()
+                return False
+
         # Subscribe to TX (JSON responses) and BIN (binary chunks)
-        await self.client.start_notify(TX_CHAR_UUID, self._on_tx_notify)
-        await self.client.start_notify(BIN_CHAR_UUID, self._on_bin_notify)
+        try:
+            await self.client.start_notify(TX_CHAR_UUID, self._on_tx_notify)
+            await self.client.start_notify(BIN_CHAR_UUID, self._on_bin_notify)
+        except Exception as e:
+            log("X", f"Subscribe failed: {e}")
+            if not self.pair:
+                log("*", "The watch may want pairing (bluetooth.pairing): try --pair")
+            await self._drop()
+            return False
 
         # Auto-sync time
         await self.sync()
         return True
+
+    async def _drop(self):
+        try:
+            await self.client.disconnect()
+        except Exception:
+            pass
+        self.connected = False
 
     def _on_disconnect(self, client):
         self.connected = False
@@ -740,6 +768,7 @@ async def main():
     parser.add_argument("--scan", action="store_true", help="Scan BLE devices")
     parser.add_argument("--addr", "--address", type=str, help="Device MAC address")
     parser.add_argument("--daemon", action="store_true", help="No CLI, proxy + sync only")
+    parser.add_argument("--pair", action="store_true", help="Pair with the code the watch shows (bluetooth.pairing)")
     
     args = parser.parse_args()
 
@@ -747,7 +776,7 @@ async def main():
         await BLEAssistant.scan()
         return
 
-    assistant = BLEAssistant(address=args.addr, daemon=args.daemon)
+    assistant = BLEAssistant(address=args.addr, daemon=args.daemon, pair=args.pair)
     
     # Handle Ctrl+C
     loop = asyncio.get_event_loop()

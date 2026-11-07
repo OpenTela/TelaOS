@@ -298,6 +298,7 @@ void Manager::init() {
     systemConfig.define("power.sleep_timeout", VarType::Int,  60);
     systemConfig.define("power.light_sleep",   VarType::Bool, false);  // docs/POWER.md
     systemConfig.define("bluetooth.enabled", VarType::Bool, false);
+    systemConfig.define("bluetooth.pairing", VarType::Bool, false);  // CONSOLE_PROTOCOL_SPEC.md, «Безопасность BLE»
 
     if (systemConfig.load()) {
         LOG_I(Log::APP, "Config loaded: /system/config.yml");

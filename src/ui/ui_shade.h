@@ -24,6 +24,12 @@ public:
     void setAutoOff(bool enabled);
     bool autoOffEnabled() const { return m_autoOff; }
 
+    // The screen on, as a touch would turn it on, without the touch
+    void wake();
+    // A BLE pairing's code over everything, the screen on; until hideCode()
+    void showCode(uint32_t code);
+    void hideCode();
+
 private:
     Shade() = default;
     
@@ -61,5 +67,7 @@ private:
     lv_obj_t*   m_btnBT      = nullptr;
     lv_obj_t*   m_btnAutoOff = nullptr;
     lv_obj_t*   m_blocker    = nullptr;
+    lv_obj_t*   m_code       = nullptr;  // the pairing code: a panel
+    lv_obj_t*   m_codeDigits = nullptr;
     lv_timer_t* m_inactTimer = nullptr;
 };
