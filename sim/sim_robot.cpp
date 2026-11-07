@@ -776,6 +776,18 @@ bool Robot::exec(const std::vector<std::string>& a, const std::string& where) {
         }
         return true;
     }
+    // expect idle.px | idle.frames <value | lo..hi>   what the last `idle` saw redrawn
+    if (cmd == "expect" && need(3) && (a[1] == "idle.px" || a[1] == "idle.frames")) {
+        if (!idle_measured_) return fail(a[1] + ": no idle before it");
+        const std::string actual = std::to_string(a[1] == "idle.px" ? idle_px_ : idle_frames_);
+        if (valueMatches(actual, unquote(a[2]))) {
+            ++passed_;
+            std::printf("[robot %6u] ✓ %s = %s\n", t, a[1].c_str(), actual.c_str());
+        } else {
+            fail(a[1] + " = " + actual + ", expected " + unquote(a[2]));
+        }
+        return true;
+    }
     // expect <target> [contains] <value>
     const bool contains = cmd == "expect" && a.size() >= 4 && a[2] == "contains";
     if (cmd == "expect" && need(3) && a[1][0] == '$') {
@@ -852,6 +864,9 @@ bool Robot::exec(const std::vector<std::string>& a, const std::string& where) {
         const bool going = advance_(ms);
         panel_.watchFlushes(nullptr);
         const std::string path = out_dir_ + "/" + a[1] + ".idle.json";
+        idle_px_ = redraw.px();
+        idle_frames_ = redraw.frames();
+        idle_measured_ = true;
         if (!redraw.save(path, ms)) return fail("cannot write " + path);
         std::printf("[robot %6u] idle %s: %llu px in %u frames, %u ms\n", t, a[1].c_str(),
                     static_cast<unsigned long long>(redraw.px()), redraw.frames(), ms);

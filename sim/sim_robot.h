@@ -25,6 +25,7 @@
 //                            as its script sees them, with the boxes of their objects ("dom")
 //   idle <name> <ms>         <ms> without a touch; what the panel redrew meanwhile into
 //                            <out>/<name>.idle.json: pixels, refreshes, the areas redrawn
+//   expect idle.px <v>       what the last idle saw: idle.px, idle.frames (ranges: 1..20)
 //   log <text> | quit
 #pragma once
 
@@ -93,6 +94,9 @@ private:
     int passed_ = 0;
     int failed_ = 0;
     bool quit_ = false;
+    uint64_t idle_px_ = 0;  // what the last `idle` saw redrawn
+    uint32_t idle_frames_ = 0;
+    bool idle_measured_ = false;
 };
 
 }  // namespace Sim
