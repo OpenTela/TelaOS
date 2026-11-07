@@ -15,6 +15,19 @@ typedef int esp_err_t;
 #ifndef OTA_SIZE_UNKNOWN
 #define OTA_SIZE_UNKNOWN 0xffffffffU
 #endif
+#ifndef ESP_ERR_NOT_FOUND
+#define ESP_ERR_NOT_FOUND 0x105
+#endif
+
+// State of a firmware in otadata (ESP-IDF 4.4 esp_flash_partitions.h)
+typedef enum {
+    ESP_OTA_IMG_NEW            = 0x0U,
+    ESP_OTA_IMG_PENDING_VERIFY = 0x1U,  // booted once, not confirmed: the next boot rolls it back
+    ESP_OTA_IMG_VALID          = 0x2U,
+    ESP_OTA_IMG_INVALID        = 0x3U,
+    ESP_OTA_IMG_ABORTED        = 0x4U,
+    ESP_OTA_IMG_UNDEFINED      = 0xFFFFFFFFU,
+} esp_ota_img_states_t;
 
 inline const char* esp_err_to_name(esp_err_t e) { return e == ESP_OK ? "ESP_OK" : "ESP_FAIL"; }
 
@@ -38,14 +51,44 @@ namespace OtaMock {
     inline esp_err_t failWrite = ESP_OK;
     inline esp_err_t failEnd   = ESP_OK;
     inline esp_err_t failBoot  = ESP_OK;
+    // the running firmware and the rollback (esp_ota_get_running_partition and on)
+    inline esp_partition_t       running      = { 0x10000, "app0" };
+    inline esp_ota_img_states_t  runningState = ESP_OTA_IMG_VALID;
+    inline bool                  runningKnown = true;     // false: no record of it in otadata
+    inline const esp_partition_t* invalid     = nullptr;  // the one the bootloader gave up on
+    inline int                   markedValid  = 0;        // esp_ota_mark_app_valid_cancel_rollback calls
 
     inline void reset() {
         if (written) { free(written); written = nullptr; }
         writtenLen = beginSize = 0;
         ended = aborted = bootSet = false;
         failBegin = failWrite = failEnd = failBoot = ESP_OK;
+        runningState = ESP_OTA_IMG_VALID;
+        runningKnown = true;
+        invalid = nullptr;
+        markedValid = 0;
     }
 }
+
+inline const esp_partition_t* esp_ota_get_running_partition() { return &OtaMock::running; }
+
+inline esp_err_t esp_ota_get_state_partition(const esp_partition_t* p, esp_ota_img_states_t* state) {
+    if (p == &OtaMock::running) {
+        if (!OtaMock::runningKnown) return ESP_ERR_NOT_FOUND;
+        *state = OtaMock::runningState;
+        return ESP_OK;
+    }
+    if (p && p == OtaMock::invalid) { *state = ESP_OTA_IMG_ABORTED; return ESP_OK; }
+    return ESP_ERR_NOT_FOUND;
+}
+
+inline esp_err_t esp_ota_mark_app_valid_cancel_rollback() {
+    OtaMock::markedValid++;
+    OtaMock::runningState = ESP_OTA_IMG_VALID;
+    return ESP_OK;
+}
+
+inline const esp_partition_t* esp_ota_get_last_invalid_partition() { return OtaMock::invalid; }
 
 inline const esp_partition_t* esp_ota_get_next_update_partition(const esp_partition_t*) {
     return &OtaMock::part;

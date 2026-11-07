@@ -53,7 +53,7 @@ TX_CHAR_UUID = "12345678-1234-5678-1234-56789abcdef1"  # watch -> PC (notify)
 RX_CHAR_UUID = "12345678-1234-5678-1234-56789abcdef2"  # PC -> watch (write)
 BIN_CHAR_UUID = "12345678-1234-5678-1234-56789abcdef3"  # binary chunks
 
-PROTOCOL_VERSION = "2.7"
+PROTOCOL_VERSION = "2.8"
 DEVICE_NAME = "FutureClock"
 
 # -- Global state -----------------------------------------------
@@ -100,6 +100,33 @@ def get_local_timezone():
 def get_utc_iso():
     """Returns current UTC time as ISO 8601 string"""
     return datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+
+
+# -- Crash log (sys crash) ---------------------------------------
+RESETS = {
+    "panic": "crash (exception or abort)", "int_wdt": "interrupt watchdog",
+    "task_wdt": "task watchdog", "wdt": "watchdog", "brownout": "power dip (brownout)",
+    "sw": "reboot", "poweron": "power-on", "ext": "reset pin", "deepsleep": "deep sleep wake-up",
+}
+
+
+def crash_text(line):
+    """One line of /system/crashes.log (JSON) as a sentence"""
+    try:
+        c = json.loads(line)
+    except json.JSONDecodeError:
+        return line
+    if not isinstance(c, dict):
+        return line
+    reset = c.get("reset", "?")
+    text = RESETS.get(reset, f"reset: {reset}")
+    if "up" in c:
+        text += f" after {c['up']} s"
+        text += f" in {c['app']}" if c.get("app") else " in the launcher"
+        text += f", firmware {c.get('fw', '?')} ({c.get('part', '?')})"
+    if c.get("rollback"):
+        text += " - the watch went back to the previous firmware"
+    return text
 
 
 # -- BLE Communication -----------------------------------------
@@ -446,7 +473,14 @@ class BLEAssistant:
                 if len(bin_buffer) >= bin_expected_size:
                     break
             
-            if len(bin_buffer) >= bin_expected_size:
+            if len(bin_buffer) >= bin_expected_size and data.get("type") == "string":
+                text = bytes(bin_buffer[:bin_expected_size]).decode("utf-8", "replace")
+                if subsystem == "sys" and cmd == "crash":
+                    for n, line in enumerate(text.splitlines(), 1):
+                        print(f"  {n}. {crash_text(line)}")
+                else:
+                    print(text)
+            elif len(bin_buffer) >= bin_expected_size:
                 raw = bin_buffer[:bin_expected_size]
                 w = data.get("w", 0)
                 h = data.get("h", 0)
@@ -466,6 +500,8 @@ class BLEAssistant:
                     log("*", f"Saved raw: {fname} ({bin_expected_size} bytes)")
             else:
                 log("X", f"Binary incomplete: {len(bin_buffer)}/{bin_expected_size}")
+        elif status == "ok" and subsystem == "sys" and cmd == "crash":
+            print("  Crash log cleared" if args else "  No crashes recorded")
 
     async def _push_ota(self, bin_path):
         """Flash a firmware image (.bin) to the watch over BLE.
@@ -517,6 +553,8 @@ class BLEAssistant:
         log("*", f"Sent {len(payload)} bytes in {dt:.1f}s "
                  f"({len(payload) / dt / 1024:.1f} KB/s) - device verifying & "
                  f"flashing, will reboot on success")
+        log("*", "The new firmware is kept after 20 s of running; a reset before that "
+                 "brings back the previous one (sys info: ota, sys crash)")
 
     async def _push_app(self, app_dir):
         """Push app directory to watch"""

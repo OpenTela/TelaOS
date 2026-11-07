@@ -22,6 +22,8 @@ Core g_core;
 #include "ble/bin_transfer.h"
 #include "ble/bin_receive.h"
 #include "ota/ota_receive.h"
+#include "ota/ota_confirm.h"
+#include "core/crash_log.h"
 #include "ui/ui_shade.h"
 #include "native/counter_app.h"
 
@@ -38,6 +40,7 @@ void IRAM_ATTR buttonISR() {
 }
 
 void setup() {
+    CrashLog::boot();  // before anything can crash: this run's record for the next boot
     Serial.begin(115200);
     delay(500);
     
@@ -133,7 +136,11 @@ void loop() {
     }
     
     App::Manager::instance().processPendingLaunch();
-    
+
+    const uint32_t now = millis();
+    CrashLog::tick(now);
+    OtaConfirm::tick(now);  // a new firmware that got here and ran 20 s is kept
+
     display_lock();
     UI::processTasks();  // Process UI update tasks from state changes
     lv_timer_handler();

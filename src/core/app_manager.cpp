@@ -23,6 +23,8 @@
 #include <lvgl.h>
 #include <LittleFS.h>
 #include "hal/device.h"
+#include "core/crash_log.h"
+#include "ota/ota_confirm.h"
 #include <sys/stat.h>
 #include <cstring>
 
@@ -279,6 +281,8 @@ void Manager::init() {
     LOG_I(Log::APP, "=== Evolution OS ===");
     
     mountLittleFS();
+    OtaConfirm::begin();  // a new firmware: kept after 20 s of running
+    CrashLog::begin(OtaConfirm::invalidPartition());  // how the last boot ended: /system/crashes.log
     display_lock();
     UI::Font::loadFiles();  // the icon fonts: before the first screen draws text
     display_unlock();
@@ -609,7 +613,8 @@ void Manager::showLauncher() {
     m_currentApp.clear();
     m_currentAppTitle.clear();
     m_inLauncher = true;
-    
+    CrashLog::setApp("");
+
     if (m_currentNative) {
         m_currentNative->onDestroy();
         m_currentNative = nullptr;
@@ -698,6 +703,7 @@ bool Manager::launchNative(NativeApp* app) {
     
     LOG_I(Log::APP, "Launching native: %s", app->name());
     s_appState = AppState::TRANSITIONING;
+    CrashLog::setApp(app->name());  // from here a crash is this app's
     
     display_lock();
     
@@ -724,7 +730,7 @@ bool Manager::launchNative(NativeApp* app) {
 bool Manager::loadApp(const P::String& path) {
     LOG_I(Log::APP, "Loading: %s", path.c_str());
     s_appState = AppState::TRANSITIONING;
-    
+
     m_launcher.cleanup();
     
     if (m_scriptMgr) {
@@ -751,6 +757,7 @@ bool Manager::loadApp(const P::String& path) {
         s_appState = AppState::LAUNCHER;
         return false;
     }
+    CrashLog::setApp(path.c_str());  // from here a crash is this app's: loading it too
     
     size_t size = f.size();
     P::String html(size, '\0');
