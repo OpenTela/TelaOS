@@ -135,16 +135,33 @@ void display_set_brightness(uint8_t level) {
     Device::inst().setBrightness(level);
 }
 
+static bool s_asleep = false;
+
 void display_sleep() {
     // TODO: per-board light sleep with touch wakeup
     //   ESP4848:   esp_light_sleep_start() + GPIO wakeup on touch INT
     //   TWatch:    AXP power off display + ext0 wakeup
     //   ESP8048:   TBD
     Device::inst().setBrightness(0);
+    // Nobody sees the screen: LVGL draws nothing. Invalidation off, or the first change would
+    // wake the refresh timer again (LV_EVENT_REFR_REQUEST); the app runs on, the touch is read
+    if (s_display && !s_asleep) {
+        lv_display_enable_invalidation(s_display, false);
+        if (lv_timer_t* refr = lv_display_get_refr_timer(s_display)) lv_timer_pause(refr);
+    }
+    s_asleep = true;
 }
 
 void display_wake() {
     // TODO: per-board wake sequence (re-init panel if needed)
+    if (s_display && s_asleep) {
+        lv_display_enable_invalidation(s_display, true);
+        if (lv_timer_t* refr = lv_display_get_refr_timer(s_display)) lv_timer_resume(refr);
+        // What changed while asleep was not marked: the whole screen, before the backlight
+        lv_obj_invalidate(lv_display_get_screen_active(s_display));
+        lv_refr_now(s_display);
+    }
+    s_asleep = false;
     Device::inst().setBrightness(255);
 }
 

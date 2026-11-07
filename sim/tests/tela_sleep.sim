@@ -1,0 +1,24 @@
+# tela_sleep.sim — a screen asleep is not drawn. After 60 s without a touch the shade puts the
+# display to sleep (power.sleep_timeout): the backlight goes off, and LVGL stops drawing. A tap
+# wakes it, and what changed meanwhile is drawn.
+
+wait 500
+> app launch timers
+wait 1000
+
+# the stopwatch, running: its 72 px time is drawn 10 times a second
+tap "Старт"
+idle running 1000
+expect idle.frames 8..12
+
+# 60 s later the display sleeps: the stopwatch runs on, nothing is drawn
+wait 60000
+idle asleep 2000
+expect idle.px 0
+expect $sw_running "true"
+
+# the first tap only wakes the screen, and the stopwatch is drawn again
+tap 240,400
+expect $sw_running "true"
+idle awake 1000
+expect idle.frames 8..12
