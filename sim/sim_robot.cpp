@@ -788,6 +788,18 @@ bool Robot::exec(const std::vector<std::string>& a, const std::string& where) {
         }
         return true;
     }
+    // expect slept.ms <value | lo..hi>   how long the board light-slept since power-on
+    if (cmd == "expect" && need(3) && a[1] == "slept.ms") {
+        if (!hooks_.sleptMs) return fail("no light sleep in this build");
+        const std::string actual = std::to_string(hooks_.sleptMs());
+        if (valueMatches(actual, unquote(a[2]))) {
+            ++passed_;
+            std::printf("[robot %6u] ✓ slept.ms = %s\n", t, actual.c_str());
+        } else {
+            fail("slept.ms = " + actual + ", expected " + unquote(a[2]));
+        }
+        return true;
+    }
     // expect <target> [contains] <value>
     const bool contains = cmd == "expect" && a.size() >= 4 && a[2] == "contains";
     if (cmd == "expect" && need(3) && a[1][0] == '$') {

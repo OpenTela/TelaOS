@@ -29,6 +29,7 @@ public:
     bool init(IScriptEngine* engine);
     void shutdown();
     IScriptEngine* engine() { return m_engine; }
+    size_t timerCount() const { return m_timers.size(); }  // the app's <timer> tags running
     
 private:
     void loadState();
