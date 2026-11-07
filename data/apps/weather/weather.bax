@@ -243,8 +243,8 @@ for _, b in ipairs(document:querySelectorAll("#cities button")) do
 end
 el("refresh"):addEventListener("click", refresh)
 
--- The weather last received, if any; then the new one
--- YAML gives numbers back as it reads them: as numbers, to be sure
+-- The weather last received, if any; then the new one. Its numbers through tonumber: the file
+-- may hold them as text
 local function numbers(w)
   for _, k in ipairs({"lat", "lon", "temp", "feels", "humidity", "wind", "code", "day"}) do w[k] = tonumber(w[k]) end
   for _, d in ipairs(w.days or {}) do
