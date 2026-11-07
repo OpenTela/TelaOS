@@ -5,6 +5,7 @@
 #include "Arduino.h"
 #include "LittleFS.h"  // TelaCI's in-memory LittleFS: same API, already covered by their tests
 #include "Wire.h"
+#include "freertos/timers.h"
 #include "lvgl.h"
 
 #include <cstdarg>
@@ -55,6 +56,7 @@ uint32_t sim_millis() { return g_ms; }
 
 void sim_delay(uint32_t ms) {
     g_ms += ms;
+    SimTimers::run(g_ms);  // the timer task: what came due while the firmware waited
     if (g_delay_hook) g_delay_hook(ms);
 }
 
