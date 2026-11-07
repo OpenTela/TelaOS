@@ -4,6 +4,10 @@
 // executable do that): inside a Firmware guard they go to the watch's heaps by the
 // watch's rules, otherwise to the host heap. free() and realloc() tell the two apart by
 // address, so a block may be freed in any context.
+//
+// SIM_ASAN (cmake -DTELA_SIM_ASAN=ON): AddressSanitizer watches the host's heap, not these.
+// The firmware's blocks go there then, malloc stays the host's, and the watch's heaps stay
+// empty: their numbers mean nothing in such a build.
 
 #include "sim_heap.h"
 
@@ -116,6 +120,20 @@ int order(size_t n, uint32_t caps, bool plain, int out[2]) {
     return 2;
 }
 
+#ifdef SIM_ASAN
+void* allocate(size_t n, uint32_t, bool) { return n ? std::malloc(n) : nullptr; }
+
+void release(void* p) { std::free(p); }
+
+void* reallocate(void* p, size_t n, uint32_t, bool) {
+    if (!p) return n ? std::malloc(n) : nullptr;
+    if (n == 0) {
+        std::free(p);
+        return nullptr;
+    }
+    return std::realloc(p, n);
+}
+#else
 void* allocate(size_t n, uint32_t caps, bool plain) {
     if (n == 0) return nullptr;  // heap_caps_malloc(0) is NULL on the chip too
     Lock lock;
@@ -169,6 +187,7 @@ void* reallocate(void* p, size_t n, uint32_t caps, bool plain) {
     release(p);
     return q;
 }
+#endif
 
 Heap& byCaps(uint32_t caps) { return g_heap[(caps & MALLOC_CAP_SPIRAM) ? PSRAM : DRAM]; }
 
@@ -290,6 +309,7 @@ void* ps_calloc(size_t n, size_t size) { return SimHeap::capsCalloc(n, size, MAL
 void* ps_realloc(void* ptr, size_t size) { return SimHeap::capsRealloc(ptr, size, MALLOC_CAP_SPIRAM); }
 
 // ============ malloc of the whole process ============
+#ifndef SIM_ASAN  // under ASan malloc is ASan's
 
 void* malloc(size_t n) { return g_firmware > 0 ? allocate(n, 0, true) : __libc_malloc(n); }
 
@@ -308,5 +328,6 @@ void* realloc(void* p, size_t n) {
     if (!p) return malloc(n);
     return reallocate(p, n, 0, true);
 }
+#endif  // SIM_ASAN
 
 }  // extern "C"
