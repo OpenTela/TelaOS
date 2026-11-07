@@ -119,8 +119,8 @@ jobs:
           path: ~/.cache/ccache
           key: ccache-sim-${{ runner.os }}-${{ github.sha }}
           restore-keys: ccache-sim-${{ runner.os }}-
-      # The judge (sim/tools/judge.py): one Playwright version, so the same Chromium every run.
-      # Without it the report says the compatibility was not measured; the screens go on
+      # The judges (sim/tools/judge.py, anim_judge.py): one Playwright version, so the same Chromium
+      # every run. Without it the report says they were not measured; the screens go on
       - name: Chromium for the judge
         continue-on-error: true
         run: |
@@ -154,6 +154,8 @@ jobs:
             out/report.md
             out/status.json
             out/judge.json
+            out/anim_judge.json
+            out/anim-head/
             out/publish/
             out/shots-head/
             out/tests/
