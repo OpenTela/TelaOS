@@ -1,79 +1,268 @@
-<app os="1.0" title="Weather" version="1.0">
+<app os="1.0" title="Weather" version="2.0">
+  <!--
+    Weather on HTML, CSS and the DOM: no TelaOS coordinates, the page is laid out by HTML flow.
+    Data: Open-Meteo (open-meteo.com, no key), fetched by the phone (net.fetch). The last weather
+    received stays in last.yml next to this file: without the phone the app shows it.
+  -->
   <config>
     <network/>
   </config>
 
+  <style>
+    :root { --muted: #8A93A6; --warm: #FFB74D; --cold: #4FC3F7; --card: #161B26; }
+    main { padding: 8px 12px; text-align: center; }
+    h1 { font-size: 24px; margin: 0; }
+    #updated { color: var(--muted); margin: 0 0 4px; }
+    #now { font-size: 72px; margin: 0; }
+    #now span { font-size: 72px; }
+    #now[data-tone="warm"] { color: var(--warm); }
+    #now[data-tone="cold"] { color: var(--cold); }
+    #what { font-size: 24px; margin: 0; }
+    #feels { color: var(--muted); margin: 2px 0 6px; }
+    #details { margin: 0 0 8px; }
+    #days p { background: var(--card); border-radius: 8px; padding: 2px 12px; margin: 0 0 4px; }
+    #status { color: var(--muted); margin: 6px 0; }
+    #status.warn { color: var(--warm); }
+    .stale #now, .stale #what { color: var(--muted); }
+    #cities button { margin: 0 4px 8px 0; }
+    @media (max-width: 300px) {
+      main { padding: 4px 6px; }
+      h1 { font-size: 20px; }
+      #now, #now span { font-size: 48px; }
+      #what { font-size: 16px; }
+    }
+  </style>
+
   <ui default="/main">
     <page id="main">
-      <label class="title" align="center" y="5%">Weather</label>
+      <main id="weather">
+        <h1 id="city">Moscow</h1>
+        <p id="updated">no data yet</p>
+        <p id="now"><span class="material-symbols-outlined">{sky}</span> {temp}</p>
+        <p id="what">—</p>
+        <p id="feels" hidden></p>
+        <p id="details"><span class="material-symbols-outlined">water_drop</span> {humidity}
+           <span class="material-symbols-outlined">air</span> {wind}</p>
+        <div id="days">
+          <p id="day1" hidden>{day1} <span class="material-symbols-outlined">{icon1}</span> {range1}</p>
+          <p id="day2" hidden>{day2} <span class="material-symbols-outlined">{icon2}</span> {range2}</p>
+          <p id="day3" hidden>{day3} <span class="material-symbols-outlined">{icon3}</span> {range3}</p>
+        </div>
+        <p id="status">Tap Refresh to get the weather</p>
+        <nav>
+          <button id="refresh"><span class="material-symbols-outlined">refresh</span> Refresh</button>
+          <button id="toCities" href="/cities"><span class="material-symbols-outlined">location_on</span> City</button>
+        </nav>
+      </main>
+    </page>
 
-      <label class="status" align="center" y="15%">{bleStatus}</label>
-
-      <label class="temp" align="center" y="35%">{temperature}</label>
-      <label class="desc" align="center" y="55%">{description}</label>
-      <label class="city" align="center" y="70%">{city}</label>
-
-      <button class="btn" x="10%" y="82%" onclick="refresh" w="35%" h="40">Refresh</button>
-      <button class="btn-back" x="55%" y="82%" onclick="goHome" w="35%" h="40">Home</button>
+    <page id="cities">
+      <main>
+        <h1>City</h1>
+        <nav id="cities">
+          <button data-lat="55.7558" data-lon="37.6173">Moscow</button>
+          <button data-lat="59.9343" data-lon="30.3351">Saint Petersburg</button>
+          <button data-lat="56.8389" data-lon="60.6057">Yekaterinburg</button>
+          <button data-lat="55.0084" data-lon="82.9357">Novosibirsk</button>
+          <button data-lat="51.5072" data-lon="-0.1276">London</button>
+          <button data-lat="35.6762" data-lon="139.6503">Tokyo</button>
+        </nav>
+        <p><a href="/main">Back</a></p>
+      </main>
     </page>
   </ui>
 
   <state>
-    <string name="bleStatus" default="Checking BLE..."/>
-    <string name="temperature" default="--°C"/>
-    <string name="description" default=""/>
-    <string name="city" default="Moscow"/>
+    <string name="sky" default="cloud"/>
+    <string name="temp" default="--°"/>
+    <string name="humidity" default="--%"/>
+    <string name="wind" default="-- m/s"/>
+    <string name="day1" default=""/>
+    <string name="icon1" default="cloud"/>
+    <string name="range1" default=""/>
+    <string name="day2" default=""/>
+    <string name="icon2" default="cloud"/>
+    <string name="range2" default=""/>
+    <string name="day3" default=""/>
+    <string name="icon3" default="cloud"/>
+    <string name="range3" default=""/>
   </state>
 
-  <timer interval="5000" call="checkBLE"/>
-
   <script language="lua">
-    local CITY = "Moscow"
+local SAVED = "/apps/weather/last.yml"
+local DAYS = 3        -- rows on the page; the phone's answer is one BLE write, at most 512 bytes: 3 days are ~430
+local PATIENCE = 20000  -- ms; the phone gives up on the site after 15 s and says so
 
-    function checkBLE()
-      if net.connected() then
-        state.bleStatus = "BLE: OK"
-      else
-        state.bleStatus = "BLE: ..."
-      end
+local function el(id) return document.getElementById(id) end
+
+-- WMO weather code (Open-Meteo), up to: words, the icon of the icon font by day and by night
+local SKY = {
+  {0, "Clear", "sunny", "clear_night"},
+  {2, "Partly cloudy", "partly_cloudy_day", "clear_night"},
+  {3, "Overcast", "cloud"},
+  {48, "Fog", "foggy"},
+  {57, "Drizzle", "rainy"},
+  {67, "Rain", "rainy"},
+  {77, "Snow", "weather_snowy"},
+  {82, "Showers", "rainy"},
+  {86, "Snow showers", "weather_snowy"},
+  {99, "Thunderstorm", "thunderstorm"},
+}
+
+local function sky(code, night)
+  for _, s in ipairs(SKY) do
+    if code <= s[1] then return s[2], (night and s[4]) or s[3] end
+  end
+  return "—", "cloud"
+end
+
+local function degrees(t) return string.format("%d°", math.floor(t + 0.5)) end
+
+-- "2026-10-30" -> "Fri"
+local function weekday(date)
+  local y, m, d = date:match("(%d+)-(%d+)-(%d+)")
+  if not y then return date end
+  return os.date("%a", os.time({year = tonumber(y), month = tonumber(m), day = tonumber(d), hour = 12}))
+end
+
+-- The weather on the page: w as saved (see save), stale when it is not just received.
+-- Only a city: the page without weather
+local function show(w, stale)
+  el("city").textContent = w.city
+  el("weather").classList:toggle("stale", stale)
+  for i = 1, DAYS do  -- a row for each day there is
+    local d, row = (w.days or {})[i], el("day" .. i)
+    if d and w.temp then
+      local _, icon = sky(d.code)
+      state["day" .. i], state["icon" .. i] = weekday(d.date), icon
+      state["range" .. i] = degrees(d.max) .. " / " .. degrees(d.min)
+      row:removeAttribute("hidden")
+    else
+      row:setAttribute("hidden", "")
     end
+  end
+  local now = el("now")
+  if not w.temp then
+    state.sky, state.temp, state.humidity, state.wind = "cloud", "--°", "--%", "-- m/s"
+    now:removeAttribute("data-tone")
+    el("what").textContent = "—"
+    el("feels"):setAttribute("hidden", "")
+    el("updated").textContent = ""
+    return
+  end
 
-    function refresh()
-      if not net.connected() then
-        state.description = "No BLE!"
-        return
-      end
+  local what, icon = sky(w.code, w.day == 0)
+  state.sky = icon
+  state.temp = degrees(w.temp)
+  now:setAttribute("data-tone", w.temp >= 20 and "warm" or (w.temp <= 0 and "cold" or "mild"))
+  el("what").textContent = what
+  el("feels").textContent = "Feels like " .. degrees(w.feels)
+  el("feels"):removeAttribute("hidden")
+  state.humidity = string.format("%d%%", w.humidity)
+  state.wind = string.format("%.0f m/s", w.wind)
+  local hh, mm = (w.time or ""):match("T(%d+):(%d+)")
+  el("updated").textContent = hh and (hh .. ":" .. mm) or ""
+end
 
-      state.description = "Loading..."
+local function status(text, warn)
+  local s = el("status")
+  s.textContent = text
+  s.classList:toggle("warn", warn == true)
+  if text == "" then s:setAttribute("hidden", "") else s:removeAttribute("hidden") end
+end
 
-      net.fetch({
-        url = "https://api.openweathermap.org/data/2.5/weather?q=" .. CITY,
-        authorize = true,
-        format = "json",
-        fields = {"main.temp", "weather[0].description"}
-      }, function(resp)
-        if resp.status == 200 then
-          local body = resp.body
-          state.temperature = math.floor(body["main.temp"]) .. "°C"
-          state.description = body["weather[0].description"]
-        else
-          state.description = resp.error or ("Error " .. resp.status)
-        end
-      end)
+local place = {city = "Moscow", lat = 55.7558, lon = 37.6173}
+local last = nil  -- the weather on screen, as saved
+
+-- What Open-Meteo answered, kept as the page needs it
+local function fromAnswer(body)
+  local c, d = body.current, body.daily
+  if type(c) ~= "table" or type(d) ~= "table" then return nil end
+  local w = {city = place.city, lat = place.lat, lon = place.lon, time = c.time,
+             temp = c.temperature_2m, feels = c.apparent_temperature, humidity = c.relative_humidity_2m,
+             wind = c.wind_speed_10m, code = c.weather_code, day = c.is_day, days = {}}
+  for i = 1, math.min(DAYS, #(d.time or {})) do
+    w.days[i] = {date = d.time[i], code = d.weather_code[i], max = d.temperature_2m_max[i],
+                 min = d.temperature_2m_min[i]}
+  end
+  return w
+end
+
+local function save(w)
+  local y = YAML.loadText("city: x")
+  local t = y:tree()
+  for k, v in pairs(w) do t[k] = v end
+  y:save(SAVED)
+end
+
+local asked = 0  -- the fetch the page waits for
+
+local function refresh()
+  if not net.connected() then
+    status("No phone: " .. (last and last.temp and "the weather as last received" or "connect it and tap Refresh"), true)
+    return
+  end
+  asked = asked + 1
+  local this = asked
+  status("Updating…")
+  timer.once(function()
+    if asked == this then status("No answer from the phone", true) end
+  end, PATIENCE)
+  net.fetch({
+    url = string.format("https://api.open-meteo.com/v1/forecast?latitude=%.4f&longitude=%.4f"
+      .. "&current=temperature_2m,apparent_temperature,relative_humidity_2m,wind_speed_10m,weather_code,is_day"
+      .. "&daily=weather_code,temperature_2m_max,temperature_2m_min&forecast_days=%d"
+      .. "&timezone=auto&wind_speed_unit=ms", place.lat, place.lon, DAYS),
+    format = "json",
+    fields = {"current", "daily"},
+  }, function(r)
+    if asked ~= this then return end  -- a city chosen since: its own fetch is on the way
+    asked = asked + 1
+    local w = r.ok and type(r.body) == "table" and fromAnswer(r.body)
+    if not w then
+      status("Couldn't update: " .. (r.ok and "an answer without the weather" or r.error or ("HTTP " .. tostring(r.status))), true)
+      if last then show(last, true) end
+      return
     end
+    last = w
+    save(w)
+    show(w, false)
+    status("")
+  end)
+end
 
-    function goHome()
-      exit()
-    end
+-- The city chosen on the page "cities"
+for _, b in ipairs(document:querySelectorAll("#cities button")) do
+  b:addEventListener("click", function()
+    place = {city = b.textContent, lat = tonumber(b:getAttribute("data-lat")), lon = tonumber(b:getAttribute("data-lon"))}
+    last = nil
+    show({city = place.city}, true)
+    ui.navigate("/main")
+    refresh()
+  end)
+end
+el("refresh"):addEventListener("click", refresh)
+
+-- The weather last received, if any; then the new one
+-- YAML gives numbers back as it reads them: as numbers, to be sure
+local function numbers(w)
+  for _, k in ipairs({"lat", "lon", "temp", "feels", "humidity", "wind", "code", "day"}) do w[k] = tonumber(w[k]) end
+  for _, d in ipairs(w.days or {}) do
+    d.code, d.max, d.min = tonumber(d.code), tonumber(d.max), tonumber(d.min)
+  end
+  return w
+end
+
+local saved = YAML.load(SAVED)
+if saved then
+  local w = numbers(saved:tree())
+  if w.city and w.lat and w.lon then
+    place = {city = w.city, lat = w.lat, lon = w.lon}
+    last = w
+    show(w, true)
+    status("")
+  end
+end
+refresh()
   </script>
-
-  <style>
-    .title { color: #ffffff; font-size: 32px; }
-    .status { color: #888888; font-size: 16px; }
-    .temp { color: #ffcc00; font-size: 72px; }
-    .desc { color: #aaaaaa; font-size: 32px; }
-    .city { color: #666666; font-size: 16px; }
-    .btn { background: #2196F3; color: #ffffff; border-radius: 8px; }
-    .btn-back { background: #555555; color: #ffffff; border-radius: 8px; }
-  </style>
 </app>
