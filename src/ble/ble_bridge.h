@@ -20,10 +20,18 @@ using ResponseCallback = std::function<void(int status, const P::String& body)>;
 
 // API
 void init(const char* deviceName = "FutureClock");
-void deinit();
+void deinit();  // from the LVGL task, the display locked (the shade's BT button)
 bool isInitialized();
 bool isConnected();
 void processBleQueue();
+
+// Pairing with a code (bluetooth.pairing): from the next init(). Then only an encrypted link that
+// paired with the code the watch shows reads and writes; a bonded phone needs no code again
+void setPairing(bool on);
+bool pairing();
+bool isSecure();      // the link now is encrypted and authenticated
+int bonds();          // phones the watch remembers; -1 with BLE off
+bool forgetBonds();   // all of them: each pairs with a code again
 
 bool send(const P::String& data);
 bool sendBinary(const uint8_t* data, size_t len);

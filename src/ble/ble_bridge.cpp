@@ -5,9 +5,15 @@
 #include "console/console.h"
 #include "console/ble_transport.h"
 #include "utils/log_config.h"
+#include "crypto/crypto_engine.h"
+#include "hal/display_hal.h"
+#include "ui/ui_shade.h"
 #include "esp_heap_caps.h"
+#include <atomic>
+#include <cstring>
 #include <queue>
 #include <map>
+#include <string>
 
 namespace BLEBridge {
 
@@ -34,6 +40,32 @@ static bool g_initialized = false;
 static std::queue<P::String> g_bleMessageQueue;
 static SemaphoreHandle_t g_bleQueueMutex = nullptr;
 
+// Pairing (bluetooth.pairing; CONSOLE_PROTOCOL_SPEC.md, «Безопасность BLE»): the characteristics
+// take only an encrypted, authenticated link. A new phone pairs with a code the watch shows and
+// keeps a bond: from then on it encrypts with its key, no code. The NimBLE host task asks for the
+// code and reports the result; the main task makes the codes and shows them
+static std::atomic<bool> s_pairing{false};  // read by the host task too
+static std::atomic<uint32_t> s_passkey{0};     // the code of the next pairing, made in advance
+static std::atomic<bool> s_passkeyReady{false};
+static std::atomic<bool> s_codeWanted{false};  // a pairing is on: the code on the screen
+static bool s_codeShown = false;
+static std::atomic<bool> s_secure{false};      // the link now is encrypted and authenticated
+
+// Six random digits, from the firmware's CSPRNG (mbedtls, not safe from two tasks: the main one)
+static bool makePasskey() {
+    std::string bytes;
+    if (!Crypto::random(sizeof(uint32_t), bytes) || bytes.size() != sizeof(uint32_t)) {
+        s_passkeyReady = false;
+        LOG_E(Log::BLE, "Pairing: no random code, pairing refused");
+        return false;
+    }
+    uint32_t v = 0;
+    std::memcpy(&v, bytes.data(), sizeof v);
+    s_passkey = v % 1000000;
+    s_passkeyReady = true;
+    return true;
+}
+
 // Forward declaration
 static void handleIncoming(const P::String& data);
 
@@ -41,11 +73,38 @@ static void handleIncoming(const P::String& data);
 class ServerCallbacks : public NimBLEServerCallbacks {
     void onConnect(NimBLEServer* server, NimBLEConnInfo& connInfo) override {
         g_connected = true;
+        s_secure = false;
         LOG_I(Log::BLE, "Client connected");
+        if (!s_pairing) return;
+        if (!s_passkeyReady) {  // no code to show: no pairing, and no open link either
+            server->disconnect(connInfo.getConnHandle());
+            return;
+        }
+        // At once, not on the first protected access: a bonded phone encrypts, a new one pairs
+        NimBLEDevice::startSecurity(connInfo.getConnHandle());
+    }
+
+    uint32_t onPassKeyDisplay() override {
+        s_codeWanted = true;
+        LOG_I(Log::BLE, "Pairing: the code is on the watch's screen");
+        return s_passkey.load();
+    }
+
+    void onAuthenticationComplete(NimBLEConnInfo& connInfo) override {
+        s_codeWanted = false;
+        s_secure = connInfo.isEncrypted() && connInfo.isAuthenticated();
+        if (s_pairing && !s_secure) {
+            LOG_W(Log::BLE, "Pairing failed: disconnecting");
+            if (g_server) g_server->disconnect(connInfo.getConnHandle());
+            return;
+        }
+        LOG_I(Log::BLE, "Link %s%s", s_secure ? "encrypted" : "open", connInfo.isBonded() ? ", bonded" : "");
     }
     
     void onDisconnect(NimBLEServer* server, NimBLEConnInfo& connInfo, int reason) override {
         g_connected = false;
+        s_secure = false;
+        s_codeWanted = false;
         LOG_I(Log::BLE, "Client disconnected (reason: %d)", reason);
         NimBLEDevice::startAdvertising();
         LOG_I(Log::BLE, "Advertising restarted");
@@ -235,6 +294,14 @@ void init(const char* deviceName) {
     
     NimBLEDevice::init(deviceName);
     NimBLEDevice::setPower(ESP_PWR_LVL_P3);
+    if (s_pairing) {
+        NimBLEDevice::setSecurityAuth(true, true, true);         // bonding, MITM protection, LE Secure Connections
+        NimBLEDevice::setSecurityIOCap(BLE_HS_IO_DISPLAY_ONLY);  // the watch shows the code, the phone types it
+        makePasskey();
+    }
+    // With pairing on, only an encrypted link that paired with the code reads and writes
+    const uint32_t readSec = s_pairing ? (NIMBLE_PROPERTY::READ_ENC | NIMBLE_PROPERTY::READ_AUTHEN) : 0;
+    const uint32_t writeSec = s_pairing ? (NIMBLE_PROPERTY::WRITE_ENC | NIMBLE_PROPERTY::WRITE_AUTHEN) : 0;
     
     P::String mac(NimBLEDevice::getAddress().toString().c_str());
     LOG_I(Log::BLE, "========================================");
@@ -250,18 +317,19 @@ void init(const char* deviceName) {
     
     g_txChar = service->createCharacteristic(
         TX_CHAR_UUID,
-        NIMBLE_PROPERTY::NOTIFY | NIMBLE_PROPERTY::READ
+        NIMBLE_PROPERTY::NOTIFY | NIMBLE_PROPERTY::READ | readSec
     );
     
     g_rxChar = service->createCharacteristic(
         RX_CHAR_UUID,
-        NIMBLE_PROPERTY::WRITE | NIMBLE_PROPERTY::WRITE_NR
+        NIMBLE_PROPERTY::WRITE | NIMBLE_PROPERTY::WRITE_NR | writeSec
     );
     g_rxChar->setCallbacks(new RxCallbacks());
     
     g_binChar = service->createCharacteristic(
         BIN_CHAR_UUID,
-        NIMBLE_PROPERTY::NOTIFY | NIMBLE_PROPERTY::READ | NIMBLE_PROPERTY::WRITE | NIMBLE_PROPERTY::WRITE_NR
+        NIMBLE_PROPERTY::NOTIFY | NIMBLE_PROPERTY::READ | NIMBLE_PROPERTY::WRITE | NIMBLE_PROPERTY::WRITE_NR |
+            readSec | writeSec
     );
     g_binChar->setCallbacks(new BinRxCallbacks());
     
@@ -274,7 +342,7 @@ void init(const char* deviceName) {
     advertising->start();
     
     g_initialized = true;
-    LOG_I(Log::BLE, "NimBLE ready, advertising as '%s'", deviceName);
+    LOG_I(Log::BLE, "NimBLE ready, advertising as '%s'%s", deviceName, s_pairing ? ", pairing with a code" : "");
 }
 
 bool isInitialized() {
@@ -294,6 +362,12 @@ void deinit() {
     g_binChar = nullptr;
     g_connected = false;
     g_initialized = false;
+    s_secure = false;
+    s_codeWanted = false;
+    if (s_codeShown) {  // processBleQueue() no longer runs; the shade calls this with the display locked
+        Shade::instance().hideCode();
+        s_codeShown = false;
+    }
     
     LOG_I(Log::BLE, "BLE deinitialized");
 }
@@ -302,8 +376,34 @@ bool isConnected() {
     return g_connected;
 }
 
+void setPairing(bool on) {
+    if (on != s_pairing && g_initialized) LOG_I(Log::BLE, "Pairing %s: from the next BLE start", on ? "on" : "off");
+    s_pairing = on;
+}
+
+bool pairing() { return s_pairing; }
+
+bool isSecure() { return s_secure; }
+
+int bonds() { return g_initialized ? NimBLEDevice::getNumBonds() : -1; }
+
+bool forgetBonds() { return g_initialized && NimBLEDevice::deleteAllBonds(); }
+
+// The code on the screen while a pairing is on; then a new one for the next
+static void showCode() {
+    const bool want = s_codeWanted.load();
+    if (want == s_codeShown) return;
+    s_codeShown = want;
+    display_lock();
+    if (want) Shade::instance().showCode(s_passkey.load());
+    else Shade::instance().hideCode();
+    display_unlock();
+    if (!want) makePasskey();
+}
+
 void processBleQueue() {
     if (!g_bleQueueMutex) return;
+    showCode();
     
     P::String message;
     bool hasMessage = false;
