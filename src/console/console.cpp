@@ -11,6 +11,7 @@
 #include "ota/ota_confirm.h"
 #include "core/crash_log.h"
 #include "core/build_info.h"
+#include "core/heap_stats.h"
 #include <esp_system.h>
 #ifndef NO_BLE
 #include "ble/ble_bridge.h"
@@ -29,7 +30,7 @@
 #include <string_view>
 
 // OS version constants
-static constexpr const char* PROTOCOL_VERSION = "2.8";
+static constexpr const char* PROTOCOL_VERSION = "2.9";
 static constexpr const char* OS_VERSION = "0.4.0";
 
 static const char* TAG = "Console";
@@ -345,6 +346,21 @@ static Result execSys(std::string_view cmd, JsonArray args) {
         return r;
     }
     
+    // sys mem — the two heaps as the simulator reports a screen's ("mem"), JSON as text: the numbers
+    // to check its estimate against (sim/tools/mem_compare.py); free of each in the reply
+    if (cmd == "mem") {
+        const HeapStats::Heap dram = HeapStats::dram(), psram = HeapStats::psram();
+        const P::String text = HeapStats::json(dram, psram);
+        auto* buf = (uint8_t*)ps_malloc(text.size());
+        if (!buf) return Result::errMemory("Out of memory");
+        std::copy(text.begin(), text.end(), buf);
+        auto r = Result::ok();
+        r.data["dram_free"] = (uint32_t)dram.free;
+        r.data["psram_free"] = (uint32_t)psram.free;
+        r.withStringData(buf, text.size());
+        return r;
+    }
+
     // sys crash [clear] — how boots ended (CrashLog): /system/crashes.log as text, a JSON line each;
     // why the last one ended, the partition rolled back from
     if (cmd == "crash") {

@@ -1,9 +1,10 @@
-# Console Protocol v2.8 — Справка для эмулятора
+# Console Protocol v2.9 — Справка для эмулятора
 
 Единый набор команд, два транспорта. Эмулятор должен реализовать оба.
 
 ## Changelog
 
+- **v2.9**: `sys mem` — обе кучи часов, как их считает симулятор: чтобы сверить его оценку с часами.
 - **v2.8**: `sys crash` — как кончались загрузки часов (журнал падений), `sys crash clear`. В `sys info` — `fw` и `ota`. Новая прошивка после OTA остаётся, только если проработала 20 с: см. «Падения и откат прошивки».
 
 ---
@@ -162,6 +163,7 @@ clicker
 | `info` | — | heap, psram, chip, freq, buf_lines, fw, ota, ble, app | Системная информация |
 | `reboot` | — | — | Перезагрузка |
 | `crash` | [`clear`] | `{crashes, reset, [ota_invalid]}` + string payload | Журнал падений; `clear` — очистить |
+| `mem` | — | `{dram_free, psram_free}` + string payload | Кучи часов, JSON |
 | `screen` | [color], [scale], [mode] | `{w, h, color, format, raw_size}` + BIN | Скриншот |
 | `time` | [epoch_seconds] | `{time}` | Получить/установить время |
 | `sync` | protocol, datetime, timezone, [lang] | `{protocol, os, chip, time, uptime, battery, w, h}` | Handshake: синхронизация + инфо об устройстве |
@@ -187,6 +189,18 @@ clicker
 - `reset` — почему часы перезагрузились в последний раз: `poweron`, `sw`, `panic`, `int_wdt`, `task_wdt`,
   `wdt`, `brownout`, `deepsleep`, `ext`, `sdio`, `unknown` (`esp_reset_reason()`);
 - `ota_invalid` — раздел, от прошивки в котором загрузчик отказался (`app0`, `app1`), если такой есть.
+
+**mem** — JSON текстом, ключи — как у `"mem"` экрана в симуляторе:
+
+```json
+{"dram": {"total": 327680, "free": 114452, "min_free": 107492, "largest": 113976, "blocks": 575,
+          "failed": 0, "at_boot": 290000}, "psram": {...}}
+```
+
+DRAM — `MALLOC_CAP_INTERNAL`, как `ESP.getFreeHeap()`; PSRAM — `MALLOC_CAP_SPIRAM`. `min_free` —
+самое низкое с загрузки, `largest` — самый большой блок, который выделится сейчас, `blocks` —
+живые выделения, `failed` — выделения без памяти с загрузки, `at_boot` — свободно, когда прошивка
+начала. Сверка с симулятором — `docs/SIMULATOR.md`, «Память часов».
 
 ### Падения и откат прошивки
 
