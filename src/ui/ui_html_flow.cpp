@@ -1417,11 +1417,33 @@ size_t wordEnd(const P::String& text, size_t i) {
     return text.size();
 }
 
-// An RTL line keeps its (left-to-right) words in their order and sits at the right
+// Where a row of words puts its words, as text-align puts a browser's line box: at the start,
+// the middle or the end. rtl: the row's line runs right to left, its start is at the right
+void placeWords(lv_obj_t* row, bool rtl) {
+    lv_flex_align_t place = rtl ? LV_FLEX_ALIGN_END : LV_FLEX_ALIGN_START;
+    switch (lv_obj_get_style_text_align(row, LV_PART_MAIN)) {  // the element's or inherited, as in CSS
+        case LV_TEXT_ALIGN_CENTER: place = LV_FLEX_ALIGN_CENTER; break;
+        case LV_TEXT_ALIGN_RIGHT: place = LV_FLEX_ALIGN_END; break;
+        case LV_TEXT_ALIGN_LEFT: place = LV_FLEX_ALIGN_START; break;
+        default: break;
+    }
+    if (lv_obj_get_style_flex_main_place(row, LV_PART_MAIN) != place) {  // else: its own change calls back
+        lv_obj_set_style_flex_main_place(row, place, LV_PART_MAIN);
+    }
+}
+
+// text-align of the row or above it changed (CSS applied later, a script's el.style)
+void onWordsStyle(lv_event_t* e) {
+    placeWords(static_cast<lv_obj_t*>(lv_event_get_current_target(e)), lv_event_get_user_data(e) != nullptr);
+}
+
+// An RTL line keeps its (left-to-right) words in their order and starts at the right; any line
+// follows text-align, now and when it changes
 void alignWordsRow(lv_obj_t* row) {
-    if (lv_obj_get_style_base_dir(row, LV_PART_MAIN) != LV_BASE_DIR_RTL) return;
-    lv_obj_set_style_base_dir(row, LV_BASE_DIR_LTR, LV_PART_MAIN);
-    lv_obj_set_flex_align(row, LV_FLEX_ALIGN_END, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_START);
+    const bool rtl = lv_obj_get_style_base_dir(row, LV_PART_MAIN) == LV_BASE_DIR_RTL;
+    if (rtl) lv_obj_set_style_base_dir(row, LV_BASE_DIR_LTR, LV_PART_MAIN);
+    placeWords(row, rtl);
+    lv_obj_add_event_cb(row, onWordsStyle, LV_EVENT_STYLE_CHANGED, rtl ? row : nullptr);
 }
 
 // A word of a sup or sub run in a row of words: how far it moves from where the row puts it,
