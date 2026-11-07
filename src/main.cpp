@@ -24,6 +24,7 @@ Core g_core;
 #include "ota/ota_receive.h"
 #include "ota/ota_confirm.h"
 #include "core/crash_log.h"
+#include "core/heap_stats.h"
 #include "ui/ui_shade.h"
 #include "native/counter_app.h"
 
@@ -41,6 +42,7 @@ void IRAM_ATTR buttonISR() {
 
 void setup() {
     CrashLog::boot();  // before anything can crash: this run's record for the next boot
+    HeapStats::begin();  // failed allocations are counted from here (sys mem)
     Serial.begin(115200);
     delay(500);
     

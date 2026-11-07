@@ -18,6 +18,8 @@
 #include <cstdint>
 #include <string>
 
+#include "esp_heap_caps.h"  // sim/shim: multi_heap_info_t
+
 namespace SimHeap {
 
 enum Region { DRAM = 0, PSRAM = 1 };
@@ -53,6 +55,7 @@ size_t freeSize(uint32_t caps);
 size_t totalSize(uint32_t caps);
 size_t minFreeSize(uint32_t caps);
 size_t largestFreeBlock(uint32_t caps);
+void info(uint32_t caps, multi_heap_info_t* out);  // heap_caps_get_info
 
 // Plain malloc/new count as the watch's while one of these is alive (nesting allowed)
 struct Firmware {

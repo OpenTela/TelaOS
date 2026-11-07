@@ -53,7 +53,7 @@ TX_CHAR_UUID = "12345678-1234-5678-1234-56789abcdef1"  # watch -> PC (notify)
 RX_CHAR_UUID = "12345678-1234-5678-1234-56789abcdef2"  # PC -> watch (write)
 BIN_CHAR_UUID = "12345678-1234-5678-1234-56789abcdef3"  # binary chunks
 
-PROTOCOL_VERSION = "2.8"
+PROTOCOL_VERSION = "2.9"
 DEVICE_NAME = "FutureClock"
 
 # -- Global state -----------------------------------------------
@@ -386,7 +386,7 @@ class BLEAssistant:
     async def cli_loop(self):
         """Interactive command line"""
         print("\n  Команды: sys info | sys screen | app list | app launch <name>")
-        print("           app push <dir> | sync | quit")
+        print("           app push <dir> | sync | bench [app...] | quit")
         print("           <subsystem> <cmd> [args...]\n")
 
         while self.connected:
@@ -412,6 +412,11 @@ class BLEAssistant:
         """Parse and execute CLI command"""
         parts = line.split(None, 2)
         if len(parts) < 1:
+            return
+
+        # Special: bench [app ...] -> the watch's memory per app, bench.json
+        if parts[0] == "bench":
+            await self._bench(line.split()[1:])
             return
 
         # Single word -> default subsystem is "sys"
@@ -502,6 +507,62 @@ class BLEAssistant:
                 log("X", f"Binary incomplete: {len(bin_buffer)}/{bin_expected_size}")
         elif status == "ok" and subsystem == "sys" and cmd == "crash":
             print("  Crash log cleared" if args else "  No crashes recorded")
+
+    async def _payload(self, subsystem, cmd, args=None, timeout=10.0):
+        """A command whose reply brings a payload: (status, data, its bytes, None if none came)"""
+        global bin_expected_size, bin_buffer
+        bin_expected_size = 0
+        bin_buffer = bytearray()
+        status, data = await self.send(subsystem, cmd, args)
+        if status != "ok" or "bytes" not in data:
+            return status, data, None
+        bin_expected_size = data["bytes"]
+        for _ in range(int(timeout * 10)):
+            if len(bin_buffer) >= bin_expected_size:
+                break
+            await asyncio.sleep(0.1)
+        got = bytes(bin_buffer[:bin_expected_size]) if len(bin_buffer) >= bin_expected_size else None
+        bin_expected_size = 0
+        return status, data, got
+
+    async def _mem(self):
+        """sys mem: {"dram": {...}, "psram": {...}}, the keys of the simulator's "mem"; None if none"""
+        status, _, raw = await self._payload("sys", "mem")
+        if status != "ok" or raw is None:
+            return None
+        try:
+            return json.loads(raw.decode("utf-8"))
+        except (UnicodeDecodeError, json.JSONDecodeError):
+            return None
+
+    async def _bench(self, apps, settle=2.5):
+        """bench [app ...]: for each app (all, by default) the launcher right before it and its first
+        screen, as the simulator measures its screens; bench.json for sim/tools/mem_compare.py"""
+        if not apps:
+            _, _, raw = await self._payload("app", "list")
+            apps = [n for n in (raw or b"").decode("utf-8", "replace").split("\0") if n]
+        _, info = await self.send("sys", "info")
+        result = {"fw": info.get("fw"), "chip": info.get("chip"), "apps": {}}
+        for app in apps:
+            await self.send("app", "home")
+            await asyncio.sleep(settle)
+            before = await self._mem()
+            status, _ = await self.send("app", "launch", [app])
+            if status != "ok":
+                log("X", f"bench: {app} did not start")
+                continue
+            await asyncio.sleep(settle)
+            after = await self._mem()
+            result["apps"][app] = {"launcher": before, "app": after}
+            if before and after:
+                log("*", f"bench {app}: DRAM {(before['dram']['free'] - after['dram']['free']) / 1024:.1f} KB, "
+                         f"PSRAM {(before['psram']['free'] - after['psram']['free']) / 1024:.1f} KB, "
+                         f"failed {after['dram']['failed'] + after['psram']['failed']}")
+        await self.send("app", "home")
+        with open("bench.json", "w", encoding="utf-8") as f:
+            json.dump(result, f, indent=1, ensure_ascii=False)
+        log("*", f"bench.json: {len(result['apps'])} apps. Against the simulator: "
+                 "python3 sim/tools/mem_compare.py --watch bench.json --sim <screens>")
 
     async def _push_ota(self, bin_path):
         """Flash a firmware image (.bin) to the watch over BLE.
