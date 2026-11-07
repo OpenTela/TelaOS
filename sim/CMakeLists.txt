@@ -86,5 +86,8 @@ target_include_directories(telaos_sim PRIVATE
   "${TELAOS_DIR}/lib/md4c"
   "${TELAOS_DIR}/ci/stubs")
 target_compile_definitions(telaos_sim PRIVATE TELAOS_DATA_DIR="${TELAOS_DIR}/data" PROGMEM=)
+# shim/freertos/timers.h comes before TelaCI's stub of the same name. A compiler cache that took the
+# objects built against the stub would not see the new header: the flag changes every command line
+target_compile_definitions(telaos_sim PRIVATE SIM_FREERTOS_TIMERS=1)
 target_link_libraries(telaos_sim PRIVATE tela_lvgl tela_lua SDL2::SDL2 PNG::PNG mbedcrypto m)
 target_link_options(telaos_sim PRIVATE -Wl,--wrap=time)  # wall clock = virtual clock (sim_tela_shim.cpp)
