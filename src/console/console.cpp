@@ -352,7 +352,8 @@ static Result execSys(std::string_view cmd, JsonArray args) {
         const HeapStats::Heap dram = HeapStats::dram(), psram = HeapStats::psram();
         const P::String text = HeapStats::json(dram, psram);
         auto* buf = (uint8_t*)ps_malloc(text.size());
-        if (!buf) return Result::errMemory("Out of memory");
+        if (!buf)
+            return Result::errMemory("Out of memory");
         std::copy(text.begin(), text.end(), buf);
         auto r = Result::ok();
         r.data["dram_free"] = (uint32_t)dram.free;

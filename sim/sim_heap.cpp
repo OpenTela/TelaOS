@@ -127,7 +127,8 @@ void* allocate(size_t n, uint32_t caps, bool plain) {
         if (void* p = take(g_heap[heaps[i]], n)) return p;
     }
     ++g_heap[heaps[0]].failed;
-    if (g_failed_hook) g_failed_hook(n, plain ? MALLOC_CAP_DEFAULT : caps, plain ? "malloc" : "heap_caps_malloc");
+    if (g_failed_hook)
+        g_failed_hook(n, plain ? MALLOC_CAP_DEFAULT : caps, plain ? "malloc" : "heap_caps_malloc");
     return nullptr;
 }
 

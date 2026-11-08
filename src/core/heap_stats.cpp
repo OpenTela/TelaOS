@@ -12,8 +12,10 @@ static size_t s_bootDram = 0, s_bootPsram = 0;
 // ESP-IDF calls it where the allocation failed, any task: count, nothing more (no allocation,
 // no log: the heap may be what is short)
 static void onFailed(size_t, uint32_t caps, const char*) {
-    if (caps & MALLOC_CAP_SPIRAM) s_failedPsram.fetch_add(1, std::memory_order_relaxed);
-    else s_failedDram.fetch_add(1, std::memory_order_relaxed);
+    if (caps & MALLOC_CAP_SPIRAM)
+        s_failedPsram.fetch_add(1, std::memory_order_relaxed);
+    else
+        s_failedDram.fetch_add(1, std::memory_order_relaxed);
 }
 
 void begin() {
@@ -45,7 +47,8 @@ static void put(P::String& out, const char* name, const Heap& h) {
         out += key;
         out += "\": ";
         out += std::to_string(v).c_str();
-        if (!last) out += ", ";
+        if (!last)
+            out += ", ";
     };
     out += '"';
     out += name;

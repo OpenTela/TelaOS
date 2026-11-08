@@ -29,16 +29,21 @@ int main() {
         g_mock_heap_info.largest_free_block = 113976;
         g_mock_heap_info.allocated_blocks = 575;
         const HeapStats::Heap d = HeapStats::dram();
-        if (d.free == 114452 && d.minFree == 107492 && d.largest == 113976 && d.blocks == 575 &&
-            d.total == heap_caps_get_total_size(MALLOC_CAP_INTERNAL))
+        const bool fromInfo = d.free == 114452 && d.minFree == 107492 && d.largest == 113976 && d.blocks == 575;
+        const bool totalOfHeap = d.total == heap_caps_get_total_size(MALLOC_CAP_INTERNAL);
+        if (fromInfo && totalOfHeap)
             PASS();
-        else FAIL("");
+        else
+            FAIL("");
     }
 
     TEST("nothing failed before begin()");
     {
-        if (HeapStats::dram().failed == 0 && HeapStats::psram().failed == 0 && !g_mock_alloc_failed) PASS();
-        else FAIL("");
+        const bool noneFailed = HeapStats::dram().failed == 0 && HeapStats::psram().failed == 0;
+        if (noneFailed && !g_mock_alloc_failed)
+            PASS();
+        else
+            FAIL("");
     }
 
     TEST("begin(): a failed allocation is counted at its heap");
@@ -49,8 +54,11 @@ int main() {
             g_mock_alloc_failed(64, MALLOC_CAP_DEFAULT, "malloc");
             g_mock_alloc_failed(64, MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT, "heap_caps_malloc");
         }
-        if (HeapStats::psram().failed == 1 && HeapStats::dram().failed == 2) PASS();
-        else FAIL("");
+        const bool counted = HeapStats::psram().failed == 1 && HeapStats::dram().failed == 2;
+        if (counted)
+            PASS();
+        else
+            FAIL("");
     }
 
     TEST("json: the keys of the simulator's mem");
@@ -62,8 +70,12 @@ int main() {
         const char* want = "{\"dram\": {\"total\": 327680, \"free\": 114452, \"min_free\": 107492, \"largest\": 113976, "
                            "\"blocks\": 575, \"failed\": 0, \"at_boot\": 290000}, \"psram\": {\"total\": 8383840, "
                            "\"free\": 7655096, \"min_free\": 0, \"largest\": 0, \"blocks\": 0, \"failed\": 2, \"at_boot\": 0}}";
-        if (j == want) PASS();
-        else { FAIL(""); printf("      got %s\n", j.c_str()); }
+        if (j == want)
+            PASS();
+        else {
+            FAIL("");
+            printf("      got %s\n", j.c_str());
+        }
     }
 
     TEST("sys mem: the JSON as text");
@@ -71,10 +83,12 @@ int main() {
         auto r = Console::exec("sys mem");
         const std::string text = r.payload ? std::string((const char*)r.payload, r.payloadSize) : "";
         free(r.payload);
-        if (r.success && r.type == Console::ResponseType::StringData && text.rfind("{\"dram\": {\"total\": ", 0) == 0 &&
-            text.find("\"psram\": {") != std::string::npos)
+        const bool isText = r.success && r.type == Console::ResponseType::StringData;
+        const bool both = text.rfind("{\"dram\": {\"total\": ", 0) == 0 && text.find("\"psram\": {") != std::string::npos;
+        if (isText && both)
             PASS();
-        else FAIL("");
+        else
+            FAIL("");
     }
 
     printf("\n");
