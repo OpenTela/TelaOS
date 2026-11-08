@@ -828,6 +828,14 @@ void textDefaults(lv_obj_t* o) {
     fillWidth(o);
 }
 
+// The root box of host's HTML is a body, with the body's 8px margin: host is a page, a tab, or a
+// TelaOS container standing on its own (placed by TelaOS). A container in the flow of a page is a
+// browser's <div>: the body is around it already, it has no margin of its own
+bool hostsBody(lv_obj_t* host) {
+    lv_obj_t* const around = host ? lv_obj_get_parent(host) : nullptr;
+    return !(around && s_flow.count(around));
+}
+
 // HTML placed straight into a page or TelaOS container goes into its one implicit root box,
 // which also takes the container's TelaOS widgets that have no x/y/align (see parse_children)
 lv_obj_t* flowParent(lv_obj_t* parent) {
@@ -836,7 +844,7 @@ lv_obj_t* flowParent(lv_obj_t* parent) {
     if (it != s_rootOf.end()) return it->second;
     fillWidth(parent);
     lv_obj_t* root = newBox(parent);
-    lv_obj_set_style_pad_all(root, kBodyPad, LV_PART_MAIN);
+    lv_obj_set_style_pad_all(root, hostsBody(parent) ? kBodyPad : 0, LV_PART_MAIN);
     lv_obj_set_style_text_font(root, Font::get(UI::Font::SMALL), LV_PART_MAIN);
     lv_obj_set_style_text_color(root, lv_color_hex(kText), LV_PART_MAIN);
     s_rootOf[parent] = root;
@@ -1003,7 +1011,7 @@ bool inList(lv_obj_t* box) {
     return false;
 }
 
-// The implicit root box of a page or TelaOS container: the body
+// The implicit root box of a page or TelaOS container: the body, or the inside of a <div> in the flow
 bool isRoot(const lv_obj_t* box) {
     for (const auto& kv : s_rootOf) {
         if (kv.second == box) return true;
@@ -1130,9 +1138,11 @@ bool collapse(lv_obj_t* box) {
         }
         bm.kids.swap(live);
     }
-    if (root) {  // the body's margin and its children's: one margin
-        setPx(box, LV_STYLE_PAD_TOP, collapsed(kBodyPad, in[kAbove]));
-        setPx(box, LV_STYLE_PAD_BOTTOM, collapsed(kBodyPad, in[kBelow]));
+    if (root) {  // the body's margin and its children's: one margin. A <div> in the flow has none of
+                 // its own: its children's stay inside it
+        const int own = hostsBody(lv_obj_get_parent(box)) ? kBodyPad : 0;
+        setPx(box, LV_STYLE_PAD_TOP, collapsed(own, in[kAbove]));
+        setPx(box, LV_STYLE_PAD_BOTTOM, collapsed(own, in[kBelow]));
     }
     const bool changed = in[0] != bm.in[0] || in[1] != bm.in[1] || out[0] != bm.out[0] || out[1] != bm.out[1];
     for (int s : {kAbove, kBelow}) {
