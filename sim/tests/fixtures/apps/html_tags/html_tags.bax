@@ -169,6 +169,7 @@
         <label id="nick">Nickname <i>(optional)</i></label>
         <label id="remember"><input type="checkbox" id="remcb"> Remember me</label>
         <button id="richBtn"><b>Save</b> now</button>
+        <p><input type="text" id="bigText" style="font-size: 20px; width: 300px"></p>
         <p id="home_forms"><a href="/home">Home</a></p>
       </form>
     </page>
