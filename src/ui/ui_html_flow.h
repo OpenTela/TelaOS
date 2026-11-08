@@ -15,6 +15,7 @@
 #include "utils/psram_alloc.h"
 
 #include <cstddef>
+#include <string_view>
 
 namespace HtmlFlow {
 
@@ -34,6 +35,14 @@ const char* impliedEnd(const char* tag, const char* content, const char* end);
 
 // Render one element. content = inner HTML (empty for void elements).
 void create(const char* tag, const char* astart, const char* aend, const char* content, lv_obj_t* parent);
+
+// <link rel="stylesheet" href>: the rules of its file are read now and count where the link stands,
+// as a <style> there: in <app> for the whole app, on a page for what comes after it. An href from /
+// is a file of the watch (/system/tela.css), another is in the app's resources/, as <img src>.
+// With media, only if the screen fits it (media="(prefers-color-scheme: dark)"). rel="alternate
+// stylesheet", disabled, an address of the network and a file that is not there are left out, as
+// a browser leaves out what it does not load
+void linkStylesheet(std::string_view rel, std::string_view href, std::string_view media, bool disabled);
 
 // Direct text and inline HTML (<b>, <a href>, <br>...) at p, up to the next block or TelaOS
 // element, rendered as one line box. Returns the end of the run, or p if there is none.

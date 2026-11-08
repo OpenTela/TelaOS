@@ -58,7 +58,7 @@ namespace Defaults {
 
 // ============ Helpers ============
 
-static P::String resolve_resource_path(const P::String& src) {
+P::String resolve_resource_path(const P::String& src) {
     if (src.empty()) return src;
     
     // Already absolute path (starts with / or A:)

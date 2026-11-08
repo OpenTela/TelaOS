@@ -1,0 +1,3 @@
+/* The file of the page "styles": <link> on the page, for what comes after it.
+   Of .app-file and .page-file the later rule wins: this file comes after the app's */
+.page-file { margin-left: 80px; width: 160px; }

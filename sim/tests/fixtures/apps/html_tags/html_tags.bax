@@ -4,6 +4,7 @@
     Flashed by the simulator with --extra-data; driven by tests/tela_html.sim.
     No TelaOS coordinates below: everything is placed by HTML flow.
   -->
+  <link rel="stylesheet" href="html_tags.css">
   <ui default="/home">
 
     <page id="home">
@@ -218,6 +219,17 @@
         <map name="m"><area shape="rect" href="/home"></map>
         <p>Unknown <blink>element</blink> shows its content.</p>
         <p id="home_media"><a href="/home">Home</a></p>
+      </section>
+    </page>
+
+    <page id="styles">
+      <link rel="stylesheet" href="styles.css">
+      <section>
+        <h2>Styles</h2>
+        <p id="fromApp" class="app-file">From the file of the app</p>
+        <p id="fromPage" class="page-file">From the file of the page</p>
+        <p id="fromBoth" class="app-file page-file">From both: the later one wins</p>
+        <p id="home_styles"><a href="/home">Home</a></p>
       </section>
     </page>
 

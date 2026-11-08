@@ -18,6 +18,7 @@
 
 #include "core/core.h"
 #include "ui/css_box.h"
+#include "ui/css_media.h"
 #include "ui/css_parser.h"
 #include "ui/css_values.h"
 #include "ui/dom.h"
@@ -29,6 +30,7 @@
 #include "utils/log_config.h"
 #include "widgets/widget_common.h"
 
+#include <LittleFS.h>
 #include <lvgl.h>
 #if LV_USE_SPAN
 #include "src/widgets/span/lv_span_private.h"  // a span's text, for textContent
@@ -1642,6 +1644,32 @@ void parseStyleTag(const TagRef& t) {
     LOG_D(Log::UI, "html: <style> in body parsed");
 }
 
+// rel="stylesheet": one of the words of rel. "alternate stylesheet" is off until chosen, as in a
+// browser
+bool linksStylesheet(std::string_view rel) {
+    bool sheet = false;
+    bool alternate = false;
+    size_t i = 0;
+    while (i < rel.size()) {
+        while (i < rel.size() && isspace(static_cast<unsigned char>(rel[i])))
+            ++i;
+        const size_t from = i;
+        while (i < rel.size() && !isspace(static_cast<unsigned char>(rel[i])))
+            ++i;
+        const std::string_view word = rel.substr(from, i - from);
+        if (sameNoCase(word, "stylesheet"))
+            sheet = true;
+        else if (sameNoCase(word, "alternate"))
+            alternate = true;
+    }
+    return sheet && !alternate;
+}
+
+// <link> on a page: its stylesheet counts from here on, as a <style> here would. It draws nothing
+void linkTag(const TagRef& t) {
+    linkStylesheet(attr(t, "rel"), attr(t, "href"), attr(t, "media"), has(t, "disabled"));
+}
+
 void handleTag(const TagRef& t, Seg& seg, const Style& st, bool inlineOnly) {
     const char* n = t.name.c_str();
     if (is(n, "br")) {
@@ -1649,6 +1677,10 @@ void handleTag(const TagRef& t, Seg& seg, const Style& st, bool inlineOnly) {
         return;
     }
     if (is(n, "wbr")) return;
+    if (is(n, "link")) {
+        linkTag(t);
+        return;
+    }
     const TagInfo* ti = info(n);
     if (ti && ti->kind == Kind::Hidden) return;
     if (is(n, "style")) {
@@ -2513,7 +2545,10 @@ void renderBlock(const TagRef& t, lv_obj_t* box, const Ctx& ctx) {
         case Kind::List: listElement(t, box, ctx); return;
         case Kind::Item: listItem(t, box, ctx, "\xE2\x80\xA2"); return;
         case Kind::Fallback: fallbackElement(t, box, ctx); return;
-        case Kind::Hidden: return;
+        case Kind::Hidden:
+            if (is(n, "link"))
+                linkTag(t);
+            return;
         case Kind::Inline: {
             Seg seg(box, ctx);
             inlineTag(t, ti, seg, Style{});
@@ -2560,6 +2595,34 @@ bool isNestable(const char* tag) { return handles(tag) && !isVoidName(tag) && !i
 
 bool isHtmlInput(const char* astart, const char* aend) { return !getAttr(astart, aend, "type").empty(); }
 
+void linkStylesheet(std::string_view rel, std::string_view href, std::string_view media, bool disabled) {
+    if (disabled || href.empty() || !linksStylesheet(rel))
+        return;
+    if (!media.empty() && !UI::cssMediaMatches(media)) {  // another screen's
+        LOG_D(Log::UI, "<link>: %.*s is for media %.*s", static_cast<int>(href.size()), href.data(),
+              static_cast<int>(media.size()), media.data());
+        return;
+    }
+    // A browser would fetch it; the watch reads only its own files
+    const bool remote = href.find("://") != std::string_view::npos || href.substr(0, 2) == "//";
+    if (remote) {
+        LOG_W(Log::UI, "<link>: %.*s is not a file of the watch, left out", static_cast<int>(href.size()),
+              href.data());
+        return;
+    }
+    const P::String path = resolve_resource_path(P::String(href));
+    if (!LittleFS.exists(path.c_str())) {  // a browser leaves out a stylesheet that does not load
+        LOG_W(Log::UI, "<link>: no file %s, left out", path.c_str());
+        return;
+    }
+    File f = LittleFS.open(path.c_str(), "r");
+    P::String css(f.size(), '\0');
+    css.resize(f.readBytes(&css[0], css.size()));
+    f.close();
+    UI::Css::instance().parse(css);
+    LOG_I(Log::UI, "<link>: %s, %d bytes", path.c_str(), static_cast<int>(css.size()));
+}
+
 void create(const char* tag, const char* astart, const char* aend, const char* content, lv_obj_t* parent) {
     TagRef t = refFrom(tag, astart, aend, content);
     // Table context: these live inside TelaOS table/tr containers, not in a flow box
@@ -2573,6 +2636,10 @@ void create(const char* tag, const char* astart, const char* aend, const char* c
     }
     if (is(tag, "caption")) {
         textElement(t, parent, Ctx{});
+        return;
+    }
+    if (is(tag, "link")) {
+        linkTag(t);
         return;
     }
     const TagInfo* ti = info(tag);

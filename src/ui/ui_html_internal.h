@@ -56,6 +56,9 @@ void ui_update_bindings(const char* varname, const char* value);
 void ui_freeze();
 void ui_unfreeze();
 P::String render_template(const char* tpl);
+// A file the app names (<img src>, icon=, <link href>): from / (or a drive, C:) as it is, otherwise
+// in the app's resources/
+P::String resolve_resource_path(const P::String& src);
 
 /// Descriptor for registering a UI element
 struct ElementDesc {

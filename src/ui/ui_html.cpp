@@ -397,15 +397,23 @@ static void parse_script(const UI::ParsedElement& root) {
     }
 }
 
-// Parse <style> section
+// <style> and <link rel="stylesheet"> of <app>, in their order: of two rules alike, the later one
+// wins, as in a browser. Of the <style> sections, the first one counts, as before
 static void parse_style(const UI::ParsedElement& root) {
-    auto style = root.find("style");
-    if (!style) return;
-    
-    // Get CSS content
-    if (!style->text.empty()) {
-        UI::Css::instance().parse(style->text);
-        LOG_D(Log::UI, "style: parsed CSS");
+    bool styled = false;
+    for (const UI::ParsedElement& child : root.children) {
+        if (child.is("link")) {
+            HtmlFlow::linkStylesheet(child.get("rel"), child.get("href"), child.get("media"),
+                                     child.has("disabled"));
+            continue;
+        }
+        if (!child.is("style") || styled)
+            continue;
+        styled = true;
+        if (!child.text.empty()) {
+            UI::Css::instance().parse(child.text);
+            LOG_D(Log::UI, "style: parsed CSS");
+        }
     }
 }
 

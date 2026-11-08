@@ -1,9 +1,10 @@
-# UI HTML Specification v0.14
+# UI HTML Specification v0.15
 
 Декларативный язык разметки для создания интерфейсов на ESP32 с LVGL.
 
 ## Changelog
 
+- **v0.15**: `<link rel="stylesheet" href="style.css">` — стили из файла в `resources/`: [CSS.md](CSS.md).
 - **v0.14**: `document:createElement()`, `el:appendChild()`, `insertBefore()`, `removeChild()` — дерево из Lua: [DOM.md](DOM.md).
 - **v0.13**: `el:addEventListener()` — события из Lua: `click`, `input`, `change`, `focus`, `blur`: [DOM.md](DOM.md).
 - **v0.12**: `el.style` — `style=""` из Lua; `style=""` берут и виджеты TelaOS: [DOM.md](DOM.md), [CSS.md](CSS.md).
@@ -27,7 +28,8 @@ myapp/
 ├── icon.png         # Опционально: иконка в лаунчере (64x64)
 └── resources/       # Опционально: ресурсы
     ├── plus.png
-    └── minus.png
+    ├── minus.png
+    └── style.css    # <link rel="stylesheet" href="style.css">
 ```
 
 ---
@@ -42,6 +44,8 @@ myapp/
 <!-- Ищет: myapp/resources/plus.png -->
 <button icon="plus.png"/>
 <image src="icons/gear.png"/>
+<!-- Ищет: myapp/resources/style.css; путь с / — от корня файлов часов -->
+<link rel="stylesheet" href="style.css"/>
 ```
 
 ### Иконки на кнопках
