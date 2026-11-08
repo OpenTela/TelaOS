@@ -1441,7 +1441,8 @@ void onWordsStyle(lv_event_t* e) {
 // follows text-align, now and when it changes
 void alignWordsRow(lv_obj_t* row) {
     const bool rtl = lv_obj_get_style_base_dir(row, LV_PART_MAIN) == LV_BASE_DIR_RTL;
-    if (rtl) lv_obj_set_style_base_dir(row, LV_BASE_DIR_LTR, LV_PART_MAIN);
+    if (rtl)
+        lv_obj_set_style_base_dir(row, LV_BASE_DIR_LTR, LV_PART_MAIN);
     placeWords(row, rtl);
     lv_obj_add_event_cb(row, onWordsStyle, LV_EVENT_STYLE_CHANGED, rtl ? row : nullptr);
 }

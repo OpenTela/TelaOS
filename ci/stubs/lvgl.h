@@ -880,7 +880,8 @@ inline lv_flex_flow_t lv_obj_get_style_flex_flow(lv_obj_t* obj, int) {
 #endif
 inline lv_flex_align_t lv_obj_get_style_flex_main_place(lv_obj_t* obj, int) { return static_cast<lv_flex_align_t>(MOCK_GET(flexMainAlign, 0)); }
 inline void lv_obj_set_style_flex_main_place(lv_obj_t* obj, lv_flex_align_t v, int) {
-    if (obj && obj->mock_widget) obj->mock_widget->flexMainAlign = (int)v;
+    if (obj && obj->mock_widget)
+        obj->mock_widget->flexMainAlign = (int)v;
 }
 // The element's own text-align only: the mock does not inherit styles
 inline lv_text_align_t lv_obj_get_style_text_align(lv_obj_t* obj, int) {
