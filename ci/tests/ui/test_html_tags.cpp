@@ -160,6 +160,8 @@ static const char* APP_TEXT_DIR = R"HTML(
   <p id="bdo"><bdo dir="rtl">olleH</bdo>, <bdo dir="RTL">тевирП</bdo>!</p>
   <p id="rtl" dir="rtl">Right to left</p>
   <p id="rtlw" dir="rtl">Two <a href="/a">links</a> <a href="/b">here</a></p>
+  <p id="midw" style="text-align: center">Two <a href="/a">links</a> <a href="/b">here</a></p>
+  <p id="endw" style="text-align: right">Two <a href="/a">links</a> <a href="/b">here</a></p>
   <ul dir="rtl"><li>one<ul id="rin"><li>two</ul></ul>
   <table id="rtb" dir="rtl"><tr><td>1</td><td>2</td></tr></table>
 </page></ui></app>
@@ -276,6 +278,7 @@ static const char* APP_FLOW = R"HTML(
   <label id="free">Free</label>
   <label id="pinned" x="10" y="20">Pinned</label>
   <button id="btn">Btn</button>
+  <button id="pbtn" x="10" y="200">Placed</button>
   <list id="glist" grow="3"><item>one</item></list>
   <div id="gdiv" grow="2">box</div>
   <div flex="column" h="100"><label id="glbl" grow="1">grows</label></div>
@@ -438,6 +441,11 @@ int main() {
                byId("rtlw") && byId("rtlw")->flexMainAlign == LV_FLEX_ALIGN_END &&
                byId("rtlw")->baseDir == LV_BASE_DIR_LTR);
     expectText("dir=rtl, words with links: text unchanged", "rtlw", "Two links here");
+    expectTrue("a line of words starts at the start", byId("e") && byId("e")->flexMainAlign == LV_FLEX_ALIGN_START);
+    expectTrue("text-align: center: a line of links in the middle",
+               byId("midw") && byId("midw")->flexMainAlign == LV_FLEX_ALIGN_CENTER);
+    expectTrue("text-align: right: a line of links at the right",
+               byId("endw") && byId("endw")->flexMainAlign == LV_FLEX_ALIGN_END);
     expectTrue("dir=rtl list: a nested list is indented from the right",
                byId("rin") && byId("rin")->padRight > 0 && byId("rin")->padLeft == 0);
     expectTrue("<table dir=rtl>: rows go right to left", byId("rtb") && byId("rtb")->baseDir == LV_BASE_DIR_RTL);
@@ -507,6 +515,8 @@ int main() {
     expectTrue("password input", byId("pw") && byId("pw")->password);
     expectTrue("hidden input builds nothing", byId("hid") == nullptr);
     expectText("submit button with value", "go", "Go");
+    expectTrue("<input type=submit>: a browser's button too", byId("go") && byId("go")->padLeft == 6 &&
+               byId("go")->padTop == 1 && byId("go")->borderWidth == 2);
     expectTrue("textarea content", byId("ta") && byId("ta")->text == "Hi & bye");
     expectTrue("progress 0.25 -> 250/1000", byId("pg") && byId("pg")->curValue == 250);
     expectTrue("meter 5 of 0..10 -> 500/1000", byId("mt") && byId("mt")->curValue == 500);
@@ -566,6 +576,13 @@ int main() {
         expectTrue("HTML goes into one flow root on the page", root && root->parent == page);
         expectTrue("TelaOS label without x/y joins the flow", free && free->parent == root);
         expectTrue("TelaOS button without x/y joins the flow", btn && btn->parent == root);
+        // a browser's: 13.33px text (drawn at 14), 1px 6px of padding, a 2px border
+        expectTrue("...as large as a browser's: 1px 6px, a 2px border, 14px text",
+                   btn && btn->padTop == 1 && btn->padBottom == 1 && btn->padLeft == 6 && btn->padRight == 6 &&
+                   btn->borderWidth == 2 && btn->fontSize == 14);
+        const MW* placed = byId("pbtn");
+        expectTrue("a button placed by x/y: as TelaOS draws it",
+                   placed && placed->borderWidth == 0 && placed->padTop == 0 && placed->fontSize != 14);
         expectTrue("TelaOS label with x/y stays on the page", pinned && pinned->parent == page);
         expectTrue("text right inside the page: one line", byText("Tail text here") != nullptr);
         expectTrue("comment with '>' leaves no text", textOf(page).find("bracket") == std::string::npos);

@@ -415,7 +415,31 @@ bool hiddenInTree(const lv_obj_t* o) {
     return false;
 }
 
-// The elements as nested JSON: each one with the box of its object, if it has one
+std::string hexColor(lv_color_t c) {
+    char s[8];
+    std::snprintf(s, sizeof s, "#%02X%02X%02X", c.red, c.green, c.blue);
+    return s;
+}
+
+// What moves on an element, as LVGL has it now (mid-transition too): opa and the colors' opa
+// 0..255, scale 256 = 1, rotation in 0.1°, translate in px (a % of the object's own size too)
+void dumpMotion(std::ostream& f, const lv_obj_t* o) {
+    int32_t tx = lv_obj_get_style_translate_x(o, LV_PART_MAIN), ty = lv_obj_get_style_translate_y(o, LV_PART_MAIN);
+    if (LV_COORD_IS_PCT(tx)) tx = LV_COORD_GET_PCT(tx) * lv_obj_get_width(o) / 100;
+    if (LV_COORD_IS_PCT(ty)) ty = LV_COORD_GET_PCT(ty) * lv_obj_get_height(o) / 100;
+    f << ", \"style\": {\"opa\": " << int(lv_obj_get_style_opa(o, LV_PART_MAIN))
+      << ", \"bg\": \"" << hexColor(lv_obj_get_style_bg_color(o, LV_PART_MAIN))
+      << "\", \"bg_opa\": " << int(lv_obj_get_style_bg_opa(o, LV_PART_MAIN))
+      << ", \"color\": \"" << hexColor(lv_obj_get_style_text_color(o, LV_PART_MAIN))
+      << "\", \"color_opa\": " << int(lv_obj_get_style_text_opa(o, LV_PART_MAIN))
+      << ", \"translate\": [" << tx << ", " << ty << "]"
+      << ", \"scale\": [" << lv_obj_get_style_transform_scale_x(o, LV_PART_MAIN) << ", "
+      << lv_obj_get_style_transform_scale_y(o, LV_PART_MAIN) << "]"
+      << ", \"rotation\": " << lv_obj_get_style_transform_rotation(o, LV_PART_MAIN) << "}";
+}
+
+// The elements as nested JSON: each one with the box of its object, if it has one, and, if it
+// has an id, what moves on it (anim_judge.py)
 void dumpDom(std::ostream& f, const std::vector<DomNode>& nodes) {
     f << "[";
     int open = -1;  // the depth of the element written last: its "}" is not written yet
@@ -437,6 +461,7 @@ void dumpDom(std::ostream& f, const std::vector<DomNode>& nodes) {
             f << ", \"x\": " << a.x1 << ", \"y\": " << a.y1 << ", \"w\": " << lv_area_get_width(&a)
               << ", \"h\": " << lv_area_get_height(&a);
             if (hiddenInTree(n.obj)) f << ", \"hidden\": true";
+            if (!n.id.empty()) dumpMotion(f, n.obj);
         }
     }
     if (open >= 0) {
@@ -446,6 +471,81 @@ void dumpDom(std::ostream& f, const std::vector<DomNode>& nodes) {
     }
     f << "]";
 }
+
+// What the panel redrew during `idle`. LVGL flushes an area it redraws in stripes of its draw
+// buffer: the stripes of one area are put back together, and an area redrawn again is counted
+// again, not listed again
+class Redraw {
+public:
+    void add(const lv_area_t& a, bool last) {
+        px_ += static_cast<uint64_t>(lv_area_get_size(&a));
+        if (open_ && a.x1 == box_.x1 && a.x2 == box_.x2 && a.y1 == box_.y2 + 1) {
+            box_.y2 = a.y2;
+        } else {
+            close();
+            box_ = a;
+            open_ = true;
+        }
+        if (last) {
+            close();
+            ++frames_;
+        }
+    }
+
+    uint64_t px() const { return px_; }
+    uint32_t frames() const { return frames_; }
+
+    // {"ms": 2000, "px": 3360, "frames": 2, "areas": [{"x": 200, "y": 12, "w": 84, "h": 20,
+    //  "times": 2}]} - the areas that took the most pixels first, kMaxAreas of them
+    bool save(const std::string& path, uint32_t ms) {
+        close();
+        std::sort(areas_.begin(), areas_.end(), [](const Area& p, const Area& q) {
+            return pixels(p) != pixels(q) ? pixels(p) > pixels(q)
+                 : p.box.y1 != q.box.y1   ? p.box.y1 < q.box.y1
+                                          : p.box.x1 < q.box.x1;
+        });
+        std::ofstream f(path);
+        if (!f) return false;
+        f << "{\"ms\": " << ms << ", \"px\": " << px_ << ", \"frames\": " << frames_ << ", \"areas\": [";
+        for (size_t i = 0; i < areas_.size() && i < kMaxAreas; ++i) {
+            const lv_area_t& b = areas_[i].box;
+            f << (i ? ",\n  " : "\n  ") << "{\"x\": " << b.x1 << ", \"y\": " << b.y1 << ", \"w\": "
+              << lv_area_get_width(&b) << ", \"h\": " << lv_area_get_height(&b) << ", \"times\": "
+              << areas_[i].times << "}";
+        }
+        f << "]}\n";
+        return static_cast<bool>(f);
+    }
+
+private:
+    struct Area {
+        lv_area_t box;
+        uint32_t times;
+    };
+    static constexpr size_t kMaxAreas = 10;
+
+    static uint64_t pixels(const Area& e) {
+        return static_cast<uint64_t>(lv_area_get_size(&e.box)) * e.times;
+    }
+
+    void close() {
+        if (!open_) return;
+        open_ = false;
+        for (Area& e : areas_) {
+            if (e.box.x1 == box_.x1 && e.box.y1 == box_.y1 && e.box.x2 == box_.x2 && e.box.y2 == box_.y2) {
+                ++e.times;
+                return;
+            }
+        }
+        areas_.push_back({box_, 1});
+    }
+
+    uint64_t px_ = 0;
+    uint32_t frames_ = 0;
+    std::vector<Area> areas_;
+    lv_area_t box_{};
+    bool open_ = false;
+};
 
 }  // namespace
 
@@ -767,6 +867,20 @@ bool Robot::exec(const std::vector<std::string>& a, const std::string& where) {
         if (!ok) return fail("cannot write " + path);
         std::printf("[robot %6u] %s %s\n", t, cmd.c_str(), path.c_str());
         return true;
+    }
+    if (cmd == "idle") {  // <ms> without a touch: what the panel redrew meanwhile
+        if (!need(3) || argMs(2, 0) == 0) return fail("idle <name> <ms>");
+        const uint32_t ms = argMs(2, 0);
+        lv_refr_now(nullptr);  // what was pending is the screen being drawn, not its rest
+        Redraw redraw;
+        panel_.watchFlushes([&redraw](const lv_area_t& area, bool last) { redraw.add(area, last); });
+        const bool going = advance_(ms);
+        panel_.watchFlushes(nullptr);
+        const std::string path = out_dir_ + "/" + a[1] + ".idle.json";
+        if (!redraw.save(path, ms)) return fail("cannot write " + path);
+        std::printf("[robot %6u] idle %s: %llu px in %u frames, %u ms\n", t, a[1].c_str(),
+                    static_cast<unsigned long long>(redraw.px()), redraw.frames(), ms);
+        return going;
     }
     if (cmd == "mem") {  // the watch's heaps right now, in the log
         if (!hooks_.memJson) return fail("no memory model in this build");

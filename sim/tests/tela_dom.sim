@@ -24,6 +24,8 @@ expect @tick on
 expect @fixed "fixed"
 expect @box "replaced"
 expect @readLive "read: 1 b"
+# a paragraph built again when its {var} changes keeps the rules of its ancestors: #liveRule span, 32px
+expect @liveRule :h 37
 shot dom_01_start
 
 scroll @btn
@@ -40,6 +42,7 @@ wait 200
 expect @count "Count: 1"
 expect @fixed "fixed"
 expect @box "replaced"
+expect @liveRule :h 37
 shot dom_02_after
 
 scroll @toClasses

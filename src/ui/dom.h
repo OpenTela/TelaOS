@@ -16,6 +16,7 @@
 #include "lvgl.h"
 #include "utils/psram_alloc.h"
 #include <cstdint>
+#include <functional>
 #include <string_view>
 
 namespace UI {
@@ -54,6 +55,11 @@ public:
     As(const As&) = delete;
     As& operator=(const As&) = delete;
 };
+
+// f() with the CSS scopes of obj's element and of the elements above it open, outermost first,
+// as the page had them open when it built obj: a paragraph built again later ({var} changed) is
+// styled as at first (#now span). obj not an element's, nor in one: f() as it is
+void inScopesOf(lv_obj_t* obj, const std::function<void()>& f);
 
 // While it lives, nothing is recorded: a dry run over content that is built after it
 class Pause {
