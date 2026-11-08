@@ -45,6 +45,11 @@ static const char* APP = R"HTML(
     #runp * { color: #FF0000; }
     .lx i { color: #0E0E0E; }
     .bx b { color: #0F0F0F; }
+    textarea { color: #1A1A1A; }
+    input[type="text"] { color: #2B2B2B; }
+    input[type="password"] { color: #3C3C3C; }
+    input[type="range"] { width: 90px; }
+    input[type="submit"] { color: #4D4D4D; }
   </style>
   <state>
     <int name="n" default="7"/>
@@ -78,6 +83,9 @@ static const char* APP = R"HTML(
       <p id="runp">n {n} <a href="/x">a</a> <a href="/y">b</a></p>
       <label class="lx" id="lx">E=mc<sup>2</sup> <i>opt</i></label>
       <button class="bx" id="bx"><b>Save</b> x<sup>2</sup></button>
+      <p><input type="text" id="tx"> <input type="password" id="pw"> <input type="range" id="rg"></p>
+      <p><textarea id="ta">t</textarea> <input type="text" id="txs" style="color: #5E5E5E"></p>
+      <p><input type="submit" id="sb" value="Go"></p>
     </page>
     <page id="other">
       <p class="big" id="big2">big on other</p>
@@ -168,6 +176,14 @@ int main() {
     expectColor(".lx i: a <label> is an ancestor of its HTML", deepWord(byId("lx"), "opt"), 0x0E0E0E);
     expectColor(".bx b: a <button> is an ancestor of its HTML", deepWord(byId("bx"), "Save"), 0x0F0F0F);
     expectColor("#other .big: on the other page", byId("big2"), 0xFF0000);
+    // HTML fields TelaOS builders make: CSS sees the markup, as a browser does
+    expectColor("textarea {}: a <textarea>, built as a TelaOS input", byId("ta"), 0x1A1A1A);
+    expectColor("input[type=\"text\"]: a text field", byId("tx"), 0x2B2B2B);
+    expectColor("input[type=\"password\"]: not the text field's", byId("pw"), 0x3C3C3C);
+    expectTrue("input[type=\"range\"]: the slider it is built as", byId("rg") && byId("rg")->w == 90,
+               byId("rg") ? std::to_string(byId("rg")->w).c_str() : "no widget");
+    expectColor("input[type=\"submit\"]: the button it is built as", byId("sb"), 0x4D4D4D);
+    expectColor("style=\"\" on a text field", byId("txs"), 0x5E5E5E);
 
     printf("\nCascade:\n");
     expectColor("p.note beats .note, though .note comes later", byId("note"), 0x999999);
