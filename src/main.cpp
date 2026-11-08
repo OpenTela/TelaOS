@@ -15,6 +15,7 @@
 #include "console/console.h"
 #include "console/serial_transport.h"
 #include "core/call_queue.h"
+#include "core/power.h"
 
 /// Global Core instance — single owner of DynamicApp and Store
 Core g_core;
@@ -136,8 +137,8 @@ void loop() {
     
     display_lock();
     UI::processTasks();  // Process UI update tasks from state changes
-    lv_timer_handler();
+    const uint32_t untilNext = lv_timer_handler();
     display_unlock();
     
-    delay(5);
+    Power::rest(untilNext);  // delay(5), or light sleep while the display is asleep
 }

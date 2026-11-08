@@ -54,6 +54,7 @@ public:
     void processPendingLaunch();
     bool inLauncher() const { return m_inLauncher; }
     const P::String& currentApp() const { return m_currentApp; }
+    size_t appTimers() const;  // FreeRTOS timers of the app's <timer> tags running now
     const std::vector<AppInfo>& apps() const { return m_apps; }
     
     YamlConfig systemConfig{"/system/config.yml", "SysConfig"};

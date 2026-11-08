@@ -1,4 +1,4 @@
-# Simulator v0.17
+# Simulator v0.18
 
 Настоящая прошивка TelaOS на ПК: тот же `src/`, LVGL 9.2 из `lib/lvgl`, `include/lv_conf.h`,
 шрифты, Lua, `data/`. Окно, где мышь — палец; робот, который тапает и проверяет; скриншоты
@@ -6,6 +6,8 @@
 
 ## Changelog
 
+- **v0.18**: Плата симулятора спит лёгким сном, как T-Watch (`Device::lightSleep()`): время идёт,
+  цикл прошивки стоит. Робот проверяет, сколько проспала: `expect slept.ms 3800..5100`.
 - **v0.17**: Робот проверяет перерисовку: `expect idle.px 0`, `expect idle.frames 8..12` — что видел
   последний `idle`.
 - **v0.16**: Случайные страницы против Chromium: `sim/tools/judge_pages.py` рисует на часах и
@@ -79,7 +81,7 @@ build/sim/telaos_sim --headless --script sim/tests/tela_hello.sim --out shots
 
 | Часы | Симулятор |
 |------|-----------|
-| Плата (`Device::inst()`) | `sim_tela_device.cpp`: вывод и касания → виртуальная панель |
+| Плата (`Device::inst()`) | `sim_tela_device.cpp`: вывод и касания → виртуальная панель; лёгкий сон — время идёт, цикл стоит |
 | `millis()` / `delay()` | виртуальные часы; `time()` тоже, старт 2026-10-30 10:09:30 UTC |
 | LittleFS, залитый из `data/` | `data/` (+ `--extra-data`) в LittleFS из TelaCI при старте |
 | Диск LVGL `C:` (`/littlefs`) | `sim_tela_fs.cpp`: тот же `lv_fs_stdio_init()`, но поверх LittleFS |
@@ -121,6 +123,7 @@ shot tela_03_result
 | `mem` | память часов — в лог |
 | `idle <name> <ms>` | `<ms>` без касаний; что панель перерисовала за это время — в `<name>.idle.json`: пиксели, кадры, области (см. «Перерисовка в покое») |
 | `expect idle.px <value>`, `expect idle.frames <value>` | что видел последний `idle`: пикселей и кадров; числа — диапазоном |
+| `expect slept.ms <value>` | сколько плата проспала лёгким сном с включения (`docs/POWER.md`) |
 | `> <строка>` | строка в консоль прошивки |
 | `shot <name>`, `tree <name>` | PNG экрана; JSON дерева виджетов с рамками, значениями, переполнением, id элементов и памятью часов, и элементы приложения, как их видит скрипт, — с рамками их объектов (`"dom"`), а у элементов с id и с тем, что на них движется (`"style"`: `opa`, `bg` и `bg_opa`, `color` и `color_opa` — 0..255; `translate` в px, `scale` — 256 это 1, `rotation` — в 0,1°; посреди перехода — значение в этот миг) |
 

@@ -167,6 +167,7 @@ int main(int argc, char** argv) {
     };
 #endif
     hooks.memJson = [] { return SimHeap::json(); };
+    hooks.sleptMs = [] { return SimTela::sleptMs(); };
     hooks.memValue = [](const std::string& figure, double& value) {
         const size_t cut = figure.find('_');
         if (cut == std::string::npos) return false;

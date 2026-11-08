@@ -6,6 +6,7 @@
 #include "hal/display_hal.h"
 #include "ble/ble_bridge.h"
 #include "core/app_manager.h"
+#include "core/power.h"
 #include "utils/log_config.h"
 #include "utils/font.h"
 #include <Arduino.h>
@@ -49,8 +50,11 @@ void Shade::applyConfig() {
     m_nudgeTimeout   = cfg.getInt("power.nudge_timeout");
     m_dimTimeout     = cfg.getInt("power.dim_timeout");
     m_sleepTimeout   = cfg.getInt("power.sleep_timeout");
+    Power::setLightSleep(cfg.getBool("power.light_sleep"));
 
-    if (m_userBrightness > 0) display_set_brightness(m_userBrightness);
+    // asleep, the backlight stays off: waking sets it
+    if (m_userBrightness > 0 && !display_is_asleep())
+        display_set_brightness(m_userBrightness);
 
     if (cfg.getBool("bluetooth.enabled") && !BLEBridge::isInitialized()) {
         BLEBridge::init();
@@ -59,7 +63,8 @@ void Shade::applyConfig() {
 
     updateAutoOffButton();
     updateBTButton();
-    LOG_I(Log::UI, "Shade config applied (auto_sleep=%d, brightness=%d)", m_autoOff, m_userBrightness);
+    LOG_I(Log::UI, "Shade config applied (auto_sleep=%d, brightness=%d, light_sleep=%d)", m_autoOff,
+          m_userBrightness, cfg.getBool("power.light_sleep"));
 }
 
 void Shade::open() {

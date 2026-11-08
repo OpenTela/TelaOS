@@ -14,6 +14,7 @@
 #include "core/app_manager.h"
 #include "core/state_store.h"
 #include "core/core.h"
+#include "ui/ui_shade.h"
 #include "ui/ui_touch.h"
 #include "utils/screenshot.h"
 #include "utils/log_config.h"
@@ -25,7 +26,7 @@
 #include <string_view>
 
 // OS version constants
-static constexpr const char* PROTOCOL_VERSION = "2.7";
+static constexpr const char* PROTOCOL_VERSION = "2.8";
 static constexpr const char* OS_VERSION = "0.4.0";
 
 static const char* TAG = "Console";
@@ -457,6 +458,26 @@ static Result execSys(std::string_view cmd, JsonArray args) {
         r.data["battery"] = getBatteryPercent();
         r.data["w"] = SCREEN_WIDTH;
         r.data["h"] = SCREEN_HEIGHT;
+        return r;
+    }
+
+    // sys config <key> [value]: a setting of /system/config.yml. With a value it is set, saved
+    // and applied at once, as the shade applies the file at boot
+    if (cmd == "config") {
+        auto& cfg = App::Manager::instance().systemConfig;
+        const char* key = argStr(args, 0);
+        if (!key[0])
+            return Result::errInvalid("sys config <key> [value]");
+        if (!cfg.store().has(key))
+            return Result::errNotFound("No such setting");
+        if (args.size() > 1) {
+            cfg.set(key, argStr(args, 1));
+            Shade::instance().applyConfig();
+            LOG_I(Log::APP, "Config: %s = %s", key, cfg.store().getAsString(key).c_str());
+        }
+        auto r = Result::ok();
+        r.data["key"] = key;
+        r.data["value"] = cfg.store().getAsString(key).c_str();
         return r;
     }
     

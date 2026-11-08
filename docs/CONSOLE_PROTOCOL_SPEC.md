@@ -1,4 +1,4 @@
-# Console Protocol v2.7 — Справка для эмулятора
+# Console Protocol v2.8 — Справка для эмулятора
 
 Единый набор команд, два транспорта. Эмулятор должен реализовать оба.
 
@@ -8,6 +8,8 @@
 
 ## Changelog
 
+- **v2.8**: `sys config <key> [value]` — настройка из `/system/config.yml`: прочитать; со значением —
+  поставить, сохранить и применить сразу.
 - **v2.7**: С этой версией протокол пришёл в репозиторий (2026-02-19); история до неё — вне
   репозитория. Правки текста при v2.7: категорий логов семь, как в `src/utils/log_config.h`, —
   `crypto` и `sd` консоль понимала и раньше, а в списке их не было.
@@ -169,6 +171,12 @@ clicker
 | `screen` | [color], [scale], [mode] | `{w, h, color, format, raw_size}` + BIN | Скриншот |
 | `time` | [epoch_seconds] | `{time}` | Получить/установить время |
 | `sync` | protocol, datetime, timezone, [lang] | `{protocol, os, chip, time, uptime, battery, w, h}` | Handshake: синхронизация + инфо об устройстве |
+| `config` | key, [value] | `{key, value}` | Настройка `/system/config.yml`; со значением — поставить, сохранить, применить |
+
+**config**: ключ — `раздел.имя`, как в `/system/config.yml`: `display.brightness`, `power.auto_sleep`,
+`power.nudge_timeout`, `power.dim_timeout`, `power.sleep_timeout`, `power.light_sleep`, `bluetooth.enabled`.
+Значение — текстом, тип у ключа свой: `true`/`false` (или `1`/`0`), число. Ответ — значение после
+установки, текстом: `{"key": "power.light_sleep", "value": "true"}`. Нет такого ключа — `not_found`.
 
 **screen** аргументы:
 - `color`: `rgb16` (default), `bw`, `gray`, `pal`

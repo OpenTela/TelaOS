@@ -275,6 +275,10 @@ namespace App {
 // ============================================
 // Manager
 // ============================================
+size_t Manager::appTimers() const {
+    return m_scriptMgr ? m_scriptMgr->timerCount() : 0;
+}
+
 void Manager::init() {
     LOG_I(Log::APP, "=== Evolution OS ===");
     
@@ -292,6 +296,7 @@ void Manager::init() {
     systemConfig.define("power.nudge_timeout", VarType::Int,  30);
     systemConfig.define("power.dim_timeout",   VarType::Int,  45);
     systemConfig.define("power.sleep_timeout", VarType::Int,  60);
+    systemConfig.define("power.light_sleep",   VarType::Bool, false);  // docs/POWER.md
     systemConfig.define("bluetooth.enabled", VarType::Bool, false);
 
     if (systemConfig.load()) {
