@@ -1898,7 +1898,8 @@ void create_select(const char *astart, const char *aend, const char *content, lv
     lv_dropdown_set_symbol(dd, select_arrow());
     // Its list opens on the screen, out of the page: in the watch's font, not the theme's 8px
     // Montserrat a child of the screen has
-    if (lv_obj_t* list = lv_dropdown_get_list(dd)) lv_obj_set_style_text_font(list, UI::Font::get(), LV_PART_MAIN);
+    if (lv_obj_t* list = lv_dropdown_get_list(dd))
+        lv_obj_set_style_text_font(list, UI::Font::get(), LV_PART_MAIN);
 
     // Initial selection: the state, else <option selected>, else the first option that can be chosen
     int initIdx = opts.selected;
