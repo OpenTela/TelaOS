@@ -1,0 +1,7 @@
+# UBSan reports sim_asan.py does not count: undefined behaviour of vendored code that changes
+# nothing the firmware uses, each with why. Our own code gets none.
+#
+# LVGL's binary font loader skips a glyph's header (35 bits at once in our fonts) with
+# read_bits(), shifting each bit by its place: past bit 31 that shift is undefined, but the
+# value is thrown away (lv_binfont_loader.c, load_glyph)
+shift-exponent:*lv_binfont_loader.c
