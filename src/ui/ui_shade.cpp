@@ -10,6 +10,7 @@
 #include "utils/log_config.h"
 #include "utils/font.h"
 #include <Arduino.h>
+#include <string>
 
 static const char* TAG = "Shade";
 
@@ -56,6 +57,7 @@ void Shade::applyConfig() {
     if (m_userBrightness > 0 && !display_is_asleep())
         display_set_brightness(m_userBrightness);
 
+    BLEBridge::setPairing(cfg.getBool("bluetooth.pairing"));
     if (cfg.getBool("bluetooth.enabled") && !BLEBridge::isInitialized()) {
         BLEBridge::init();
         LOG_I(Log::BLE, "BLE enabled from config");
@@ -265,6 +267,54 @@ void Shade::showBlocker() {
 
 void Shade::hideBlocker() {
     if (m_blocker) lv_obj_add_flag(m_blocker, LV_OBJ_FLAG_HIDDEN);
+}
+
+// ============================================
+// Pairing code
+// ============================================
+
+void Shade::wake() {
+    lv_display_trigger_activity(nullptr);  // or the next inactivity tick would put it back to sleep
+    restoreBrightness();
+}
+
+void Shade::showCode(uint32_t code) {
+    wake();
+    if (!m_code) {
+        m_code = lv_obj_create(lv_layer_top());
+        lv_obj_set_size(m_code, SCREEN_WIDTH, SCREEN_HEIGHT);
+        lv_obj_set_pos(m_code, 0, 0);
+        lv_obj_set_style_bg_color(m_code, lv_color_hex(BG_COLOR), 0);
+        lv_obj_set_style_bg_opa(m_code, LV_OPA_COVER, 0);
+        lv_obj_set_style_border_width(m_code, 0, 0);
+        lv_obj_set_style_radius(m_code, 0, 0);
+        lv_obj_remove_flag(m_code, LV_OBJ_FLAG_SCROLLABLE);
+
+        lv_obj_t* title = lv_label_create(m_code);
+        lv_label_set_text(title, "Bluetooth: код");
+        lv_obj_set_style_text_color(title, lv_color_white(), 0);
+        lv_obj_set_style_text_font(title, &Ubuntu_16px, 0);
+        lv_obj_align(title, LV_ALIGN_CENTER, 0, -SCREEN_HEIGHT / 6);
+
+        m_codeDigits = lv_label_create(m_code);
+        lv_obj_set_style_text_color(m_codeDigits, lv_color_white(), 0);
+        lv_obj_set_style_text_font(m_codeDigits, SCREEN_WIDTH >= 400 ? &Ubuntu_72px : &Ubuntu_48px, 0);
+        lv_obj_align(m_codeDigits, LV_ALIGN_CENTER, 0, 0);
+    }
+    std::string digits = std::to_string(code % 1000000 + 1000000).substr(1);  // six, leading zeros
+    digits.insert(3, " ");
+    lv_label_set_text(m_codeDigits, digits.c_str());
+    lv_obj_align(m_codeDigits, LV_ALIGN_CENTER, 0, 0);
+    lv_obj_remove_flag(m_code, LV_OBJ_FLAG_HIDDEN);
+    lv_obj_move_foreground(m_code);
+    LOG_I(Log::UI, "Pairing code shown");
+}
+
+void Shade::hideCode() {
+    if (!m_code)
+        return;
+    lv_obj_add_flag(m_code, LV_OBJ_FLAG_HIDDEN);
+    LOG_I(Log::UI, "Pairing code hidden");
 }
 
 // ============================================

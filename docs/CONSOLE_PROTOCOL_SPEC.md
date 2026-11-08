@@ -1,4 +1,4 @@
-# Console Protocol v2.8 — Справка для эмулятора
+# Console Protocol v2.9 — Справка для эмулятора
 
 Единый набор команд, два транспорта. Эмулятор должен реализовать оба.
 
@@ -8,6 +8,9 @@
 
 ## Changelog
 
+- **v2.9**: Безопасность BLE: с `bluetooth.pairing` часы пускают к характеристикам только
+  зашифрованную связь, спаренную по коду на их экране. `sys ble [forget]` — что с BLE, забыть
+  спаренные телефоны.
 - **v2.8**: `sys config <key> [value]` — настройка из `/system/config.yml`: прочитать; со значением —
   поставить, сохранить и применить сразу.
 - **v2.7**: С этой версией протокол пришёл в репозиторий (2026-02-19); история до неё — вне
@@ -27,6 +30,21 @@
 | TX | `...def1` | device → client | Notify (JSON text) |
 | RX | `...def2` | client → device | Write (JSON text) |
 | BIN | `...def3` | device ↔ client | Notify + Write (binary chunks) |
+
+**Безопасность BLE.** Без настройки `bluetooth.pairing` (так по умолчанию) характеристики открыты:
+команды — в том числе `app push` и прошивку по воздуху — шлёт любой, кто подключится. С
+`sys config bluetooth.pairing true` — со следующего включения BLE:
+
+- RX, TX и BIN читаются и пишутся только по зашифрованной и проверенной связи (`*_ENC`, `*_AUTHEN`);
+- подключившемуся часы сразу предлагают пару. Новый телефон: часы показывают шесть цифр, телефон
+  их вводит (пара «passkey», LE Secure Connections, защита от MITM). Код случайный, на одну пару;
+- телефон запоминает часы (bond): дальше связь шифруется его ключом, без кода;
+- пара не прошла или зашифровано без кода (Just Works) — часы отключают;
+- `sys ble forget` — забыть все телефоны: каждый спаривается заново.
+
+Клиенту: в Web Bluetooth и на macOS код обычно спрашивает система, своим окном;
+`tools/ble_assistant.py --pair` вызывает пару сам, на Linux код вводится в агенте BlueZ
+(`bluetoothctl`, `agent on`).
 
 **Запрос (client → RX):**
 ```json
@@ -172,9 +190,11 @@ clicker
 | `time` | [epoch_seconds] | `{time}` | Получить/установить время |
 | `sync` | protocol, datetime, timezone, [lang] | `{protocol, os, chip, time, uptime, battery, w, h}` | Handshake: синхронизация + инфо об устройстве |
 | `config` | key, [value] | `{key, value}` | Настройка `/system/config.yml`; со значением — поставить, сохранить, применить |
+| `ble` | [`forget`] | `{on, pairing, connected, secure, bonds}` | BLE и его безопасность; `forget` — забыть спаренные телефоны |
 
 **config**: ключ — `раздел.имя`, как в `/system/config.yml`: `display.brightness`, `power.auto_sleep`,
-`power.nudge_timeout`, `power.dim_timeout`, `power.sleep_timeout`, `power.light_sleep`, `bluetooth.enabled`.
+`power.nudge_timeout`, `power.dim_timeout`, `power.sleep_timeout`, `power.light_sleep`, `bluetooth.enabled`,
+`bluetooth.pairing`.
 Значение — текстом, тип у ключа свой: `true`/`false` (или `1`/`0`), число. Ответ — значение после
 установки, текстом: `{"key": "power.light_sleep", "value": "true"}`. Нет такого ключа — `not_found`.
 

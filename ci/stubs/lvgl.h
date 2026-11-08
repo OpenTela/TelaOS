@@ -1336,6 +1336,7 @@ inline void lv_tick_set_cb(uint32_t(*)()) {}
 inline void lv_task_handler() {}
 inline void lv_refr_now(lv_display_t*) {}
 inline void lv_display_enable_invalidation(lv_display_t*, bool) {}
+inline void lv_display_trigger_activity(lv_display_t*) {}
 inline lv_timer_t* lv_display_get_refr_timer(lv_display_t*) { return nullptr; }
 inline lv_obj_t* lv_display_get_screen_active(lv_display_t*) { return nullptr; }
 

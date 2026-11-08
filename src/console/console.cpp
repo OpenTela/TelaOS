@@ -26,7 +26,7 @@
 #include <string_view>
 
 // OS version constants
-static constexpr const char* PROTOCOL_VERSION = "2.8";
+static constexpr const char* PROTOCOL_VERSION = "2.9";
 static constexpr const char* OS_VERSION = "0.4.0";
 
 static const char* TAG = "Console";
@@ -459,6 +459,32 @@ static Result execSys(std::string_view cmd, JsonArray args) {
         r.data["w"] = SCREEN_WIDTH;
         r.data["h"] = SCREEN_HEIGHT;
         return r;
+    }
+
+    // sys ble [forget]: BLE and its security. forget: the phones the watch remembers, all of them,
+    // pair with a code again (bluetooth.pairing)
+    if (cmd == "ble") {
+#ifndef NO_BLE
+        const std::string_view sub = argStr(args, 0);
+        if (sub == "forget") {
+            if (!BLEBridge::isInitialized())
+                return Result::errInvalid("BLE is off");
+            if (!BLEBridge::forgetBonds())
+                return Result::errServer("Bonds not deleted");
+            LOG_I(Log::BLE, "All bonds forgotten");
+        } else if (!sub.empty()) {
+            return Result::errInvalid("sys ble [forget]");
+        }
+        auto r = Result::ok();
+        r.data["on"] = BLEBridge::isInitialized();
+        r.data["pairing"] = BLEBridge::pairing();
+        r.data["connected"] = BLEBridge::isConnected();
+        r.data["secure"] = BLEBridge::isSecure();
+        r.data["bonds"] = BLEBridge::bonds();
+        return r;
+#else
+        return Result::errInvalid("No BLE in this build");
+#endif
     }
 
     // sys config <key> [value]: a setting of /system/config.yml. With a value it is set, saved
