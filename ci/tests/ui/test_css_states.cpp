@@ -208,8 +208,10 @@ int main() {
         w = byId("seccut");
         expectTrue("overflow: hidden clips it", w && !w->overflowVisible, w ? "not clipped" : "no widget");
         w = byId("cbx");
-        expectTrue("a checkbox is its box: the gap to the text is outside", w && w->padColumn == 0 && w->marginRight == 8,
-                   w ? "gap " + std::to_string(w->padColumn) + ", margin " + std::to_string(w->marginRight) : "no widget");
+        expectTrue("a checkbox is its box, 13x13, and a browser's 3px after it",
+                   w && w->w == 13 && w->h == 13 && w->marginRight == 3,
+                   w ? std::to_string(w->w) + "x" + std::to_string(w->h) + ", margin " + std::to_string(w->marginRight)
+                     : "no widget");
         w = byId("rad");
         expectTrue("a radio's ring is round", w && w->radius == LV_RADIUS_CIRCLE,
                    w ? "radius " + std::to_string(w->radius) : "no widget");

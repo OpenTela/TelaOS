@@ -35,6 +35,10 @@
 #if LV_USE_SPAN
 #include "src/widgets/span/lv_span_private.h"  // a span's text, for textContent
 #endif
+#if !defined(LVGL_MOCK_ENABLED)
+#include "src/core/lv_obj_class_private.h"              // kHtmlBox, a class of its own
+#include "src/widgets/checkbox/lv_checkbox_private.h"  // its instance, an lv_checkbox's
+#endif
 
 #include <algorithm>
 #include <array>
@@ -2049,15 +2053,130 @@ void onToggleChanged(lv_event_t* e) {
     if (!tg.onchange.empty() && g_onclick_handler) g_onclick_handler(tg.onchange.c_str());
 }
 
-void checkboxElement(const TagRef& t, lv_obj_t* parent, bool radio) {
+#if !defined(LVGL_MOCK_ENABLED)
+// The box of a checkbox or radio HTML lays out, as a browser draws it: it fills the input, 13x13
+// unless CSS sizes it (a box that is not square is the square of its smaller side, in the
+// middle), and its mark, a tick or in a radio a dot, is drawn to its size. lv_checkbox's own box
+// is the line of its font beside a text, and its mark a glyph of the theme's font, 8px. The look
+// of the box is the theme's and CSS's for the indicator: lv_checkbox is the base class
+void drawHtmlBox(lv_event_t* e) {
+    auto* cb = static_cast<lv_obj_t*>(lv_event_get_current_target(e));
+    lv_area_t box;
+    lv_obj_get_content_coords(cb, &box);  // inside a border and padding CSS gives the input
+    const int32_t w = lv_area_get_width(&box), h = lv_area_get_height(&box), side = LV_MIN(w, h);
+    if (side <= 0)
+        return;
+    box.x1 += (w - side) / 2;
+    box.y1 += (h - side) / 2;
+    box.x2 = box.x1 + side - 1;
+    box.y2 = box.y1 + side - 1;
+    lv_area_increase(&box, lv_obj_get_style_transform_width(cb, LV_PART_INDICATOR),
+                     lv_obj_get_style_transform_height(cb, LV_PART_INDICATOR));  // the theme's, pressed
+    lv_layer_t* layer = lv_event_get_layer(e);
+    lv_draw_rect_dsc_t look;
+    lv_draw_rect_dsc_init(&look);
+    lv_obj_init_draw_rect_dsc(cb, LV_PART_INDICATOR, &look);
+    look.bg_image_src = nullptr;  // the theme's mark
+    lv_draw_rect(layer, &look, &box);
+    if (!lv_obj_has_state(cb, LV_STATE_CHECKED))
+        return;
+
+    const int32_t s = lv_area_get_width(&box);
+    const lv_color_t color = lv_obj_get_style_text_color_filtered(cb, LV_PART_INDICATOR);  // the glyph's
+    const lv_opa_t opa = lv_obj_get_style_opa_recursive(cb, LV_PART_INDICATOR);
+    const auto tg = s_toggles.find(cb);
+    if (tg != s_toggles.end() && tg->second.radio) {
+        const int32_t r = LV_MAX(1, s / 5), cx = (box.x1 + box.x2) / 2, cy = (box.y1 + box.y2) / 2;
+        lv_draw_rect_dsc_t dot;
+        lv_draw_rect_dsc_init(&dot);
+        dot.bg_color = color;
+        dot.bg_opa = opa;
+        dot.radius = LV_RADIUS_CIRCLE;
+        const lv_area_t a = {cx - r, cy - r, cx + r, cy + r};
+        lv_draw_rect(layer, &dot, &a);
+        return;
+    }
+    lv_draw_line_dsc_t tick;
+    lv_draw_line_dsc_init(&tick);
+    tick.color = color;
+    tick.opa = opa;
+    tick.width = LV_MAX(2, s / 6);
+    tick.round_start = 1;
+    tick.round_end = 1;
+    const auto at = [&](int32_t x, int32_t y) {  // in hundredths of the box
+        return lv_point_precise_t{static_cast<lv_value_precise_t>(box.x1 + s * x / 100),
+                                  static_cast<lv_value_precise_t>(box.y1 + s * y / 100)};
+    };
+    tick.p1 = at(25, 52);
+    tick.p2 = at(43, 70);
+    lv_draw_line(layer, &tick);
+    tick.p1 = tick.p2;
+    tick.p2 = at(76, 32);
+    lv_draw_line(layer, &tick);
+}
+
+void htmlBoxEvent(const lv_obj_class_t* cls, lv_event_t* e);
+
+// lv_checkbox, drawn as a browser's box: its size and drawing are the class's, so a box costs
+// nothing more than an lv_checkbox
+const lv_obj_class_t kHtmlBox = [] {
+    lv_obj_class_t c{};
+    c.base_class = &lv_checkbox_class;
+    c.event_cb = htmlBoxEvent;
+    c.name = "checkbox";  // as lv_checkbox's, in the trees of the screens
+    c.width_def = 13;
+    c.height_def = 13;
+    c.instance_size = sizeof(lv_checkbox_t);
+    c.theme_inheritable = LV_OBJ_CLASS_THEME_INHERITABLE_TRUE;  // the theme's look of a checkbox
+    return c;
+}();
+
+void htmlBoxEvent(const lv_obj_class_t* cls, lv_event_t* e) {
+    (void)cls;
+    const lv_event_code_t code = lv_event_get_code(e);
+    if (code == LV_EVENT_DRAW_MAIN) {  // the input as lv_obj draws it (CSS's background, border), then the box
+        if (lv_obj_event_base(&lv_checkbox_class, e) == LV_RESULT_OK)
+            drawHtmlBox(e);
+        return;
+    }
+    if (lv_obj_event_base(&kHtmlBox, e) != LV_RESULT_OK)  // lv_checkbox's
+        return;
+    if (code == LV_EVENT_GET_SELF_SIZE) {  // width: auto, as in a browser
+        auto* p = static_cast<lv_point_t*>(lv_event_get_param(e));
+        p->x = 13;
+        p->y = 13;
+    }
+}
+#endif
+
+// A checkbox or radio without label=: a browser's box (kHtmlBox), no text
+lv_obj_t* htmlBox(lv_obj_t* parent) {
+#if !defined(LVGL_MOCK_ENABLED)
+    lv_obj_t* cb = lv_obj_class_create_obj(&kHtmlBox, parent);
+    lv_obj_class_init_obj(cb);
+    lv_checkbox_set_text_static(cb, "");
+#else
     lv_obj_t* cb = lv_checkbox_create(parent);
+    lv_obj_set_size(cb, 13, 13);
+    lv_checkbox_set_text(cb, "");
+#endif
+    return cb;
+}
+
+void checkboxElement(const TagRef& t, lv_obj_t* parent, bool radio) {
     const P::String label = attr(t, "label");
-    lv_checkbox_set_text(cb, label.c_str());
-    if (label.empty()) {
-        // The input is its box, as in HTML: the gap LVGL keeps for the text moves outside it, so the
-        // text after it stays where it was, and an outline or a border from CSS goes round the box
-        lv_obj_set_style_margin_right(cb, lv_obj_get_style_pad_column(cb, LV_PART_MAIN), LV_PART_MAIN);
-        lv_obj_set_style_pad_column(cb, 0, LV_PART_MAIN);
+    lv_obj_t* cb = label.empty() ? htmlBox(parent) : lv_checkbox_create(parent);
+    if (!label.empty()) {
+        lv_checkbox_set_text(cb, label.c_str());
+    } else {
+        // The input is its box, as in HTML, and a browser's: 13x13, 3px 3px 3px 4px of margin
+        // around a checkbox, 3px 3px 0 5px around a radio. An outline or a border from CSS goes
+        // round the box; a finger has 15px more
+        lv_obj_set_style_margin_top(cb, 3, LV_PART_MAIN);
+        lv_obj_set_style_margin_right(cb, 3, LV_PART_MAIN);
+        lv_obj_set_style_margin_bottom(cb, radio ? 0 : 3, LV_PART_MAIN);
+        lv_obj_set_style_margin_left(cb, radio ? 5 : 4, LV_PART_MAIN);
+        fingerRoom(cb, ClickArea::CHECKBOX, true);
     }
     if (radio) lv_obj_set_style_radius(cb, LV_RADIUS_CIRCLE, LV_PART_MAIN);  // its ring is round too
     Toggle tg;
@@ -2256,9 +2375,13 @@ void textareaElement(const TagRef& t, lv_obj_t* parent) {
 void barElement(const TagRef& t, lv_obj_t* parent, bool meter) {
     lv_obj_t* b = lv_bar_create(parent);
     P::String w = attr(t, "width");
-    if (w.empty()) w = attr(t, "w");
-    // inline, browser default size: progress 10em, meter 5em
-    lv_obj_set_size(b, w.empty() ? (meter ? 80 : 160) : parse_size(w.c_str()), 10);
+    if (w.empty())
+        w = attr(t, "w");
+    // inline, a browser's size: progress 10em, meter 5em, both 1em high. The bar is drawn 10px high
+    // in the middle of its 16 (transform_height), as before
+    lv_obj_set_size(b, w.empty() ? (meter ? 80 : 160) : parse_size(w.c_str()), 16);
+    lv_obj_set_style_transform_height(b, -3, LV_PART_MAIN);
+    lv_obj_set_style_transform_height(b, -3, LV_PART_INDICATOR);
     const double mn = meter ? attrNum(t.astart, t.aend, "min", 0) : 0;
     const double mx = attrNum(t.astart, t.aend, "max", meter ? 1 : 1);
     const double v = attrNum(t.astart, t.aend, "value", mn);

@@ -152,7 +152,7 @@ static void roomHitTest(lv_event_t* e) {
 #endif
 
 // html: a control HTML lays out (HtmlFlow::browserSized(), or right in a flow box)
-static void fingerRoom(lv_obj_t* o, int px, bool html) {
+void fingerRoom(lv_obj_t* o, int px, bool html) {
     lv_obj_set_ext_click_area(o, px);
 #if !defined(LVGL_MOCK_ENABLED)
     if (!html) return;
@@ -1198,6 +1198,22 @@ void create_switch(const char *astart, const char *aend, lv_obj_t *parent) {
     widget.on(LV_EVENT_VALUE_CHANGED, switch_event_handler, idx);
 }
 
+// A range HTML lays out, as Chromium has it with the watch's font: 129x16 (w= keeps its width),
+// a margin of 2px. LVGL draws a slider's track and filling in the whole box: transform_height
+// draws them 4px high in its middle; the knob, as high as the box, is 16
+static void browserRange(lv_obj_t* s, bool ownWidth) {
+    if (!ownWidth)
+        lv_obj_set_width(s, 129);
+    lv_obj_set_height(s, 16);
+    lv_obj_set_style_margin_top(s, 2, LV_PART_MAIN);
+    lv_obj_set_style_margin_right(s, 2, LV_PART_MAIN);
+    lv_obj_set_style_margin_bottom(s, 2, LV_PART_MAIN);
+    lv_obj_set_style_margin_left(s, 2, LV_PART_MAIN);
+    lv_obj_set_style_transform_height(s, -6, LV_PART_MAIN);
+    lv_obj_set_style_transform_height(s, -6, LV_PART_INDICATOR);
+    lv_obj_set_style_pad_all(s, 0, LV_PART_KNOB);
+}
+
 void create_slider(const char *astart, const char *aend, lv_obj_t *parent) {
     auto attrs = parseCommonAttrs(astart, aend);
     auto bind = getAttr(astart, aend, "bind");
@@ -1232,6 +1248,13 @@ void create_slider(const char *astart, const char *aend, lv_obj_t *parent) {
     
     // as before: a slider's own hit test (LV_OBJ_FLAG_ADV_HITTEST) would take only its knob
     lv_obj_set_ext_click_area(slider, ClickArea::SLIDER);
+
+    // A range HTML lays out (<input type="range">, or a slider in a line of text) is a browser's;
+    // one placed by x or y stays as TelaOS draws it
+    const bool browser = (HtmlFlow::browserSized() || HtmlFlow::inFlow(parent)) && getAttr(astart, aend, "x").empty() &&
+                         getAttr(astart, aend, "y").empty();
+    if (browser)
+        browserRange(slider, !getAttr(astart, aend, "w").empty());
     
     // CSS first, then inline overrides
     {

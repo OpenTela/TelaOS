@@ -508,6 +508,12 @@ int main() {
     printf("\nForms:\n");
     render(APP_FORMS);
     expectTrue("checkbox checked", byId("cb") && byId("cb")->checked);
+    expectTrue("checkbox: a browser's box, 13x13", byId("cb") && byId("cb")->w == 13 && byId("cb")->h == 13);
+    expectTrue("radio: a browser's box, 13x13", byId("r1") && byId("r1")->w == 13 && byId("r1")->h == 13);
+    expectTrue("checkbox: a browser's margins, 3px 3px 3px 4px", byId("cb") && byId("cb")->marginTop == 3 &&
+               byId("cb")->marginRight == 3 && byId("cb")->marginBottom == 3 && byId("cb")->marginLeft == 4);
+    expectTrue("radio: a browser's margins, 3px 3px 0 5px", byId("r1") && byId("r1")->marginTop == 3 &&
+               byId("r1")->marginRight == 3 && byId("r1")->marginBottom == 0 && byId("r1")->marginLeft == 5);
     expectTrue("checkbox unchecked", byId("cb2") && !byId("cb2")->checked);
     expectTrue("radio checked attribute", byId("r2") && byId("r2")->checked && byId("r1") && !byId("r1")->checked);
     {
@@ -535,6 +541,13 @@ int main() {
                byId("placed")->h == 40);
     expectTrue("progress 0.25 -> 250/1000", byId("pg") && byId("pg")->curValue == 250);
     expectTrue("meter 5 of 0..10 -> 500/1000", byId("mt") && byId("mt")->curValue == 500);
+    expectTrue("<progress>: a browser's 160x16", byId("pg") && byId("pg")->w == 160 && byId("pg")->h == 16);
+    expectTrue("<meter>: a browser's 80x16", byId("mt") && byId("mt")->w == 80 && byId("mt")->h == 16);
+    {
+        MW* r = byId("rng");
+        expectTrue("<input type=range>: a browser's 129x16, margin 2px", r && r->w == 129 && r->h == 16 &&
+                   r->marginTop == 2 && r->marginRight == 2 && r->marginBottom == 2 && r->marginLeft == 2);
+    }
     expectTrue("select stays TelaOS dropdown", byId("sel") && byId("sel")->type == "Dropdown");
     expectTrue("input without type= stays TelaOS input", byId("tela") && byId("tela")->type == "TextArea");
     expectTrue("checked before type=: still a checked checkbox", byId("cb3") && byId("cb3")->checked);
