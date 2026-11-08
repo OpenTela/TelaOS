@@ -64,7 +64,9 @@ input:disabled {
 }
 
 /* Fields a finger types in and lists it picks from: across the screen, not lower than a button,
-   the text 16px on the screen's cards. A textarea is as high as its rows */
+   the text 16px on the screen's cards, 8px apart one under another (4px above and below each:
+   a field is a word of its line, its line as high as it with them). A textarea is as high as
+   its rows */
 input[type="text"],
 input[type="password"],
 input[type="email"],
@@ -77,6 +79,8 @@ textarea {
   box-sizing: border-box;
   width: 100%;
   min-height: var(--tela-tap);
+  margin-top: 4px;
+  margin-bottom: 4px;
   padding: 10px 12px;
   border: 1px solid var(--tela-line);
   border-radius: var(--tela-radius);
