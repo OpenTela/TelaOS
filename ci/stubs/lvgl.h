@@ -1464,7 +1464,10 @@ inline void lv_obj_set_style_transform_height(lv_obj_t*, int, int) {}
 inline int lv_obj_get_style_pad_bottom(lv_obj_t* obj, int) { return (obj && obj->mock_widget) ? obj->mock_widget->padBottom : 0; }
 inline int lv_obj_get_style_max_height(lv_obj_t*, int) { return 0; }
 inline int lv_obj_get_style_min_height(lv_obj_t*, int) { return 0; }
-inline int lv_obj_get_style_max_width(lv_obj_t*, int) { return 0; }
+#ifndef LV_COORD_MAX
+#define LV_COORD_MAX ((1 << 29) - 1)
+#endif
+inline int lv_obj_get_style_max_width(lv_obj_t*, int) { return LV_COORD_MAX; }  // LVGL's default: none
 inline int lv_obj_get_style_min_width(lv_obj_t*, int) { return 0; }
 inline int lv_obj_get_style_pad_top(lv_obj_t* obj, int) { return (obj && obj->mock_widget) ? obj->mock_widget->padTop : 0; }
 

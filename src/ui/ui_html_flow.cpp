@@ -1484,15 +1484,19 @@ int baselineMove(const lv_font_t* around, const lv_font_t* own, int shift) {
 
 // The spaces between two widgets of a row of words, as a margin: the first one's on its right, or
 // the second one's on its left where the first is as wide as a share of the line (LVGL takes a
-// margin off a width in %; 100% wide, a browser's widget does not share its line anyway)
+// margin off a width in %). After one as wide as the line, none: the line breaks after it, and a
+// browser's space at a break is gone
 void gapBetween(lv_obj_t* first, lv_obj_t* second, int32_t space) {
     if (!first || !space)
         return;
-    const bool firstShares = LV_COORD_IS_PCT(lv_obj_get_style_width(first, LV_PART_MAIN));
+    const int32_t width = lv_obj_get_style_width(first, LV_PART_MAIN);
+    const bool firstShares = LV_COORD_IS_PCT(width);
     const bool secondShares = LV_COORD_IS_PCT(lv_obj_get_style_width(second, LV_PART_MAIN));
+    const bool limited = lv_obj_get_style_max_width(first, LV_PART_MAIN) != LV_COORD_MAX;  // max-width
+    const bool wholeLine = firstShares && LV_COORD_GET_PCT(width) >= 100 && !limited;
     if (!firstShares) {
         lv_obj_set_style_margin_right(first, lv_obj_get_style_margin_right(first, LV_PART_MAIN) + space, LV_PART_MAIN);
-    } else if (!secondShares) {
+    } else if (!wholeLine && !secondShares) {
         lv_obj_set_style_margin_left(second, lv_obj_get_style_margin_left(second, LV_PART_MAIN) + space, LV_PART_MAIN);
     }
 }
