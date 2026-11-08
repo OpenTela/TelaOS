@@ -1,4 +1,4 @@
-# Simulator v0.17
+# Simulator v0.18
 
 Настоящая прошивка TelaOS на ПК: тот же `src/`, LVGL 9.2 из `lib/lvgl`, `include/lv_conf.h`,
 шрифты, Lua, `data/`. Окно, где мышь — палец; робот, который тапает и проверяет; скриншоты
@@ -6,6 +6,9 @@
 
 ## Changelog
 
+- **v0.18**: `html_tags` и со стилем часов: `sim_screens.py` снимает и судит его ещё раз —
+  `html_tags_tela`, `<link rel="stylesheet" href="/system/tela.css">` в `<app>`; Chromium получает тот
+  же файл из `data/system/`. В отчёте PR — строка «Со стилем часов» и экраны `html_tags_tela`.
 - **v0.17**: Судья `html_tags` даёт каждой странице и CSS самого приложения — `<link>` и `<style>` в
   `<app>`, как документу в браузере: страница со стилем из файла сверяется с Chromium с тем же файлом.
 - **v0.16**: Случайные страницы против Chromium: `sim/tools/judge_pages.py` рисует на часах и
@@ -309,6 +312,12 @@ python3 sim/tools/sim_asan.py --head . --out build/asan --pages 300 [--seed 1 --
 - не считаются текст в строке (`<b>`, `<a>` в абзаце — на часах у него нет своей рамки) и то, что
   не показывает ни один из двух. Страница `icons` не судится: у Chromium нет шрифта Material Symbols,
   он нарисовал бы иконки чужим.
+
+И ещё раз — со стилем часов (`docs/CSS.md`, «Стиль часов»). `sim_screens.py` кладёт в `out/fixtures/`
+копию образцов и в ней `html_tags_tela` — тот же `html_tags`, только первым в `<app>` стоит
+`<link rel="stylesheet" href="/system/tela.css">`. Его экраны снимаются, как у всех, а судья
+раскладывает его в Chromium с тем же файлом: `/system/…` в `href` и `src` — файл из `data/system/`
+проверяемой ветки. В отчёте — своя строка «Со стилем часов», всё целиком — `judge_tela.json`.
 
 В отчёте PR:
 

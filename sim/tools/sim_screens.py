@@ -12,11 +12,14 @@ trees of every screen (the same pixels over another tree: changed unseen), and w
                          (images from --image-url, if given), the watch's memory on every
                          screen, what the screens redraw at rest (idle_report.py), how much C
                          is left in src/, how the pages of JUDGED lay out
-                         against Chromium (judge.py), how the animations of ANIMATED move
+                         against Chromium (judge.py), without the watch style and with it
+                         (STYLED: JUDGED with /system/tela.css), how the animations of ANIMATED move
                          against it (anim_judge.py), and with --pages N: N random pages
                          through both builds (sim_pages.py) and N random pages of plain
                          HTML and CSS laid out by both and by Chromium (judge_pages.py)
     out/judge.json       the judge's verdict on every element of those pages
+    out/judge_tela.json  and with the watch style
+    out/fixtures/        the fixtures the screens are shot with: sim/tests/fixtures and STYLED
     out/anim_judge.json  and on every value of those animations, frame by frame
     out/publish/         before/ after/ diff/ — only the screens that changed
     out/status.json      machine-readable summary
@@ -59,10 +62,32 @@ NAV_MS = 400      # after "ui nav": the page is drawn
 IDLE_MS = 2000    # after each screen's picture: at rest, what it redraws by itself (idle_report.py)
 MAX_ROWS = 30     # screens with pictures in the comment; the rest by name
 JUDGED = "html_tags"  # the fixture app whose pages Chromium judges (judge.py)
+STYLED = judge.STYLED  # JUDGED with the watch style: a <link> to /system/tela.css in its <app>
 ANIMATED = "anim_tags"  # and whose animations it judges, frame by frame (anim_judge.py)
+STYLED_TITLE = (f"**Со стилем часов:** {JUDGED} и `/system/tela.css` против Chromium с тем же файлом, "
+                f"рамки элементов ±{judge.TOLERANCE} px")
 
 
 # ============ Firmware: build, list apps, run ============
+
+def styled_fixtures(fixtures, out):
+    """out/fixtures: the fixtures and one more app, STYLED — JUDGED, its <app> linking the watch
+    style first, as an app would (its own CSS after it wins). Its screens are shot and judged as
+    JUDGED's are, so the report shows the style on every tag, and against Chromium"""
+    copy = Path(out) / "fixtures"
+    shutil.rmtree(copy, ignore_errors=True)
+    shutil.copytree(fixtures, copy)
+    app = copy / "apps" / STYLED
+    shutil.copytree(copy / "apps" / JUDGED, app)
+    (app / f"{JUDGED}.bax").rename(app / f"{STYLED}.bax")
+    bax = app / f"{STYLED}.bax"
+    link = '\n  <link rel="stylesheet" href="/system/tela.css">'
+    text, n = re.subn(r"(<app\b[^>]*>)", lambda m: m.group(1) + link, bax.read_text("utf-8"), count=1)
+    if n != 1:
+        raise ValueError(f"{bax}: no <app>")
+    bax.write_text(text, "utf-8")
+    return copy
+
 
 def build(sim_dir, telaos_dir, build_dir, log, options=()):
     """Configure and build telaos_sim for telaos_dir; returns the binary or None.
@@ -402,6 +427,7 @@ def report(entries, tests, meta, url):
     if meta.get("code"):
         out += [code_summary(*meta["code"]), ""]
     out += meta.get("judge", [])
+    out += meta.get("judge_tela", [])
     out += meta.get("judge_pages", [])
     out += meta.get("motion", [])
     out += meta.get("memory", [])
@@ -488,9 +514,10 @@ def main():
             print("[screens] base does not build: showing head screens only", flush=True)
 
     print("[screens] shooting every screen ...", flush=True)
-    head_errors = shoot(head_bin, [head / "data", fixtures], fixtures, out / "shots-head", out / "work-head")
+    styled = styled_fixtures(fixtures, out)
+    head_errors = shoot(head_bin, [head / "data", styled], styled, out / "shots-head", out / "work-head")
     if base_bin:
-        shoot(base_bin, [base / "data", fixtures], fixtures, out / "shots-base", out / "work-base")
+        shoot(base_bin, [base / "data", styled], styled, out / "shots-base", out / "work-base")
     print("[screens] frames of the animations ...", flush=True)
     anim_errors = anim_frames(head_bin, fixtures, out / "anim-head")
     if base_bin:
@@ -516,6 +543,11 @@ def main():
     verdict, verdict_base = judge.check(fixtures / "apps" / JUDGED, out / "shots-head", out / "shots-base")
     if verdict:
         (out / "judge.json").write_text(json.dumps(verdict, indent=1, ensure_ascii=False))
+    print("[screens] ... and with the watch style, %s ..." % STYLED, flush=True)
+    styled_verdict, styled_base = judge.check(styled / "apps" / STYLED, out / "shots-head", out / "shots-base",
+                                              system=head / "data" / "system")
+    if styled_verdict:
+        (out / "judge_tela.json").write_text(json.dumps(styled_verdict, indent=1, ensure_ascii=False))
     random_judged = (None, None)
     if args.pages:
         print(f"[screens] Chromium judges {args.pages} random pages of plain HTML ...", flush=True)
@@ -530,6 +562,7 @@ def main():
             "code": code, "memory": mem_report.lines(mem_base, mem_head),
             "idle": idle_report.lines(idle_base, idle_head),
             "judge": judge.lines(verdict, verdict_base) or judge.unmeasured(),
+            "judge_tela": judge.lines(styled_verdict, styled_base, title=STYLED_TITLE),
             "judge_pages": judge_pages.lines(*random_judged),
             "motion": anim_judge.lines(motion, motion_base) or anim_judge.unmeasured(),
             "pages": sim_pages.lines(pages)}
@@ -544,6 +577,8 @@ def main():
                                                  "idle": {"head": idle_head, "base": idle_base},
                                                  "judge": {"head": judge.summary(verdict),
                                                            "base": judge.summary(verdict_base)},
+                                                 "judge_tela": {"head": judge.summary(styled_verdict),
+                                                                "base": judge.summary(styled_base)},
                                                  "judge_pages": {"head": judge.summary(random_judged[0]),
                                                                  "base": judge.summary(random_judged[1])},
                                                  "motion": {"head": anim_judge.summary(motion),

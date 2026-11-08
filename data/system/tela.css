@@ -1,0 +1,54 @@
+/* tela.css 0.1 — the look of TelaOS for plain HTML (docs/CSS.md, «Стиль часов»)
+
+     <link rel="stylesheet" href="/system/tela.css">
+
+   No classes: the tags as they are look like the apps of TelaOS without HTML — the dark screen,
+   blue buttons a finger hits: rounded, not lower than 44px, text 16px. Chromium shows a page
+   with this file the same way, and the judge holds it to that.
+
+   A theme is the variables again, after this file:
+     <style> :root { --tela-accent: #4caf50; } </style> */
+
+:root {
+  --tela-bg: #15171a;        /* the screen */
+  --tela-text: #fafafa;
+  --tela-accent: #2196f3;    /* buttons and links */
+  --tela-on-accent: #ffffff; /* text on a button */
+  --tela-pressed: #1976d2;   /* a button under the finger */
+  --tela-radius: 10px;
+  --tela-tap: 44px;          /* the least height of what a finger presses */
+}
+
+html, body {
+  background: var(--tela-bg);
+  color: var(--tela-text);
+}
+
+a {
+  color: var(--tela-accent);
+}
+
+button,
+input[type="button"],
+input[type="submit"],
+input[type="reset"] {
+  min-height: var(--tela-tap);
+  padding: 10px 16px;
+  border: 0;
+  border-radius: var(--tela-radius);
+  background: var(--tela-accent);
+  color: var(--tela-on-accent);
+  font-size: 16px;
+}
+
+button:active,
+input[type="button"]:active,
+input[type="submit"]:active,
+input[type="reset"]:active {
+  background: var(--tela-pressed);
+}
+
+button:disabled,
+input:disabled {
+  opacity: 0.5;
+}
