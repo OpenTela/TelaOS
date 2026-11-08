@@ -22,15 +22,23 @@ int main() {
     Log::setAll(Log::Disabled);
 
     TEST("Arduino leaves the confirmation to TelaOS");
-    { if (verifyRollbackLater()) PASS(); else FAIL(""); }
+    {
+        if (verifyRollbackLater())
+            PASS();
+        else
+            FAIL("");
+    }
 
     TEST("a confirmed firmware: nothing to do");
     {
         OtaMock::reset();
         OtaConfirm::begin();
         OtaConfirm::tick(60000);
-        if (OtaMock::markedValid == 0 && !strcmp(OtaConfirm::state(), "valid")) PASS();
-        else FAIL("");
+        const bool stateValid = !strcmp(OtaConfirm::state(), "valid");
+        if (OtaMock::markedValid == 0 && stateValid)
+            PASS();
+        else
+            FAIL("");
     }
 
     TEST("pending: not before 20 s");
@@ -40,8 +48,11 @@ int main() {
         OtaConfirm::begin();
         OtaConfirm::tick(5000);
         OtaConfirm::tick(19999);
-        if (OtaMock::markedValid == 0 && !strcmp(OtaConfirm::state(), "pending")) PASS();
-        else FAIL("");
+        const bool statePending = !strcmp(OtaConfirm::state(), "pending");
+        if (OtaMock::markedValid == 0 && statePending)
+            PASS();
+        else
+            FAIL("");
     }
 
     TEST("pending: confirmed at 20 s, once");
@@ -49,8 +60,11 @@ int main() {
         OtaConfirm::tick(20000);
         OtaConfirm::tick(20005);
         OtaConfirm::tick(90000);
-        if (OtaMock::markedValid == 1 && !strcmp(OtaConfirm::state(), "valid")) PASS();
-        else FAIL("");
+        const bool stateValid = !strcmp(OtaConfirm::state(), "valid");
+        if (OtaMock::markedValid == 1 && stateValid)
+            PASS();
+        else
+            FAIL("");
     }
 
     TEST("flashed over USB (boot_app0.bin: undefined): never confirmed");
@@ -59,8 +73,11 @@ int main() {
         OtaMock::runningState = ESP_OTA_IMG_UNDEFINED;
         OtaConfirm::begin();
         OtaConfirm::tick(60000);
-        if (OtaMock::markedValid == 0 && !strcmp(OtaConfirm::state(), "undefined")) PASS();
-        else FAIL("");
+        const bool stateUndefined = !strcmp(OtaConfirm::state(), "undefined");
+        if (OtaMock::markedValid == 0 && stateUndefined)
+            PASS();
+        else
+            FAIL("");
     }
 
     TEST("no record in otadata: never confirmed");
@@ -69,8 +86,11 @@ int main() {
         OtaMock::runningKnown = false;
         OtaConfirm::begin();
         OtaConfirm::tick(60000);
-        if (OtaMock::markedValid == 0 && !strcmp(OtaConfirm::state(), "none")) PASS();
-        else FAIL("");
+        const bool stateNone = !strcmp(OtaConfirm::state(), "none");
+        if (OtaMock::markedValid == 0 && stateNone)
+            PASS();
+        else
+            FAIL("");
     }
 
     TEST("the partition rolled back from, as of begin()");
@@ -81,8 +101,10 @@ int main() {
         OtaMock::invalid = &OtaMock::part;  // app1
         OtaConfirm::begin();
         const char* bad = OtaConfirm::invalidPartition();
-        if (none && bad && !strcmp(bad, "app1")) PASS();
-        else FAIL("");
+        if (none && bad && !strcmp(bad, "app1"))
+            PASS();
+        else
+            FAIL("");
         OtaMock::reset();
     }
 

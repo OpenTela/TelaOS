@@ -61,7 +61,8 @@ static int lines() {
 
 static bool expectLog(const char* want) {
     const std::string got = LittleFS.readFile(CrashLog::kPath);
-    if (got == want) return true;
+    if (got == want)
+        return true;
     printf("\n      got  '%s'\n      want '%s'\n", got.c_str(), want);
     return false;
 }
@@ -76,24 +77,33 @@ int main() {
     TEST("power-on, reboot: nothing to record");
     {
         auto r = run(10, "", "dev", "app0");
-        if (CrashLog::line(ESP_RST_POWERON, &r, false).empty() && CrashLog::line(ESP_RST_SW, &r, false).empty() &&
-            CrashLog::line(ESP_RST_UNKNOWN, nullptr, false).empty())
+        const bool nothing = CrashLog::line(ESP_RST_POWERON, &r, false).empty() &&
+                             CrashLog::line(ESP_RST_SW, &r, false).empty() &&
+                             CrashLog::line(ESP_RST_UNKNOWN, nullptr, false).empty();
+        if (nothing)
             PASS();
-        else FAIL("");
+        else
+            FAIL("");
     }
 
     TEST("panic with no run kept: the reason only");
     {
-        if (CrashLog::line(ESP_RST_PANIC, nullptr, false) == "{\"reset\":\"panic\"}") PASS();
-        else FAIL(CrashLog::line(ESP_RST_PANIC, nullptr, false).c_str());
+        const P::String l = CrashLog::line(ESP_RST_PANIC, nullptr, false);
+        if (l == "{\"reset\":\"panic\"}")
+            PASS();
+        else
+            FAIL(CrashLog::line(ESP_RST_PANIC, nullptr, false).c_str());
     }
 
     TEST("panic: uptime, app, firmware, partition");
     {
         auto r = run(183, "weather", "fc686e0", "app1");
         const P::String l = CrashLog::line(ESP_RST_PANIC, &r, false);
-        if (l == "{\"reset\":\"panic\",\"up\":183,\"app\":\"weather\",\"fw\":\"fc686e0\",\"part\":\"app1\"}") PASS();
-        else FAIL(l.c_str());
+        const char* expected = "{\"reset\":\"panic\",\"up\":183,\"app\":\"weather\",\"fw\":\"fc686e0\",\"part\":\"app1\"}";
+        if (l == expected)
+            PASS();
+        else
+            FAIL(l.c_str());
     }
 
     TEST("watchdogs and brownout are recorded");
@@ -105,24 +115,33 @@ int main() {
             const std::string want = std::string("{\"reset\":\"") + CrashLog::resetName(reason) + "\"";
             ok = ok && l.compare(0, want.size(), want.c_str()) == 0;
         }
-        if (ok && std::string(CrashLog::resetName(ESP_RST_TASK_WDT)) == "task_wdt") PASS();
-        else FAIL("");
+        const bool named = std::string(CrashLog::resetName(ESP_RST_TASK_WDT)) == "task_wdt";
+        if (ok && named)
+            PASS();
+        else
+            FAIL("");
     }
 
     TEST("in the launcher: no app");
     {
         auto r = run(7, "", "dev", "app0");
         const P::String l = CrashLog::line(ESP_RST_PANIC, &r, false);
-        if (l == "{\"reset\":\"panic\",\"up\":7,\"fw\":\"dev\",\"part\":\"app0\"}") PASS();
-        else FAIL(l.c_str());
+        const char* expected = "{\"reset\":\"panic\",\"up\":7,\"fw\":\"dev\",\"part\":\"app0\"}";
+        if (l == expected)
+            PASS();
+        else
+            FAIL(l.c_str());
     }
 
     TEST("a reboot that was rolled back is recorded");
     {
         auto r = run(12, "", "9a8b7c6", "app1");
         const P::String l = CrashLog::line(ESP_RST_SW, &r, true);
-        if (l == "{\"reset\":\"sw\",\"up\":12,\"fw\":\"9a8b7c6\",\"part\":\"app1\",\"rollback\":true}") PASS();
-        else FAIL(l.c_str());
+        const char* expected = "{\"reset\":\"sw\",\"up\":12,\"fw\":\"9a8b7c6\",\"part\":\"app1\",\"rollback\":true}";
+        if (l == expected)
+            PASS();
+        else
+            FAIL(l.c_str());
     }
 
     printf("\nappend:\n");
@@ -130,8 +149,11 @@ int main() {
     TEST("into a new file, the folder made");
     {
         LittleFS.reset();
-        if (CrashLog::append(CrashLog::kPath, "{\"reset\":\"panic\"}") && expectLog("{\"reset\":\"panic\"}\n")) PASS();
-        else FAIL("");
+        const bool appended = CrashLog::append(CrashLog::kPath, "{\"reset\":\"panic\"}");
+        if (appended && expectLog("{\"reset\":\"panic\"}\n"))
+            PASS();
+        else
+            FAIL("");
     }
 
     TEST("the last 10 kept, newest last");
@@ -140,8 +162,10 @@ int main() {
         for (int i = 1; i <= 12; i++) CrashLog::append(CrashLog::kPath, ("{\"n\":" + std::to_string(i) + "}").c_str());
         std::string want;
         for (int i = 3; i <= 12; i++) want += "{\"n\":" + std::to_string(i) + "}\n";
-        if (expectLog(want.c_str()) && lines() == 10) PASS();
-        else FAIL("");
+        if (expectLog(want.c_str()) && lines() == 10)
+            PASS();
+        else
+            FAIL("");
     }
 
     TEST("a line without its newline (cut short) is kept as a line");
@@ -149,8 +173,10 @@ int main() {
         LittleFS.reset();
         LittleFS.writeFile(CrashLog::kPath, "{\"a\":1}\n{\"b\":2}");
         CrashLog::append(CrashLog::kPath, "{\"c\":3}");
-        if (expectLog("{\"a\":1}\n{\"b\":2}\n{\"c\":3}\n")) PASS();
-        else FAIL("");
+        if (expectLog("{\"a\":1}\n{\"b\":2}\n{\"c\":3}\n"))
+            PASS();
+        else
+            FAIL("");
     }
 
     printf("\nthe boot before:\n");
@@ -161,8 +187,11 @@ int main() {
         OtaMock::reset();
         bootThenReset(kApp0, "/apps/weather/weather.bax", 183400, ESP_RST_PANIC);
         nextBoot();
-        if (expectLog("{\"reset\":\"panic\",\"up\":183,\"app\":\"weather\",\"fw\":\"dev\",\"part\":\"app0\"}\n")) PASS();
-        else FAIL("");
+        const char* expected = "{\"reset\":\"panic\",\"up\":183,\"app\":\"weather\",\"fw\":\"dev\",\"part\":\"app0\"}\n";
+        if (expectLog(expected))
+            PASS();
+        else
+            FAIL("");
     }
 
     TEST("a reboot or power-on: nothing added");
@@ -171,8 +200,10 @@ int main() {
         nextBoot();
         bootThenReset(kApp0, "", 5000, ESP_RST_POWERON);
         nextBoot();
-        if (lines() == 1) PASS();
-        else FAIL("");
+        if (lines() == 1)
+            PASS();
+        else
+            FAIL("");
     }
 
     TEST("a native app by its name; back in the launcher, none");
@@ -183,10 +214,12 @@ int main() {
         bootThenReset(kApp0, "counter", 1000, ESP_RST_PANIC);
         CrashLog::setApp("");
         nextBoot();
-        if (expectLog("{\"reset\":\"task_wdt\",\"up\":2,\"app\":\"counter\",\"fw\":\"dev\",\"part\":\"app0\"}\n"
-                      "{\"reset\":\"panic\",\"up\":1,\"fw\":\"dev\",\"part\":\"app0\"}\n"))
+        const char* expected = "{\"reset\":\"task_wdt\",\"up\":2,\"app\":\"counter\",\"fw\":\"dev\",\"part\":\"app0\"}\n"
+                               "{\"reset\":\"panic\",\"up\":1,\"fw\":\"dev\",\"part\":\"app0\"}\n";
+        if (expectLog(expected))
             PASS();
-        else FAIL("");
+        else
+            FAIL("");
     }
 
     TEST("an app name stays plain JSON");
@@ -194,8 +227,11 @@ int main() {
         LittleFS.reset();
         bootThenReset(kApp0, "/apps/my \"app\"/main.bax", 3000, ESP_RST_PANIC);
         nextBoot();
-        if (expectLog("{\"reset\":\"panic\",\"up\":3,\"app\":\"my__app_\",\"fw\":\"dev\",\"part\":\"app0\"}\n")) PASS();
-        else FAIL("");
+        const char* expected = "{\"reset\":\"panic\",\"up\":3,\"app\":\"my__app_\",\"fw\":\"dev\",\"part\":\"app0\"}\n";
+        if (expectLog(expected))
+            PASS();
+        else
+            FAIL("");
     }
 
     printf("\nrollback:\n");
@@ -208,8 +244,11 @@ int main() {
         OtaMock::invalid = &kApp1;                     // the previous firmware, app0, runs
         OtaMock::running = kApp0;
         nextBoot();
-        if (expectLog("{\"reset\":\"sw\",\"up\":5,\"fw\":\"dev\",\"part\":\"app1\",\"rollback\":true}\n")) PASS();
-        else FAIL("");
+        const char* expected = "{\"reset\":\"sw\",\"up\":5,\"fw\":\"dev\",\"part\":\"app1\",\"rollback\":true}\n";
+        if (expectLog(expected))
+            PASS();
+        else
+            FAIL("");
     }
 
     TEST("an old invalid partition is not this boot's rollback");
@@ -220,8 +259,11 @@ int main() {
         nextBoot();
         bootThenReset(kApp0, "", 60000, ESP_RST_SW);
         nextBoot();
-        if (expectLog("{\"reset\":\"panic\",\"up\":60,\"fw\":\"dev\",\"part\":\"app0\"}\n")) PASS();
-        else FAIL("");
+        const char* expected = "{\"reset\":\"panic\",\"up\":60,\"fw\":\"dev\",\"part\":\"app0\"}\n";
+        if (expectLog(expected))
+            PASS();
+        else
+            FAIL("");
         OtaMock::reset();
     }
 
@@ -234,33 +276,42 @@ int main() {
         auto r = Console::exec("sys crash");
         const std::string text = r.payload ? std::string((const char*)r.payload, r.payloadSize) : "";
         free(r.payload);
-        if (r.success && r.type == Console::ResponseType::StringData &&
-            text == "{\"reset\":\"panic\"}\n{\"reset\":\"brownout\"}\n")
+        const bool isText = r.success && r.type == Console::ResponseType::StringData;
+        const char* expected = "{\"reset\":\"panic\"}\n{\"reset\":\"brownout\"}\n";
+        if (isText && text == expected)
             PASS();
-        else FAIL("");
+        else
+            FAIL("");
     }
 
     TEST("sys crash with none: ok, no payload");
     {
         LittleFS.reset();
         auto r = Console::exec("sys crash");
-        if (r.success && !r.payload && r.payloadSize == 0) PASS();
-        else FAIL("");
+        if (r.success && !r.payload && r.payloadSize == 0)
+            PASS();
+        else
+            FAIL("");
     }
 
     TEST("sys crash clear: the log removed");
     {
         LittleFS.writeFile(CrashLog::kPath, "{\"reset\":\"panic\"}\n");
         auto r = Console::exec("sys crash clear");
-        if (r.success && !LittleFS.exists(CrashLog::kPath) && lines() == 0) PASS();
-        else FAIL("");
+        const bool cleared = !LittleFS.exists(CrashLog::kPath) && lines() == 0;
+        if (r.success && cleared)
+            PASS();
+        else
+            FAIL("");
     }
 
     TEST("sys crash <other>: invalid");
     {
         auto r = Console::exec("sys crash now");
-        if (!r.success && r.errorCode == Console::ErrorCode::INVALID) PASS();
-        else FAIL("");
+        if (!r.success && r.errorCode == Console::ErrorCode::INVALID)
+            PASS();
+        else
+            FAIL("");
     }
 
     printf("\n");

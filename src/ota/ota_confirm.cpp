@@ -29,20 +29,25 @@ void begin() {
     // Once: it checks the whole image in that partition, ~2.5 MB of flash
     const esp_partition_t* bad = esp_ota_get_last_invalid_partition();
     s_invalid = bad ? bad->label : nullptr;
-    if (s_invalid) LOG_W(Log::APP, "The firmware in %s was rolled back", s_invalid);
+    if (s_invalid)
+        LOG_W(Log::APP, "The firmware in %s was rolled back", s_invalid);
 }
 
 void tick(uint32_t nowMs) {
-    if (!s_pending || nowMs < kHealthyMs) return;
+    if (!s_pending || nowMs < kHealthyMs)
+        return;
     s_pending = false;
     const esp_err_t err = esp_ota_mark_app_valid_cancel_rollback();
-    if (err == ESP_OK) LOG_I(Log::APP, "New firmware confirmed after %u s", (unsigned)(nowMs / 1000));
-    else LOG_E(Log::APP, "Can't confirm the new firmware: %s", esp_err_to_name(err));
+    if (err == ESP_OK)
+        LOG_I(Log::APP, "New firmware confirmed after %u s", (unsigned)(nowMs / 1000));
+    else
+        LOG_E(Log::APP, "Can't confirm the new firmware: %s", esp_err_to_name(err));
 }
 
 const char* state() {
     esp_ota_img_states_t st;
-    if (!runningState(st)) return "none";
+    if (!runningState(st))
+        return "none";
     switch (st) {
         case ESP_OTA_IMG_NEW:            return "new";
         case ESP_OTA_IMG_PENDING_VERIFY: return "pending";

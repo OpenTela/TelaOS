@@ -58,7 +58,8 @@ void boot() {
 
 void tick(uint32_t nowMs) {
     const uint32_t s = nowMs / 1000;
-    if (s == s_run.uptimeS) return;
+    if (s == s_run.uptimeS)
+        return;
     s_run.uptimeS = s;
     seal();
 }
@@ -66,7 +67,8 @@ void tick(uint32_t nowMs) {
 void setApp(const char* app) {
     // "/apps/weather/weather.bax" -> "weather": the folder of the file; "/weather" -> "weather"
     std::string_view name = app ? app : "";
-    if (const size_t last = name.rfind('/'); last != std::string_view::npos) {
+    const size_t last = name.rfind('/');
+    if (last != std::string_view::npos) {
         const std::string_view dir = name.substr(0, last);
         const size_t prev = dir.rfind('/');
         name = dir.empty() ? name.substr(last + 1) : dir.substr(prev == std::string_view::npos ? 0 : prev + 1);
@@ -97,25 +99,32 @@ static bool isCrash(int r) {
 }
 
 P::String line(int resetReason, const Run* last, bool rolledBack) {
-    if (!isCrash(resetReason) && !rolledBack) return {};
+    if (!isCrash(resetReason) && !rolledBack)
+        return {};
     P::String out = "{\"reset\":\"";
     out += resetName(resetReason);
     out += '"';
     if (last) {
         out += ",\"up\":";
         out += std::to_string(last->uptimeS).c_str();
-        if (last->app[0]) { out += ",\"app\":\""; out += last->app.data(); out += '"'; }
+        if (last->app[0]) {
+            out += ",\"app\":\"";
+            out += last->app.data();
+            out += '"';
+        }
         out += ",\"fw\":\""; out += last->fw.data();
         out += "\",\"part\":\""; out += last->part.data(); out += '"';
     }
-    if (rolledBack) out += ",\"rollback\":true";
+    if (rolledBack)
+        out += ",\"rollback\":true";
     out += '}';
     return out;
 }
 
 static P::String readFile(const char* path) {
     File f = LittleFS.open(path, "r");
-    if (!f) return {};
+    if (!f)
+        return {};
     P::String s(f.size(), '\0');
     const size_t n = f.readBytes(&s[0], s.size());
     f.close();
@@ -129,19 +138,25 @@ bool append(const char* path, const P::String& line, int keep) {
     P::Array<P::String> lines;
     for (size_t at = 0; at < old.size();) {
         size_t end = old.find('\n', at);
-        if (end == P::String::npos) end = old.size();
-        if (end > at) lines.emplace_back(old.substr(at, end - at));
+        if (end == P::String::npos)
+            end = old.size();
+        if (end > at)
+            lines.emplace_back(old.substr(at, end - at));
         at = end + 1;
     }
     const size_t drop = lines.size() + 1 > static_cast<size_t>(keep) ? lines.size() + 1 - keep : 0;
 
     const std::string_view file = path;
-    if (const size_t slash = file.rfind('/'); slash != std::string_view::npos && slash > 0) {
+    const size_t slash = file.rfind('/');
+    const bool inFolder = slash != std::string_view::npos && slash > 0;
+    if (inFolder) {
         const P::String dir(file.substr(0, slash));
-        if (!LittleFS.exists(dir.c_str())) LittleFS.mkdir(dir.c_str());
+        if (!LittleFS.exists(dir.c_str()))
+            LittleFS.mkdir(dir.c_str());
     }
     File f = LittleFS.open(path, "w");
-    if (!f) return false;
+    if (!f)
+        return false;
     for (size_t i = drop; i < lines.size(); i++) {
         f.write(reinterpret_cast<const uint8_t*>(lines[i].c_str()), lines[i].size());
         f.write(reinterpret_cast<const uint8_t*>("\n"), 1);
@@ -170,7 +185,8 @@ void begin(const char* invalidPart) {
         return;
     }
     LOG_W(Log::APP, "Last boot: %s", l.c_str());
-    if (!append(kPath, l)) LOG_E(Log::APP, "Can't write %s", kPath);
+    if (!append(kPath, l))
+        LOG_E(Log::APP, "Can't write %s", kPath);
 }
 
 } // namespace CrashLog
