@@ -1457,31 +1457,6 @@ void placeWords(lv_obj_t* row, bool rtl) {
     }
 }
 
-// text-align of the row or above it changed (CSS applied later, a script's el.style)
-void onWordsStyle(lv_event_t* e) {
-    placeWords(static_cast<lv_obj_t*>(lv_event_get_current_target(e)), lv_event_get_user_data(e) != nullptr);
-}
-
-// An RTL line keeps its (left-to-right) words in their order and starts at the right; any line
-// follows text-align, now and when it changes
-void alignWordsRow(lv_obj_t* row) {
-    const bool rtl = lv_obj_get_style_base_dir(row, LV_PART_MAIN) == LV_BASE_DIR_RTL;
-    if (rtl)
-        lv_obj_set_style_base_dir(row, LV_BASE_DIR_LTR, LV_PART_MAIN);
-    placeWords(row, rtl);
-    lv_obj_add_event_cb(row, onWordsStyle, LV_EVENT_STYLE_CHANGED, rtl ? row : nullptr);
-}
-
-// A word of a sup or sub run in a row of words: how far it moves from where the row puts it,
-// centered on the line, for its baseline to be `shift` px from the baseline of the text around it
-// (font: around), as a browser has it
-int baselineMove(const lv_font_t* around, const lv_font_t* own, int shift) {
-    if (!around || !own) return shift;
-    const int line = lv_font_get_line_height(around), ownLine = lv_font_get_line_height(own);
-    const int ascent = line - around->base_line, ownAscent = ownLine - own->base_line;
-    return ascent - ownAscent - (line - ownLine) / 2 + shift;
-}
-
 // The spaces between two widgets of a row of words, as a margin: the first one's on its right, or
 // the second one's on its left where the first is as wide as a share of the line (LVGL takes a
 // margin off a width in %). After one as wide as the line, none: the line breaks after it, and a
@@ -1501,18 +1476,344 @@ void gapBetween(lv_obj_t* first, lv_obj_t* second, int32_t space) {
     }
 }
 
+#if !defined(LVGL_MOCK_ENABLED)
+// ---- The baseline of a line ----
+//
+// A browser lines up the words and the widgets of a line on their baselines (vertical-align:
+// baseline) and makes the line as high as what goes above the baseline and below it, its font's
+// too (the strut); a word of sup or sub sits off the baseline, and its line makes room for it;
+// the lines touch. LVGL's flex row puts every item at the top of its line (cross place START).
+// After each layout of a row of words, lineUpRow lines its lines up by the margins above and below
+// their items. A word in the row's font is in its place already: at the top of its line, its
+// baseline is the strut's. What rises above it goes up, by a margin above less than its own, even
+// below 0; the line before makes room for that (its items' margins below), the first line's row its
+// padding on top. So the words, most of a line, keep no style of theirs. Margins above and below
+// move nothing along a line: the next layout keeps the lines as they are, and finds nothing to
+// change.
+
+struct OwnMargins {
+    lv_obj_t* obj;
+    int32_t top, bottom;        // its own, before a line took them over
+    int32_t setTop, setBottom;  // what the line set: other margins are new own ones (CSS, a script)
+    int32_t shift;              // a word of sup or sub: how far off the baseline, px (down > 0)
+};
+// What lining up took over in a row of words: its items' margins and its own padding on top
+struct LinedRow {
+    P::Array<OwnMargins> items;
+    int32_t padTop = 0, setPadTop = 0;  // the row's own, and what its first line set
+    bool padded = false;
+};
+// row of words → what lining it up took over (forgetRow). Never destroyed, as s_margins: the
+// objects that go at the simulator's exit, after the statics, still find it
+P::Map<const lv_obj_t*, LinedRow>& s_linedRows = *P::create<P::Map<const lv_obj_t*, LinedRow>>().release();
+
+// A row settles at the second layout. One that would never settle stops lining up after a few
+// layouts, until LVGL's next round of timers: a watch that hangs in a layout is worse than a line
+// a pixel off
+constexpr uint8_t kLineUps = 8;
+P::Map<const lv_obj_t*, uint8_t>& s_lineUps = *P::create<P::Map<const lv_obj_t*, uint8_t>>().release();
+bool s_lineUpsCounted = false;  // a reset of s_lineUps is on its way
+
+void forgetLineUps(void*) {
+    s_lineUps.clear();
+    s_lineUpsCounted = false;
+}
+
+void forgetRow(const lv_obj_t* row) {
+    s_linedRows.erase(row);
+    s_lineUps.erase(row);
+}
+
+// The ascent of a font: its baseline from the top of its line
+int32_t ascentOf(const lv_font_t* f) { return f ? lv_font_get_line_height(f) - f->base_line : 0; }
+
+void onWordsRow(lv_event_t* e);
+
+// A row of words (asWords), in a line of another one: a <label> with a field in it
+bool isWordsRow(lv_obj_t* o) {
+    for (uint32_t i = 0; i < lv_obj_get_event_count(o); ++i) {
+        const lv_event_cb_t cb = lv_event_dsc_get_cb(lv_obj_get_event_dsc(o, i));
+        if (cb == onWordsRow)
+            return true;
+    }
+    return false;
+}
+
+// Where a browser puts the baseline of an item of a line, from the top of its border box. A word,
+// a run of formatted words: their font's. A field, a list, a button: their text's; a row of words:
+// its first line's. A box and a range: their bottom. progress and meter: 0.2em above their bottom
+// (a browser's style sheet has them 0.2em lower). A picture and any other widget: their margin's
+// bottom
+int32_t baselineOf(lv_obj_t* o, int32_t bottomMargin, int32_t em) {
+    const int32_t h = lv_obj_get_height(o);
+    lv_area_t box;
+    lv_obj_get_coords(o, &box);
+    if (lv_obj_check_type(o, &lv_label_class))
+        return ascentOf(lv_obj_get_style_text_font(o, LV_PART_MAIN));
+    if (lv_obj_check_type(o, &lv_spangroup_class)) {  // its spans are of its size: its font's
+        return lv_obj_get_style_pad_top(o, LV_PART_MAIN) + lv_obj_get_style_border_width(o, LV_PART_MAIN) +
+               ascentOf(lv_obj_get_style_text_font(o, LV_PART_MAIN));
+    }
+    if (isWordsRow(o)) {  // its first item's: the first line is lined up already (LVGL lays out children first)
+        for (uint32_t i = 0; i < lv_obj_get_child_count(o); ++i) {
+            lv_obj_t* c = lv_obj_get_child(o, static_cast<int32_t>(i));
+            const bool item = !lv_obj_has_flag(c, LV_OBJ_FLAG_HIDDEN) && lv_obj_get_height(c) > 0;
+            if (!item)
+                continue;
+            lv_area_t at;
+            lv_obj_get_coords(c, &at);
+            return at.y1 - box.y1 + baselineOf(c, lv_obj_get_style_margin_bottom(c, LV_PART_MAIN), em);
+        }
+    }
+    if (lv_obj_check_type(o, &lv_slider_class))
+        return h;
+    if (lv_obj_check_type(o, &lv_bar_class))
+        return h - (em * 2 + 5) / 10;
+    if (lv_obj_has_class(o, &lv_checkbox_class)) {
+        const char* text = lv_checkbox_get_text(o);
+        if (!text || !*text)  // an HTML box
+            return h;
+        return lv_obj_get_style_pad_top(o, LV_PART_MAIN) + lv_obj_get_style_border_width(o, LV_PART_MAIN) +
+               ascentOf(lv_obj_get_style_text_font(o, LV_PART_MAIN));
+    }
+    if (lv_obj_check_type(o, &lv_textarea_class)) {
+        if (!lv_textarea_get_one_line(o))  // a textarea scrolls: a browser has its bottom
+            return h;
+        lv_area_t text;
+        lv_obj_get_coords(lv_textarea_get_label(o), &text);
+        return text.y1 - box.y1 + ascentOf(lv_obj_get_style_text_font(o, LV_PART_MAIN));
+    }
+    if (lv_obj_check_type(o, &lv_dropdown_class)) {
+        return lv_obj_get_style_pad_top(o, LV_PART_MAIN) + lv_obj_get_style_border_width(o, LV_PART_MAIN) +
+               ascentOf(lv_obj_get_style_text_font(o, LV_PART_MAIN));
+    }
+    if (lv_obj_check_type(o, &lv_button_class)) {  // its text's: a label, or words of HTML in it
+        for (uint32_t i = 0; i < lv_obj_get_child_count(o); ++i) {
+            lv_obj_t* c = lv_obj_get_child(o, static_cast<int32_t>(i));
+            const bool text = lv_obj_check_type(c, &lv_label_class) || lv_obj_check_type(c, &lv_spangroup_class);
+            if (!text)
+                continue;
+            lv_area_t at;
+            lv_obj_get_coords(c, &at);
+            return at.y1 - box.y1 + baselineOf(c, 0, em);
+        }
+    }
+    return h + bottomMargin;
+}
+
+// How far an item is moved off its place (translate_y: px or a share of its height, as flex has it)
+int32_t movedBy(lv_obj_t* o) {
+    const int32_t ty = lv_obj_get_style_translate_y(o, LV_PART_MAIN);
+    if (LV_COORD_IS_PCT(ty))
+        return lv_obj_get_height(o) * LV_COORD_GET_PCT(ty) / 100;
+    return ty;
+}
+
+constexpr size_t kNone = SIZE_MAX;
+
+// An item of a line of words
+struct LineItem {
+    lv_obj_t* obj;
+    int32_t top, bottom;  // its own margins
+    int32_t base, h;      // its baseline from its top, its height
+    int32_t shift;        // a word of sup or sub: how far off the baseline (down > 0)
+    size_t kept;          // its own margins in LinedRow::items, or kNone
+    bool moved;           // a word of sup or sub, moved still (translate_y)
+    bool placed;          // a word on the strut: in its place at the top of its line
+};
+
+// A line of a row of words: items [first, end), as high as `above` + `below` its baseline. rise:
+// how far its top is above the top of its track, where flex puts its words on the strut
+struct Line {
+    size_t first, end;
+    int32_t above, below, rise;
+};
+
+// The item `o` of a line, with its own margins (lined: what a line set them to was ours)
+LineItem lineItem(lv_obj_t* o, const LinedRow& lined, const lv_font_t* font) {
+    LineItem it{o, lv_obj_get_style_margin_top(o, LV_PART_MAIN), lv_obj_get_style_margin_bottom(o, LV_PART_MAIN), 0,
+                lv_obj_get_height(o), 0, kNone, false, false};
+    for (size_t k = 0; k < lined.items.size(); ++k) {
+        if (lined.items[k].obj == o)
+            it.kept = k;
+    }
+    if (it.kept != kNone) {
+        const OwnMargins& m = lined.items[it.kept];
+        it.shift = m.shift;
+        if (m.setTop == it.top && m.setBottom == it.bottom) {  // else: the margins are new, its own
+            it.top = m.top;
+            it.bottom = m.bottom;
+        }
+    }
+    // a word of sup or sub (vertical-align: asWords moves it): the line takes the move over into
+    // the margins (LVGL counts a word moved down into the row's height once more). A widget moved
+    // by CSS is not one: as a browser's transform, it takes no room
+    const int32_t moved = lv_obj_check_type(o, &lv_label_class) ? movedBy(o) : 0;
+    if (moved) {
+        it.shift = moved;
+        it.moved = true;
+    }
+    it.base = baselineOf(o, it.bottom, UI::Font::sizeOf(font));
+    const int32_t ascent = ascentOf(font), descent = font ? font->base_line : 0;
+    it.placed = it.base == ascent && it.h - it.base == descent && !it.top && !it.bottom && !it.shift;
+    return it;
+}
+
+// Give an item its margins in its line. true: they changed
+bool setMargins(LinedRow& lined, const LineItem& it, int32_t top, int32_t bottom) {
+    const bool same = top == lv_obj_get_style_margin_top(it.obj, LV_PART_MAIN) &&
+                      bottom == lv_obj_get_style_margin_bottom(it.obj, LV_PART_MAIN);
+    if (same && !it.moved)
+        return false;
+    const OwnMargins m{it.obj, it.top, it.bottom, top, bottom, it.shift};
+    if (it.kept != kNone) {
+        lined.items[it.kept] = m;
+    } else {
+        lined.items.push_back(m);
+    }
+    if (it.moved)
+        lv_obj_remove_local_style_prop(it.obj, LV_STYLE_TRANSLATE_Y, LV_PART_MAIN);
+    lv_obj_set_style_margin_top(it.obj, top, LV_PART_MAIN);
+    lv_obj_set_style_margin_bottom(it.obj, bottom, LV_PART_MAIN);
+    return true;
+}
+
+// Flex laid a row of words out: each of its lines on its baseline. Flex puts the items of a line
+// at its top, each below its margin: a line is the items that start where it starts, above where
+// it ends so far (where they would be unmoved); a line of nothing high (a <br>) is no line of text
+void lineUpRow(lv_obj_t* row) {
+    const auto counted = s_lineUps.find(row);
+    const bool spent = counted != s_lineUps.end() && counted->second >= kLineUps;
+    if (spent)
+        return;
+    const lv_font_t* font = lv_obj_get_style_text_font(row, LV_PART_MAIN);
+    const int32_t ascent = ascentOf(font), descent = font ? font->base_line : 0;
+    LinedRow& lined = s_linedRows[row];
+    P::Array<LineItem> items;
+    P::Array<Line> lines;
+    int32_t end = LV_COORD_MIN;  // the bottom of the line so far, with its margins
+    bool fresh = true;           // the next item starts a line
+    for (uint32_t i = 0; i < lv_obj_get_child_count(row); ++i) {
+        lv_obj_t* c = lv_obj_get_child(row, static_cast<int32_t>(i));
+        const bool out = lv_obj_has_flag(c, LV_OBJ_FLAG_HIDDEN) || lv_obj_has_flag(c, LV_OBJ_FLAG_IGNORE_LAYOUT) ||
+                         lv_obj_has_flag(c, LV_OBJ_FLAG_FLOATING);
+        if (out)
+            continue;
+        lv_area_t a;
+        lv_obj_get_coords(c, &a);
+        const int32_t moved = movedBy(c);
+        const int32_t top = a.y1 - moved - lv_obj_get_style_margin_top(c, LV_PART_MAIN);
+        const int32_t bottom = a.y2 + 1 - moved + lv_obj_get_style_margin_bottom(c, LV_PART_MAIN);
+        if (top >= end) {  // a line of its own
+            fresh = true;
+            end = top;
+        }
+        end = std::max(end, bottom);
+        if (lv_obj_get_height(c) <= 0)  // nothing high: a <br> (its margins may be a line's, below 0)
+            continue;
+        if (fresh)
+            lines.push_back(Line{items.size(), items.size(), ascent, descent, 0});
+        fresh = false;
+        const LineItem it = lineItem(c, lined, font);
+        Line& line = lines.back();
+        line.above = std::max(line.above, it.top + it.base - it.shift);
+        line.below = std::max(line.below, it.h - it.base + it.bottom + it.shift);
+        items.push_back(it);
+        line.end = items.size();
+    }
+    bool changed = false;
+    for (size_t k = 0; k < lines.size(); ++k) {  // where a word on the strut holds the baseline
+        Line& line = lines[k];
+        for (size_t i = line.first; i < line.end; ++i) {
+            if (items[i].placed)
+                line.rise = line.above - ascent;
+        }
+    }
+    for (size_t k = 0; k < lines.size(); ++k) {
+        const Line& line = lines[k];
+        const int32_t next = k + 1 < lines.size() ? lines[k + 1].rise : 0;
+        const int32_t track = line.above + line.below - line.rise + next;  // with its rise and the next one's
+        // What makes the track as high: the items off the strut, each as high as it with its margins;
+        // in a line of words on the strut alone lower than the track (the next line rises into it),
+        // the last word's margin below
+        bool held = false;
+        for (size_t i = line.first; i < line.end; ++i)
+            held = held || !items[i].placed;
+        const bool low = !held && track > ascent + descent;
+        for (size_t i = line.first; i < line.end; ++i) {
+            const LineItem& it = items[i];
+            int32_t top = 0, bottom = low && i + 1 == line.end ? track - it.h : 0;
+            if (!it.placed) {
+                top = line.above - line.rise + it.shift - it.base;
+                bottom = track - top - it.h;
+            }
+            changed = setMargins(lined, it, top, bottom) || changed;
+        }
+    }
+    // the first line's rise: the row makes room on top
+    const int32_t pad = lv_obj_get_style_pad_top(row, LV_PART_MAIN);
+    const int32_t ownPad = lined.padded && lined.setPadTop == pad ? lined.padTop : pad;
+    const int32_t padTop = ownPad + (lines.empty() ? 0 : lines.front().rise);
+    if (padTop != pad) {
+        lined.padTop = ownPad;
+        lined.setPadTop = padTop;
+        lined.padded = true;
+        lv_obj_set_style_pad_top(row, padTop, LV_PART_MAIN);
+        changed = true;
+    }
+    if (lined.items.empty() && !lined.padded)
+        s_linedRows.erase(row);
+    if (!changed)
+        return;
+    ++s_lineUps[row];
+    if (!s_lineUpsCounted) {
+        s_lineUpsCounted = true;
+        lv_async_call(forgetLineUps, nullptr);
+    }
+    if (s_lineUps[row] == kLineUps)
+        LOG_W(Log::UI, "html: a line of words did not settle in %d layouts, left as it is", kLineUps);
+}
+#endif
+
+// What happens to a row of words: text-align of the row or above it changed (CSS applied later, a
+// script's el.style); flex laid it out; it goes. One handler for all, the row's only event: one
+// costs a row as much memory as a handful of words
+void onWordsRow(lv_event_t* e) {
+    lv_obj_t* row = static_cast<lv_obj_t*>(lv_event_get_current_target(e));
+    if (lv_event_get_target(e) != row)  // a child's, bubbled up
+        return;
+    switch (lv_event_get_code(e)) {
+        case LV_EVENT_STYLE_CHANGED: placeWords(row, lv_event_get_user_data(e) != nullptr); break;
+#if !defined(LVGL_MOCK_ENABLED)
+        case LV_EVENT_LAYOUT_CHANGED: lineUpRow(row); break;
+        case LV_EVENT_DELETE: forgetRow(row); break;
+#endif
+        default: break;
+    }
+}
+
+// An RTL line keeps its (left-to-right) words in their order and starts at the right; any line
+// follows text-align, now and when it changes
+void alignWordsRow(lv_obj_t* row) {
+    const bool rtl = lv_obj_get_style_base_dir(row, LV_PART_MAIN) == LV_BASE_DIR_RTL;
+    if (rtl)
+        lv_obj_set_style_base_dir(row, LV_BASE_DIR_LTR, LV_PART_MAIN);
+    placeWords(row, rtl);
+    lv_obj_add_event_cb(row, onWordsRow, LV_EVENT_ALL, rtl ? row : nullptr);
+}
+
 // Text with widgets, several links or sup/sub: a row that wraps word by word, like an HTML line box
 void Seg::asWords() {
     lv_obj_t* row = plainObj(box_);
     lv_obj_set_width(row, lv_pct(100));
     lv_obj_set_height(row, LV_SIZE_CONTENT);
     lv_obj_set_flex_flow(row, LV_FLEX_FLOW_ROW_WRAP);
-    lv_obj_set_flex_align(row, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_START);
-    lv_obj_set_style_pad_row(row, 4, LV_PART_MAIN);
+    // each item at the top of its line, and the lines touch, as a browser's; then lineUpRow puts
+    // each line on its baseline
+    lv_obj_set_flex_align(row, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_START);
     UI::letOverflow(row);  // a line box clips nothing either; before the element's CSS (overflow: hidden)
     decorate(row);
     alignWordsRow(row);
-    int raise = 0;  // how far a sup goes above the line: the row makes room for it
     lv_obj_t* atom = nullptr;  // the widget made last, while only spaces came after it
     int32_t space = 0;         // those spaces: the gap to the next widget
     for (size_t k = 0; k < items_.size(); ++k) {
@@ -1566,18 +1867,10 @@ void Seg::asWords() {
                     ((it.st.decor & kStrike) ? LV_TEXT_DECOR_STRIKETHROUGH : 0)), LV_PART_MAIN);
             }
 #endif
-            if (it.st.shift) {
-                const lv_font_t* own = lv_obj_get_style_text_font(w, LV_PART_MAIN);
-                const int dy = baselineMove(around, own, it.st.shift);
-                lv_obj_set_style_translate_y(w, dy, LV_PART_MAIN);
-                // Its top on its line, moved: above the line, the row makes room for it; below, LVGL
-                // takes the moved word into the row's height itself. The line is as high as the
-                // higher of the two fonts (a sup of <font size=6> makes it so)
-                const int ownLine = lv_font_get_line_height(own);
-                const int line = std::max(lv_font_get_line_height(around), ownLine);
-                const int top = (line - ownLine) / 2 + dy;
-                if (-top > raise) raise = -top;
-            }
+            // a word of sup or sub: off the baseline; its line takes the move over and makes room
+            // for it (lineUpRow)
+            if (it.st.shift)
+                lv_obj_set_style_translate_y(w, it.st.shift, LV_PART_MAIN);
             makeClickable(w, it.st.href, it.st.onclick);
             if (live) {  // {var}: the TelaOS binding mechanism keeps the word up to date
                 TagRef none;
@@ -1587,7 +1880,6 @@ void Seg::asWords() {
             }
         }
     }
-    if (raise) lv_obj_set_style_pad_top(row, raise, LV_PART_MAIN);
 }
 
 // ============ Walking content ============
