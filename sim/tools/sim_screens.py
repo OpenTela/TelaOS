@@ -12,14 +12,17 @@ trees of every screen (the same pixels over another tree: changed unseen), and w
                          (images from --image-url, if given), the watch's memory on every
                          screen, what the screens redraw at rest (idle_report.py), how much C
                          is left in src/, how the pages of JUDGED lay out
-                         against Chromium (judge.py), and with --pages N: N random pages
+                         against Chromium (judge.py), how the animations of ANIMATED move
+                         against it (anim_judge.py), and with --pages N: N random pages
                          through both builds (sim_pages.py)
     out/judge.json       the judge's verdict on every element of those pages
+    out/anim_judge.json  and on every value of those animations, frame by frame
     out/publish/         before/ after/ diff/ — only the screens that changed
     out/status.json      machine-readable summary
     out/shots-base/ out/shots-head/ out/tests/   everything, for artifacts (a .png and the
                          widget tree .json of every screen, and .idle.json: what it redrew
                          at rest)
+    out/anim-base/ out/anim-head/   the frames of the animations (the robot's trees)
 
 Exit code 1 if --head does not build or a robot test fails. A changed screen is not a
 failure: it is what a reviewer looks at. Python standard library only; the judge takes
@@ -39,6 +42,7 @@ import zlib
 from pathlib import Path
 
 from code_meter import measure as measure_code, summary as code_summary
+import anim_judge
 import idle_report
 import judge
 import mem_report
@@ -53,14 +57,16 @@ NAV_MS = 400      # after "ui nav": the page is drawn
 IDLE_MS = 2000    # after each screen's picture: at rest, what it redraws by itself (idle_report.py)
 MAX_ROWS = 30     # screens with pictures in the comment; the rest by name
 JUDGED = "html_tags"  # the fixture app whose pages Chromium judges (judge.py)
+ANIMATED = "anim_tags"  # and whose animations it judges, frame by frame (anim_judge.py)
 
 
 # ============ Firmware: build, list apps, run ============
 
-def build(sim_dir, telaos_dir, build_dir, log):
-    """Configure and build telaos_sim for telaos_dir; returns the binary or None."""
+def build(sim_dir, telaos_dir, build_dir, log, options=()):
+    """Configure and build telaos_sim for telaos_dir; returns the binary or None.
+    options: more cmake -D..., -DTELA_SIM_ASAN=ON say (sim_asan.py)"""
     cfg = ["cmake", "-S", str(sim_dir), "-B", str(build_dir), f"-DTELAOS_DIR={telaos_dir}",
-           "-DCMAKE_BUILD_TYPE=Release"]
+           "-DCMAKE_BUILD_TYPE=Release", *options]
     if shutil.which("ccache"):
         cfg += ["-DCMAKE_C_COMPILER_LAUNCHER=ccache", "-DCMAKE_CXX_COMPILER_LAUNCHER=ccache"]
     if shutil.which("ninja"):
@@ -172,6 +178,13 @@ def shoot(binary, roots, extra_data, out_dir, work):
     with concurrent.futures.ThreadPoolExecutor(max_workers=os.cpu_count() or 2) as ex:
         results = list(ex.map(one, jobs))
     return [name for name, rc in results if rc != 0]
+
+
+def anim_frames(binary, fixtures, out_dir):
+    """The frames of ANIMATED's animations into out_dir (anim_judge.py); the pages the simulator
+    stopped on"""
+    return anim_judge.shoot(Path(fixtures) / "apps" / ANIMATED, out_dir,
+                            lambda script, out: run_sim(binary, out, script=script, extra_data=fixtures))
 
 
 def run_tests(binary, tests_dir, extra_data, out_dir):
@@ -387,6 +400,7 @@ def report(entries, tests, meta, url):
     if meta.get("code"):
         out += [code_summary(*meta["code"]), ""]
     out += meta.get("judge", [])
+    out += meta.get("motion", [])
     out += meta.get("memory", [])
     out += meta.get("idle", [])
     out += meta.get("pages", [])
@@ -448,7 +462,8 @@ def main():
     head = Path(args.head).resolve()
     base = Path(args.base).resolve() if args.base else None
     out = Path(args.out).resolve()
-    shutil.rmtree(out / "publish", ignore_errors=True)
+    for old in ("publish", "anim-head", "anim-base"):  # nothing of an earlier run is judged again
+        shutil.rmtree(out / old, ignore_errors=True)
     out.mkdir(parents=True, exist_ok=True)
     sim_dir = Path(args.sim).resolve() if args.sim else head / "sim"
     fixtures = sim_dir / "tests" / "fixtures"
@@ -473,12 +488,19 @@ def main():
     head_errors = shoot(head_bin, [head / "data", fixtures], fixtures, out / "shots-head", out / "work-head")
     if base_bin:
         shoot(base_bin, [base / "data", fixtures], fixtures, out / "shots-base", out / "work-base")
+    print("[screens] frames of the animations ...", flush=True)
+    anim_errors = anim_frames(head_bin, fixtures, out / "anim-head")
+    if base_bin:
+        anim_frames(base_bin, fixtures, out / "anim-base")
 
     print("[screens] robot tests ...", flush=True)
     tests = run_tests(head_bin, sim_dir / "tests", fixtures, out / "tests")
     for name in head_errors:
         tests.append({"name": f"screens:{name}", "passed": 0, "failed": 1, "ok": False,
                       "errors": ["the simulator stopped (see work-head/%s.log)" % name]})
+    for page in anim_errors:
+        tests.append({"name": f"anim:{page}", "passed": 0, "failed": 1, "ok": False,
+                      "errors": ["the simulator stopped (see anim-head/%s.log)" % page]})
 
     print("[screens] comparing ...", flush=True)
     entries = compare(out / "shots-base", out / "shots-head", out / "publish")
@@ -491,12 +513,18 @@ def main():
     verdict, verdict_base = judge.check(fixtures / "apps" / JUDGED, out / "shots-head", out / "shots-base")
     if verdict:
         (out / "judge.json").write_text(json.dumps(verdict, indent=1, ensure_ascii=False))
+    print("[screens] Chromium judges the animations of %s ..." % ANIMATED, flush=True)
+    motion, motion_base = anim_judge.check(fixtures / "apps" / ANIMATED, out / "anim-head", out / "anim-base")
+    if motion:
+        (out / "anim_judge.json").write_text(json.dumps(motion, indent=1, ensure_ascii=False))
     mem_base, mem_head = mem_report.load(out / "shots-base"), mem_report.load(out / "shots-head")
     idle_base, idle_head = idle_report.load(out / "shots-base"), idle_report.load(out / "shots-head")
     meta = {"base": args.base_label, "head": args.head_label, "base_built": base_bin is not None or not base,
             "code": code, "memory": mem_report.lines(mem_base, mem_head),
             "idle": idle_report.lines(idle_base, idle_head),
-            "judge": judge.lines(verdict, verdict_base) or judge.unmeasured(), "pages": sim_pages.lines(pages)}
+            "judge": judge.lines(verdict, verdict_base) or judge.unmeasured(),
+            "motion": anim_judge.lines(motion, motion_base) or anim_judge.unmeasured(),
+            "pages": sim_pages.lines(pages)}
     (out / "report.md").write_text(report(entries, tests, meta, args.image_url.rstrip("/")))
     ok = all(t["ok"] for t in tests)
     counts = {s: sum(1 for e in entries if e["status"] == s)
@@ -508,6 +536,8 @@ def main():
                                                  "idle": {"head": idle_head, "base": idle_base},
                                                  "judge": {"head": judge.summary(verdict),
                                                            "base": judge.summary(verdict_base)},
+                                                 "motion": {"head": anim_judge.summary(motion),
+                                                            "base": anim_judge.summary(motion_base)},
                                                  "pages": sim_pages.summary(pages)},
                                                 indent=1, ensure_ascii=False))
     print(f"[screens] {counts} · tests " + ", ".join(f"{t['name']} {t['passed']}/{t['failed']}" for t in tests))

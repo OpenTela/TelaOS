@@ -1492,6 +1492,15 @@ const char* ui_get_current_page_id() {
 //   <tab title="Preview">...widgets...</tab>
 // </tabs>
 
+// When a scroll of the tabs ends, LVGL finds the tab it ended on by dividing by the width of their
+// content (lv_tabview.c, cont_scroll_end_event_cb). Tabs laid out 0 wide (100% of a table cell as
+// wide as its content) would divide by zero: an exception that restarts the watch. Before LVGL's
+// handler, this one skips it then: with no room there is no tab to find
+static void tabsWithoutRoom(lv_event_t* e) {
+    lv_obj_t* cont = static_cast<lv_obj_t*>(lv_event_get_current_target(e));
+    if (lv_obj_get_content_width(cont) <= 0 || lv_obj_get_content_height(cont) <= 0) lv_event_stop_processing(e);
+}
+
 void create_tabs(const char* astart, const char* aend, const char* content, lv_obj_t* parent) {
     using namespace UI::XmlUtils;
     
@@ -1531,6 +1540,10 @@ void create_tabs(const char* astart, const char* aend, const char* content, lv_o
     
     // Style content area
     lv_obj_t* cont = lv_tabview_get_content(tv);
+    if (cont) {
+        lv_obj_add_event_cb(cont, tabsWithoutRoom, static_cast<lv_event_code_t>(LV_EVENT_SCROLL_END | LV_EVENT_PREPROCESS),
+                            nullptr);
+    }
     if (!bgcolorAttr.empty()) {
         uint32_t bgc = parse_color(bgcolorAttr.c_str());
         lv_obj_set_style_bg_color(cont, lv_color_hex(bgc), 0);
