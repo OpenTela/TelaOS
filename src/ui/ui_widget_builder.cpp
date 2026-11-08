@@ -153,7 +153,7 @@ static void roomHitTest(lv_event_t* e) {
 #endif
 
 // html: a control HTML lays out (HtmlFlow::browserSized(), or right in a flow box)
-static void fingerRoom(lv_obj_t* o, int px, bool html) {
+void fingerRoom(lv_obj_t* o, int px, bool html) {
     lv_obj_set_ext_click_area(o, px);
 #if !defined(LVGL_MOCK_ENABLED)
     if (!html) return;
@@ -1199,6 +1199,22 @@ void create_switch(const char *astart, const char *aend, lv_obj_t *parent) {
     widget.on(LV_EVENT_VALUE_CHANGED, switch_event_handler, idx);
 }
 
+// A range HTML lays out, as Chromium has it with the watch's font: 129x16 (w= keeps its width),
+// a margin of 2px. LVGL draws a slider's track and filling in the whole box: transform_height
+// draws them 4px high in its middle; the knob, as high as the box, is 16
+static void browserRange(lv_obj_t* s, bool ownWidth) {
+    if (!ownWidth)
+        lv_obj_set_width(s, 129);
+    lv_obj_set_height(s, 16);
+    lv_obj_set_style_margin_top(s, 2, LV_PART_MAIN);
+    lv_obj_set_style_margin_right(s, 2, LV_PART_MAIN);
+    lv_obj_set_style_margin_bottom(s, 2, LV_PART_MAIN);
+    lv_obj_set_style_margin_left(s, 2, LV_PART_MAIN);
+    lv_obj_set_style_transform_height(s, -6, LV_PART_MAIN);
+    lv_obj_set_style_transform_height(s, -6, LV_PART_INDICATOR);
+    lv_obj_set_style_pad_all(s, 0, LV_PART_KNOB);
+}
+
 void create_slider(const char *astart, const char *aend, lv_obj_t *parent) {
     auto attrs = parseCommonAttrs(astart, aend);
     auto bind = getAttr(astart, aend, "bind");
@@ -1233,6 +1249,13 @@ void create_slider(const char *astart, const char *aend, lv_obj_t *parent) {
     
     // as before: a slider's own hit test (LV_OBJ_FLAG_ADV_HITTEST) would take only its knob
     lv_obj_set_ext_click_area(slider, ClickArea::SLIDER);
+
+    // A range HTML lays out (<input type="range">, or a slider in a line of text) is a browser's;
+    // one placed by x or y stays as TelaOS draws it
+    const bool browser = (HtmlFlow::browserSized() || HtmlFlow::inFlow(parent)) && getAttr(astart, aend, "x").empty() &&
+                         getAttr(astart, aend, "y").empty();
+    if (browser)
+        browserRange(slider, !getAttr(astart, aend, "w").empty());
     
     // CSS first, then inline overrides
     {
@@ -1258,6 +1281,32 @@ void create_slider(const char *astart, const char *aend, lv_obj_t *parent) {
     
     widget.on(LV_EVENT_VALUE_CHANGED, slider_event_handler, idx);
     widget.on(LV_EVENT_RELEASED, slider_event_handler, idx);
+}
+
+// HTML's size=, cols=, rows=: a whole number above 0, or else the default
+static int htmlCount(const char* astart, const char* aend, const char* name, int def) {
+    const int n = getAttrInt(astart, aend, name, def);
+    return n > 0 ? n : def;
+}
+
+// A field HTML lays out, as Chromium draws it with the watch's font: 13.33px text (drawn at 14);
+// a text input 1px 2px of padding in a 2px border, 8px a character of size= (20) and 50 more, 21
+// high; a textarea 2px in 1px, 8px a character of cols= (20) and 22 more, 15 a line of rows= (2)
+// and 6 more. CSS comes after it
+static void browserField(lv_obj_t* ta, bool multiline, const char* astart, const char* aend) {
+    lv_obj_set_style_text_font(ta, UI::Font::get(14), LV_PART_MAIN);
+    lv_obj_set_style_border_width(ta, multiline ? 1 : 2, LV_PART_MAIN);
+    lv_obj_set_style_pad_left(ta, 2, LV_PART_MAIN);
+    lv_obj_set_style_pad_right(ta, 2, LV_PART_MAIN);
+    // a line of LVGL's 14px is 2px higher than Chromium's: the one line of an input takes them
+    // from its padding, so the text stays whole in the same 21px
+    lv_obj_set_style_pad_top(ta, multiline ? 2 : 0, LV_PART_MAIN);
+    lv_obj_set_style_pad_bottom(ta, multiline ? 2 : 0, LV_PART_MAIN);
+    if (multiline) {
+        lv_obj_set_size(ta, 8 * htmlCount(astart, aend, "cols", 20) + 22, 15 * htmlCount(astart, aend, "rows", 2) + 6);
+    } else {
+        lv_obj_set_size(ta, 8 * htmlCount(astart, aend, "size", 20) + 50, 21);
+    }
 }
 
 void create_input(const char *astart, const char *aend, const char *content, lv_obj_t *parent) {
@@ -1319,13 +1368,27 @@ void create_input(const char *astart, const char *aend, const char *content, lv_
         lv_obj_set_style_text_color(ta, lv_color_hex(c), 0);
     }
     
+    // A field HTML lays out (in a line of text, or a block of an HTML page) is a browser's; one
+    // placed by x or y stays as TelaOS draws it
+    const bool browser = (HtmlFlow::browserSized() || HtmlFlow::inFlow(parent)) && getAttr(astart, aend, "x").empty() &&
+                         getAttr(astart, aend, "y").empty();
+    if (browser)
+        browserField(ta, isMultiline, astart, aend);
+
     // CSS first, then inline overrides
     {
         P::String renderedClass = attrs.hasDynamicClass ? render_template(attrs.cssClass.c_str()) : attrs.cssClass;
         Widget{ta}.applyCss("input", attrs.id.c_str(), renderedClass.c_str(), std::string_view(astart, static_cast<size_t>(aend - astart)));
     }
     set_pos(ta, x, y);
-    set_size(ta, w, h);
+    if (!browser) {
+        set_size(ta, w, h);
+    } else {  // the browser's size, or CSS's; w= and h= over them, as inline values
+        if (!getAttr(astart, aend, "w").empty())
+            lv_obj_set_width(ta, w);
+        if (!getAttr(astart, aend, "h").empty())
+            lv_obj_set_height(ta, h);
+    }
     
     ElementDesc ind;
     ind.id          = attrs.id.c_str();
@@ -1875,6 +1938,30 @@ static const char* select_arrow() {
     return arrow[0] ? arrow.data() : nullptr;
 }
 
+// A <select> HTML lays out, as Chromium draws it with the watch's font: 13.33px text (drawn at
+// 14, as a field's), a 1px border, 19 high (LVGL's line of 14px takes all of it), and as wide as
+// its longest option at 13.33px with 22 more for its arrow and padding. CSS comes after it
+static void browserSelect(lv_obj_t* dd, const SelectOptions& opts) {
+    const lv_font_t* font = UI::Font::get(14);
+    lv_obj_set_style_text_font(dd, font, LV_PART_MAIN);
+    lv_obj_set_style_text_font(dd, font, LV_PART_INDICATOR);  // the arrow
+    lv_obj_set_style_border_width(dd, 1, LV_PART_MAIN);
+    lv_obj_set_style_pad_top(dd, 0, LV_PART_MAIN);
+    lv_obj_set_style_pad_bottom(dd, 0, LV_PART_MAIN);
+    lv_obj_set_style_pad_left(dd, 4, LV_PART_MAIN);
+    lv_obj_set_style_pad_right(dd, 4, LV_PART_MAIN);
+    int32_t widest = 0;
+#if !defined(LVGL_MOCK_ENABLED)
+    for (const P::String& label : opts.labels) {
+        widest = std::max(widest, lv_text_get_width(label.c_str(), static_cast<uint32_t>(label.size()), font, 0));
+    }
+#else
+    (void)opts;
+#endif
+    // the text is measured at 14px: 20/21 of it is Chromium's 13.33, rounded up as Chromium does
+    lv_obj_set_size(dd, (widest * 20 + 20) / 21 + 22, 19);
+}
+
 void create_select(const char *astart, const char *aend, const char *content, lv_obj_t *parent) {
     auto attrs    = parseCommonAttrs(astart, aend);
     auto bind     = getAttr(astart, aend, "bind");
@@ -1915,6 +2002,12 @@ void create_select(const char *astart, const char *aend, const char *content, lv
         while (initIdx + 1 < (int)opts.disabled.size() && opts.disabled[initIdx]) ++initIdx;
     }
     lv_dropdown_set_selected(dd, (uint16_t)initIdx);
+
+    // A <select> HTML lays out is a browser's; one placed by x or y stays as TelaOS draws it
+    const bool browser = (HtmlFlow::browserSized() || HtmlFlow::inFlow(parent)) && getAttr(astart, aend, "x").empty() &&
+                         getAttr(astart, aend, "y").empty();
+    if (browser)
+        browserSelect(dd, opts);
 
     set_pos(dd, x, y);
     if (w != 0) lv_obj_set_width(dd, w);

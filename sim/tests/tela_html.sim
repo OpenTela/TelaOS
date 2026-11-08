@@ -115,6 +115,11 @@ wait 200
 # ---- forms -----------------------------------------------------------------------------
 tap "Forms"
 wait 200
+# a browser's box: 13x13, the mark drawn in it
+expect @agree :w 13
+expect @agree :h 13
+expect @r1 :w 13
+expect @r1 :h 13
 expect @agree off
 tap @agree
 expect @agree on
@@ -131,6 +136,9 @@ expect @notes "Hello & welcome"
 expect @load 700
 expect @disk 900
 expect @city "Moscow"
+# a browser's <select>: 19 high, its longest option (at 13.33px) and 22 more wide
+expect @city :h 19
+expect @city :w 122
 expect $sent "no"
 tap "Send"
 expect $sent "yes"

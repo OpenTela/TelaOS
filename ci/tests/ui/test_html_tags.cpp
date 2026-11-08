@@ -216,6 +216,11 @@ static const char* APP_FORMS = R"HTML(
     <input id="tela" bind="name"/>
     <input checked type="checkbox" id="cb3">
     <input disabled id="off" type="checkbox">
+    <input type="text" id="small" size="10"> <input type="email" id="sized" w="300">
+    <textarea id="wide" cols="30" rows="1"></textarea>
+    <input id="placed" x="10" y="300"/>
+    <select id="selw" w="200"><option>W</option></select>
+    <select id="selx" x="10" y="340"><option>P</option></select>
   </form>
 </page></ui></app>
 )HTML";
@@ -505,6 +510,12 @@ int main() {
     printf("\nForms:\n");
     render(APP_FORMS);
     expectTrue("checkbox checked", byId("cb") && byId("cb")->checked);
+    expectTrue("checkbox: a browser's box, 13x13", byId("cb") && byId("cb")->w == 13 && byId("cb")->h == 13);
+    expectTrue("radio: a browser's box, 13x13", byId("r1") && byId("r1")->w == 13 && byId("r1")->h == 13);
+    expectTrue("checkbox: a browser's margins, 3px 3px 3px 4px", byId("cb") && byId("cb")->marginTop == 3 &&
+               byId("cb")->marginRight == 3 && byId("cb")->marginBottom == 3 && byId("cb")->marginLeft == 4);
+    expectTrue("radio: a browser's margins, 3px 3px 0 5px", byId("r1") && byId("r1")->marginTop == 3 &&
+               byId("r1")->marginRight == 3 && byId("r1")->marginBottom == 0 && byId("r1")->marginLeft == 5);
     expectTrue("checkbox unchecked", byId("cb2") && !byId("cb2")->checked);
     expectTrue("radio checked attribute", byId("r2") && byId("r2")->checked && byId("r1") && !byId("r1")->checked);
     {
@@ -518,9 +529,34 @@ int main() {
     expectTrue("<input type=submit>: a browser's button too", byId("go") && byId("go")->padLeft == 6 &&
                byId("go")->padTop == 1 && byId("go")->borderWidth == 2);
     expectTrue("textarea content", byId("ta") && byId("ta")->text == "Hi & bye");
+    expectTrue("<input type=text>: a browser's field, 210x21, 2px border, 2px padding aside",
+               byId("txt") && byId("txt")->w == 210 && byId("txt")->h == 21 && byId("txt")->borderWidth == 2 &&
+                   byId("txt")->padLeft == 2);
+    expectTrue("<input size=10>: 8px a character, 130 wide", byId("small") && byId("small")->w == 130 &&
+               byId("small")->h == 21);
+    expectTrue("<input w=300>: w= over the browser's width", byId("sized") && byId("sized")->w == 300 &&
+               byId("sized")->h == 21);
+    expectTrue("<textarea rows=3>: 20 columns, 182x51, 1px border", byId("ta") && byId("ta")->w == 182 &&
+               byId("ta")->h == 51 && byId("ta")->borderWidth == 1);
+    expectTrue("<textarea cols=30 rows=1>: 262x21", byId("wide") && byId("wide")->w == 262 && byId("wide")->h == 21);
+    expectTrue("<input x= y=>: placed by TelaOS, TelaOS's size", byId("placed") && byId("placed")->w == 150 &&
+               byId("placed")->h == 40);
     expectTrue("progress 0.25 -> 250/1000", byId("pg") && byId("pg")->curValue == 250);
     expectTrue("meter 5 of 0..10 -> 500/1000", byId("mt") && byId("mt")->curValue == 500);
+    expectTrue("<progress>: a browser's 160x16", byId("pg") && byId("pg")->w == 160 && byId("pg")->h == 16);
+    expectTrue("<meter>: a browser's 80x16", byId("mt") && byId("mt")->w == 80 && byId("mt")->h == 16);
+    {
+        MW* r = byId("rng");
+        expectTrue("<input type=range>: a browser's 129x16, margin 2px", r && r->w == 129 && r->h == 16 &&
+                   r->marginTop == 2 && r->marginRight == 2 && r->marginBottom == 2 && r->marginLeft == 2);
+    }
     expectTrue("select stays TelaOS dropdown", byId("sel") && byId("sel")->type == "Dropdown");
+    expectTrue("<select>: a browser's, 19 high, 1px border, 14px text", byId("sel") && byId("sel")->h == 19 &&
+               byId("sel")->borderWidth == 1 && byId("sel")->fontSize == 14);
+    expectTrue("<select w=200>: w= over the browser's width", byId("selw") && byId("selw")->w == 200 &&
+               byId("selw")->h == 19);
+    expectTrue("<select x= y=>: placed by TelaOS, TelaOS's size", byId("selx") && byId("selx")->h != 19 &&
+               byId("selx")->borderWidth != 1);
     expectTrue("input without type= stays TelaOS input", byId("tela") && byId("tela")->type == "TextArea");
     expectTrue("checked before type=: still a checked checkbox", byId("cb3") && byId("cb3")->checked);
     expectTrue("disabled before id=: the id is kept", byId("off") != nullptr);

@@ -30,6 +30,7 @@ constexpr uint32_t SLIDER_THROTTLE_MS = 100;
 namespace ClickArea {
     constexpr int BUTTON = 18;
     constexpr int SWITCH = 15;
+    constexpr int CHECKBOX = 15;  // a browser's 13px box
     constexpr int SLIDER = 20;
     constexpr int IMAGE = 25;
 }
@@ -59,6 +60,9 @@ P::String render_template(const char* tpl);
 // A file the app names (<img src>, icon=, <link href>): from / (or a drive, C:) as it is, otherwise
 // in the app's resources/
 P::String resolve_resource_path(const P::String& src);
+// px more around a control for a finger to hit it; html: a control HTML lays out, whose room
+// is its own only where no other control is right under the finger
+void fingerRoom(lv_obj_t* o, int px, bool html);
 
 /// Descriptor for registering a UI element
 struct ElementDesc {
