@@ -14,6 +14,10 @@
 # screen, the random pages. A memory error often draws the right pixels; this fails on it.
 # Its random pages are new every time: in a PR, those of seed 1 and 300 of the PR's number; on
 # a merge into future, 3000 of the run's number. Seed 1 alone never found the crash seed 3 did.
+#
+# The style job holds the lines the PR adds to the rules of CONTRIBUTING «Код» that a robot can
+# check (.github/scripts/style_check.py): the body of `if` on its own line, a long condition in a
+# variable with a name, unique file names. It takes seconds, so it answers first.
 name: PR checks
 
 on:
@@ -52,6 +56,19 @@ jobs:
         run: python3 -m unittest discover -s .github/scripts -p 'test_*.py'
       - name: Documents against code
         run: python3 .github/scripts/doc_check.py .
+
+  style:
+    name: Style
+    if: github.event_name == 'pull_request' && github.event.action != 'closed'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      # The PR merged into its base is HEAD; the base is HEAD^1, and the PR's lines are the diff
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 2
+      - name: The lines of the PR against CONTRIBUTING «Код»
+        run: python3 .github/scripts/style_check.py --base HEAD^1 .
 
   firmware:
     name: Firmware (${{ matrix.board }})
