@@ -149,7 +149,7 @@
         <p><input type="radio" id="r1" name="size" checked> Small
            <input type="radio" id="r2" name="size"> Medium</p>
         <input type="range" id="vol" min="0" max="10" value="4">
-        <textarea id="notes" rows="2">Hello &amp; welcome</textarea>
+        <textarea id="notes" rows="2" style="margin-bottom: 4px">Hello &amp; welcome</textarea>
         <p>Load <progress id="load" value="70" max="100"></progress></p>
         <p>Disk <meter id="disk" value="0.9" low="0.2" high="0.8"></meter></p>
         <select id="city" bind="city">

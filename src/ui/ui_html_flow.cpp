@@ -1542,8 +1542,8 @@ bool isWordsRow(lv_obj_t* o) {
 // Where a browser puts the baseline of an item of a line, from the top of its border box. A word,
 // a run of formatted words: their font's. A field, a list, a button: their text's; a row of words:
 // its first line's. A box and a range: their bottom. progress and meter: 0.2em above their bottom
-// (a browser's style sheet has them 0.2em lower). A picture and any other widget: their margin's
-// bottom
+// (a browser's style sheet has them 0.2em lower). A textarea (it scrolls, as an inline-block with
+// overflow), a picture and any other widget: their margin's bottom
 int32_t baselineOf(lv_obj_t* o, int32_t bottomMargin, int32_t em) {
     const int32_t h = lv_obj_get_height(o);
     lv_area_t box;
@@ -1577,8 +1577,8 @@ int32_t baselineOf(lv_obj_t* o, int32_t bottomMargin, int32_t em) {
                ascentOf(lv_obj_get_style_text_font(o, LV_PART_MAIN));
     }
     if (lv_obj_check_type(o, &lv_textarea_class)) {
-        if (!lv_textarea_get_one_line(o))  // a textarea scrolls: a browser has its bottom
-            return h;
+        if (!lv_textarea_get_one_line(o))  // a textarea scrolls: a browser has its margin's bottom
+            return h + bottomMargin;
         lv_area_t text;
         lv_obj_get_coords(lv_textarea_get_label(o), &text);
         return text.y1 - box.y1 + ascentOf(lv_obj_get_style_text_font(o, LV_PART_MAIN));
