@@ -30,26 +30,33 @@ int main() {
     BLEBridge::init("test");
     NimBLEConnInfo info;
     NimBLEServer* server = NimBLEDevice::createServer();
-    if (server->callbacks) server->callbacks->onConnect(server, info);  // a client: the phone
+    if (server->callbacks)
+        server->callbacks->onConnect(server, info);  // a client: the phone
 
     TEST("a fetch on its way keeps its callback");
     auto token = std::make_shared<int>(0);
     const int id = fetchHolding(token);
-    if (BLEBridge::isConnected() && id > 0 && token.use_count() == 2) PASS();
-    else FAIL("");
+    if (BLEBridge::isConnected() && id > 0 && token.use_count() == 2)
+        PASS();
+    else
+        FAIL("");
 
     TEST("the app closes: its callbacks go");
     {
         ScriptManager scripts;
         scripts.shutdown();
-        if (token.use_count() == 1) PASS();
-        else FAIL("");
+        if (token.use_count() == 1)
+            PASS();
+        else
+            FAIL("");
     }
 
     TEST("a fetch of the next app keeps its own");
     auto next = std::make_shared<int>(0);
-    if (fetchHolding(next) > id && next.use_count() == 2) PASS();
-    else FAIL("");
+    if (fetchHolding(next) > id && next.use_count() == 2)
+        PASS();
+    else
+        FAIL("");
 
     printf("\n");
     if (passed == total) {
