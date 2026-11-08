@@ -27,7 +27,9 @@ void Panel::flushCb(lv_display_t* disp, const lv_area_t* area, uint8_t* px_map) 
     }
     self->flushes_++;
     self->dirty_ = true;
-    if (lv_display_flush_is_last(disp)) self->frames_++;
+    const bool last = lv_display_flush_is_last(disp);
+    if (last) self->frames_++;
+    if (self->watch_) self->watch_(*area, last);
     lv_display_flush_ready(disp);
 }
 
