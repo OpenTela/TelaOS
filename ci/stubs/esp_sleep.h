@@ -35,8 +35,11 @@ inline esp_err_t esp_sleep_enable_gpio_wakeup() {
     return ESP_OK;
 }
 inline esp_err_t esp_sleep_disable_wakeup_source(esp_sleep_source_t source) {
-    if (source == ESP_SLEEP_WAKEUP_ALL || source == ESP_SLEEP_WAKEUP_TIMER) g_sleep_mock.timerUs = 0;
-    if (source == ESP_SLEEP_WAKEUP_ALL || source == ESP_SLEEP_WAKEUP_GPIO) g_sleep_mock.gpio = false;
+    const bool all = source == ESP_SLEEP_WAKEUP_ALL;
+    if (all || source == ESP_SLEEP_WAKEUP_TIMER)
+        g_sleep_mock.timerUs = 0;
+    if (all || source == ESP_SLEEP_WAKEUP_GPIO)
+        g_sleep_mock.gpio = false;
     return ESP_OK;
 }
 inline esp_err_t esp_light_sleep_start() {

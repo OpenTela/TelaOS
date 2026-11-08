@@ -490,8 +490,10 @@ static Result execSys(std::string_view cmd, JsonArray args) {
     if (cmd == "config") {
         auto& cfg = App::Manager::instance().systemConfig;
         const char* key = argStr(args, 0);
-        if (!key[0]) return Result::errInvalid("sys config <key> [value]");
-        if (!cfg.store().has(key)) return Result::errNotFound("No such setting");
+        if (!key[0])
+            return Result::errInvalid("sys config <key> [value]");
+        if (!cfg.store().has(key))
+            return Result::errNotFound("No such setting");
         if (args.size() > 1) {
             cfg.set(key, argStr(args, 1));
             Shade::instance().applyConfig();

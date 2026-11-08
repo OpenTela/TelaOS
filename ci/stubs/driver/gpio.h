@@ -29,10 +29,12 @@ inline int gpio_get_level(gpio_num_t pin) {
     return pin >= 0 && pin < 49 ? g_gpio_mock.level[pin] : 0;
 }
 inline esp_err_t gpio_wakeup_enable(gpio_num_t pin, gpio_int_type_t type) {
-    if (pin >= 0 && pin < 49) g_gpio_mock.wakeup[pin] = type;
+    if (pin >= 0 && pin < 49)
+        g_gpio_mock.wakeup[pin] = type;
     return ESP_OK;
 }
 inline esp_err_t gpio_wakeup_disable(gpio_num_t pin) {
-    if (pin >= 0 && pin < 49) g_gpio_mock.wakeup[pin] = GPIO_INTR_DISABLE;
+    if (pin >= 0 && pin < 49)
+        g_gpio_mock.wakeup[pin] = GPIO_INTR_DISABLE;
     return ESP_OK;
 }

@@ -240,7 +240,8 @@ bool TWatch2020::lightSleep(uint32_t ms) {
         esp_sleep_enable_gpio_wakeup();
     }
     const esp_err_t err = esp_light_sleep_start();
-    if (byTouch) gpio_wakeup_disable(intPin);
+    if (byTouch)
+        gpio_wakeup_disable(intPin);
     esp_sleep_disable_wakeup_source(ESP_SLEEP_WAKEUP_ALL);
     return err == ESP_OK;
 }

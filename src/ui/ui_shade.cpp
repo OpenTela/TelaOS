@@ -54,7 +54,8 @@ void Shade::applyConfig() {
     Power::setLightSleep(cfg.getBool("power.light_sleep"));
 
     // asleep, the backlight stays off: waking sets it
-    if (m_userBrightness > 0 && !display_is_asleep()) display_set_brightness(m_userBrightness);
+    if (m_userBrightness > 0 && !display_is_asleep())
+        display_set_brightness(m_userBrightness);
 
     BLEBridge::setPairing(cfg.getBool("bluetooth.pairing"));
     if (cfg.getBool("bluetooth.enabled") && !BLEBridge::isInitialized()) {

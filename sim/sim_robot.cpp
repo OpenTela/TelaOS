@@ -802,8 +802,10 @@ bool Robot::exec(const std::vector<std::string>& a, const std::string& where) {
         return true;
     }
     // expect idle.px | idle.frames <value | lo..hi>   what the last `idle` saw redrawn
-    if (cmd == "expect" && need(3) && (a[1] == "idle.px" || a[1] == "idle.frames")) {
-        if (!idle_measured_) return fail(a[1] + ": no idle before it");
+    const bool expectIdle = cmd == "expect" && need(3) && (a[1] == "idle.px" || a[1] == "idle.frames");
+    if (expectIdle) {
+        if (!idle_measured_)
+            return fail(a[1] + ": no idle before it");
         const std::string actual = std::to_string(a[1] == "idle.px" ? idle_px_ : idle_frames_);
         if (valueMatches(actual, unquote(a[2]))) {
             ++passed_;
@@ -815,7 +817,8 @@ bool Robot::exec(const std::vector<std::string>& a, const std::string& where) {
     }
     // expect slept.ms <value | lo..hi>   how long the board light-slept since power-on
     if (cmd == "expect" && need(3) && a[1] == "slept.ms") {
-        if (!hooks_.sleptMs) return fail("no light sleep in this build");
+        if (!hooks_.sleptMs)
+            return fail("no light sleep in this build");
         const std::string actual = std::to_string(hooks_.sleptMs());
         if (valueMatches(actual, unquote(a[2]))) {
             ++passed_;
