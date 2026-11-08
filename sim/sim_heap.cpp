@@ -46,6 +46,7 @@ Heap g_heap[2];
 size_t g_size[2] = {SimHeap::kDefaultDram, SimHeap::kDefaultPsram};
 bool g_estimated = true;
 bool g_ready = false;
+esp_alloc_failed_hook_t g_failed_hook = nullptr;  // the firmware's, as ESP-IDF calls it
 std::atomic_flag g_lock = ATOMIC_FLAG_INIT;
 __thread int g_firmware = 0;  // initial-exec TLS: no allocation on first use
 
@@ -144,6 +145,8 @@ void* allocate(size_t n, uint32_t caps, bool plain) {
         if (void* p = take(g_heap[heaps[i]], n)) return p;
     }
     ++g_heap[heaps[0]].failed;
+    if (g_failed_hook)
+        g_failed_hook(n, plain ? MALLOC_CAP_DEFAULT : caps, plain ? "malloc" : "heap_caps_malloc");
     return nullptr;
 }
 
@@ -285,6 +288,18 @@ size_t largestFreeBlock(uint32_t caps) {
     return largest(byCaps(caps));
 }
 
+void info(uint32_t caps, multi_heap_info_t* out) {
+    Lock lock;
+    ready();
+    Heap& h = byCaps(caps);
+    *out = multi_heap_info_t{};
+    out->total_free_bytes = h.free;
+    out->total_allocated_bytes = h.total - h.free;
+    out->largest_free_block = largest(h);
+    out->minimum_free_bytes = h.min_free;
+    out->allocated_blocks = h.blocks;
+}
+
 Firmware::Firmware() { ++g_firmware; }
 Firmware::~Firmware() { --g_firmware; }
 Host::Host() : saved_(g_firmware) { g_firmware = 0; }
@@ -304,6 +319,11 @@ size_t heap_caps_get_free_size(uint32_t caps) { return SimHeap::freeSize(caps); 
 size_t heap_caps_get_total_size(uint32_t caps) { return SimHeap::totalSize(caps); }
 size_t heap_caps_get_minimum_free_size(uint32_t caps) { return SimHeap::minFreeSize(caps); }
 size_t heap_caps_get_largest_free_block(uint32_t caps) { return SimHeap::largestFreeBlock(caps); }
+void heap_caps_get_info(multi_heap_info_t* info, uint32_t caps) { SimHeap::info(caps, info); }
+int heap_caps_register_failed_alloc_callback(esp_alloc_failed_hook_t callback) {
+    g_failed_hook = callback;
+    return 0;
+}
 void* ps_malloc(size_t size) { return SimHeap::capsMalloc(size, MALLOC_CAP_SPIRAM); }
 void* ps_calloc(size_t n, size_t size) { return SimHeap::capsCalloc(n, size, MALLOC_CAP_SPIRAM); }
 void* ps_realloc(void* ptr, size_t size) { return SimHeap::capsRealloc(ptr, size, MALLOC_CAP_SPIRAM); }
