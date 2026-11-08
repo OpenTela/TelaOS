@@ -26,6 +26,7 @@
 #include "utils/string_utils.h"
 #include "utils/log_config.h"
 #include <algorithm>
+#include <array>
 #include <string>
 #include <cctype>
 
@@ -1921,6 +1922,22 @@ static SelectOptions parse_options(const char* content) {
     return out;
 }
 
+// The arrow of a <select>: expand_more of the icons behind every font. LVGL's own, LV_SYMBOL_DOWN,
+// is a glyph of its symbol font, which the watch's fonts have not: it was drawn as an empty box.
+// Without the icons, no arrow
+static const char* select_arrow() {
+    static std::array<char, 4> arrow{};
+    if (!arrow[0]) {
+        const uint32_t c = UI::Font::iconCode("expand_more");
+        if (c >= 0x800 && c <= 0xFFFF) {  // three bytes of UTF-8, as every icon of the font
+            arrow[0] = static_cast<char>(0xE0 | (c >> 12));
+            arrow[1] = static_cast<char>(0x80 | ((c >> 6) & 0x3F));
+            arrow[2] = static_cast<char>(0x80 | (c & 0x3F));
+        }
+    }
+    return arrow[0] ? arrow.data() : nullptr;
+}
+
 // A <select> HTML lays out, as Chromium draws it with the watch's font: 13.33px text (drawn at
 // 14, as a field's), a 1px border, 19 high (LVGL's line of 14px takes all of it), and as wide as
 // its longest option at 13.33px with 22 more for its arrow and padding. CSS comes after it
@@ -1965,6 +1982,11 @@ void create_select(const char *astart, const char *aend, const char *content, lv
 
     lv_obj_t* dd = lv_dropdown_create(parent);
     lv_dropdown_set_options(dd, opts.lvglStr.c_str());
+    lv_dropdown_set_symbol(dd, select_arrow());
+    // Its list opens on the screen, out of the page: in the watch's font, not the theme's 8px
+    // Montserrat a child of the screen has
+    if (lv_obj_t* list = lv_dropdown_get_list(dd))
+        lv_obj_set_style_text_font(list, UI::Font::get(), LV_PART_MAIN);
 
     // Initial selection: the state, else <option selected>, else the first option that can be chosen
     int initIdx = opts.selected;

@@ -18,6 +18,17 @@ void Widget::applyStyle(const P::String& classNames) {
 void Widget::applyCss(const char* tag, const char* id, const char* classNames, std::string_view attrs,
                       std::string_view inlineStyle) {
     if (!handle) return;
+    // An HTML element a TelaOS builder makes (<textarea> as <input>, <input type="range"> as
+    // <slider>): CSS sees what the markup says, its tag, its type= and its style="", as a browser
+    // does. The element scripts find is recorded from the builder's attributes, as before
+    const std::string_view built = attrs;
+    std::string_view markupTag, markupAttrs;
+    P::String asTag;
+    if (UI::Dom::takeAs(markupTag, markupAttrs)) {
+        asTag = P::String(markupTag);
+        tag = asTag.c_str();
+        attrs = markupAttrs;
+    }
     P::String style;  // the style="" of a TelaOS widget: its builder gives none, its attributes have it
     if (inlineStyle.empty() && UI::Css::findAttr(attrs, "style", inlineStyle) &&
         inlineStyle.find('&') != std::string_view::npos) {
@@ -25,7 +36,7 @@ void Widget::applyCss(const char* tag, const char* id, const char* classNames, s
         inlineStyle = style;
     }
     // the element scripts find (docs/DOM.md); what CSS changes on it is kept for a class change
-    const bool dom = UI::Dom::element(handle, tag ? tag : "", attrs, true);
+    const bool dom = UI::Dom::element(handle, tag ? tag : "", built, true);
     UI::CssElement el;
     el.tag = tag ? tag : "";
     el.id = id ? id : "";

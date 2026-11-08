@@ -2498,7 +2498,8 @@ void drawHtmlBox(lv_event_t* e) {
     lv_area_t box;
     lv_obj_get_content_coords(cb, &box);  // inside a border and padding CSS gives the input
     const int32_t w = lv_area_get_width(&box), h = lv_area_get_height(&box), side = LV_MIN(w, h);
-    if (side <= 0) return;
+    if (side <= 0)
+        return;
     box.x1 += (w - side) / 2;
     box.y1 += (h - side) / 2;
     box.x2 = box.x1 + side - 1;
@@ -2511,7 +2512,8 @@ void drawHtmlBox(lv_event_t* e) {
     lv_obj_init_draw_rect_dsc(cb, LV_PART_INDICATOR, &look);
     look.bg_image_src = nullptr;  // the theme's mark
     lv_draw_rect(layer, &look, &box);
-    if (!lv_obj_has_state(cb, LV_STATE_CHECKED)) return;
+    if (!lv_obj_has_state(cb, LV_STATE_CHECKED))
+        return;
 
     const int32_t s = lv_area_get_width(&box);
     const lv_color_t color = lv_obj_get_style_text_color_filtered(cb, LV_PART_INDICATOR);  // the glyph's
@@ -2567,10 +2569,12 @@ void htmlBoxEvent(const lv_obj_class_t* cls, lv_event_t* e) {
     (void)cls;
     const lv_event_code_t code = lv_event_get_code(e);
     if (code == LV_EVENT_DRAW_MAIN) {  // the input as lv_obj draws it (CSS's background, border), then the box
-        if (lv_obj_event_base(&lv_checkbox_class, e) == LV_RESULT_OK) drawHtmlBox(e);
+        if (lv_obj_event_base(&lv_checkbox_class, e) == LV_RESULT_OK)
+            drawHtmlBox(e);
         return;
     }
-    if (lv_obj_event_base(&kHtmlBox, e) != LV_RESULT_OK) return;  // lv_checkbox's
+    if (lv_obj_event_base(&kHtmlBox, e) != LV_RESULT_OK)  // lv_checkbox's
+        return;
     if (code == LV_EVENT_GET_SELF_SIZE) {  // width: auto, as in a browser
         auto* p = static_cast<lv_point_t*>(lv_event_get_param(e));
         p->x = 13;
@@ -2596,8 +2600,9 @@ lv_obj_t* htmlBox(lv_obj_t* parent) {
 void checkboxElement(const TagRef& t, lv_obj_t* parent, bool radio) {
     const P::String label = attr(t, "label");
     lv_obj_t* cb = label.empty() ? htmlBox(parent) : lv_checkbox_create(parent);
-    if (!label.empty()) lv_checkbox_set_text(cb, label.c_str());
-    if (label.empty()) {
+    if (!label.empty()) {
+        lv_checkbox_set_text(cb, label.c_str());
+    } else {
         // The input is its box, as in HTML, and a browser's: 13x13, 3px 3px 3px 4px of margin
         // around a checkbox, 3px 3px 0 5px around a radio. An outline or a border from CSS goes
         // round the box; a finger has 15px more
@@ -2804,7 +2809,8 @@ void textareaElement(const TagRef& t, lv_obj_t* parent) {
 void barElement(const TagRef& t, lv_obj_t* parent, bool meter) {
     lv_obj_t* b = lv_bar_create(parent);
     P::String w = attr(t, "width");
-    if (w.empty()) w = attr(t, "w");
+    if (w.empty())
+        w = attr(t, "w");
     // inline, a browser's size: progress 10em, meter 5em, both 1em high. The bar is drawn 10px high
     // in the middle of its 16 (transform_height), as before
     lv_obj_set_size(b, w.empty() ? (meter ? 80 : 160) : parse_size(w.c_str()), 16);

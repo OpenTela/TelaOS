@@ -1067,14 +1067,35 @@ void contentReplaced(lv_obj_t* obj) {
     }
 }
 
-As::As(std::string_view tag, std::string_view attrs) {
+// Dom::As for CSS: the markup's element, until the builder styles what it makes of it
+std::string_view s_cssTag, s_cssAttrs;
+bool s_cssAs = false;
+
+As::As(std::string_view tag, std::string_view attrs) : tag_(s_cssTag), attrs_(s_cssAttrs), css_(s_cssAs) {
+    s_cssTag = tag;
+    s_cssAttrs = attrs;
+    s_cssAs = true;
     if (!recording()) return;
     s_asOn = true;
     tree().asTag = tag.empty() ? P::String() : P::String(tag);
     tree().asAttrs = attrs.empty() ? P::String() : P::String(attrs);
 }
 
-As::~As() { s_asOn = false; }
+As::~As() {
+    s_asOn = false;
+    s_cssTag = tag_;
+    s_cssAttrs = attrs_;
+    s_cssAs = css_;
+}
+
+bool takeAs(std::string_view& tag, std::string_view& attrs) {
+    if (!s_cssAs)
+        return false;
+    s_cssAs = false;
+    tag = s_cssTag;
+    attrs = s_cssAttrs;
+    return true;
+}
 
 Pause::Pause() { ++s_paused; }
 Pause::~Pause() { --s_paused; }

@@ -47,14 +47,23 @@ void keep(CssUndo&& undo);
 void contentReplaced(lv_obj_t* obj);
 
 // While it lives, the next element is recorded as `tag` with `attrs`: the builder got rewritten
-// ones (<img> is built as <image>, <input type="range"> as <slider>)
+// ones (<img> is built as <image>, <input type="range"> as <slider>). CSS sees it so too, as a
+// browser does (takeAs): textarea {} styles a <textarea>, input[type="text"] a text field
 class As {
 public:
     As(std::string_view tag, std::string_view attrs);
     ~As();
     As(const As&) = delete;
     As& operator=(const As&) = delete;
+
+private:
+    std::string_view tag_, attrs_;  // the As around this one, for CSS
+    bool css_;
 };
+
+// The tag and the attributes of the markup an As holds, for the CSS of the element the builder
+// makes in it (Widget::applyCss): once, recorded or not. False outside an As, or once taken
+bool takeAs(std::string_view& tag, std::string_view& attrs);
 
 // f() with the CSS scopes of obj's element and of the elements above it open, outermost first,
 // as the page had them open when it built obj: a paragraph built again later ({var} changed) is
