@@ -74,11 +74,15 @@ inline const esp_partition_t* esp_ota_get_running_partition() { return &OtaMock:
 
 inline esp_err_t esp_ota_get_state_partition(const esp_partition_t* p, esp_ota_img_states_t* state) {
     if (p == &OtaMock::running) {
-        if (!OtaMock::runningKnown) return ESP_ERR_NOT_FOUND;
+        if (!OtaMock::runningKnown)
+            return ESP_ERR_NOT_FOUND;
         *state = OtaMock::runningState;
         return ESP_OK;
     }
-    if (p && p == OtaMock::invalid) { *state = ESP_OTA_IMG_ABORTED; return ESP_OK; }
+    if (p && p == OtaMock::invalid) {
+        *state = ESP_OTA_IMG_ABORTED;
+        return ESP_OK;
+    }
     return ESP_ERR_NOT_FOUND;
 }
 

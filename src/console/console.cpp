@@ -366,21 +366,25 @@ static Result execSys(std::string_view cmd, JsonArray args) {
     if (cmd == "crash") {
         const std::string_view what = argStr(args, 0, "");
         if (what == "clear") {
-            if (!CrashLog::clear()) return Result::errServer("Can't remove the crash log");
+            if (!CrashLog::clear())
+                return Result::errServer("Can't remove the crash log");
             auto r = Result::ok();
             r.data["crashes"] = 0;
             return r;
         }
-        if (!what.empty()) return Result::errInvalid("Usage: sys crash [clear]");
+        if (!what.empty())
+            return Result::errInvalid("Usage: sys crash [clear]");
 
         const P::String log = CrashLog::read();
         auto r = Result::ok();
         r.data["crashes"] = (int)std::count(log.begin(), log.end(), '\n');
         r.data["reset"] = CrashLog::resetName(esp_reset_reason());
-        if (const char* bad = OtaConfirm::invalidPartition()) r.data["ota_invalid"] = bad;
+        if (const char* bad = OtaConfirm::invalidPartition())
+            r.data["ota_invalid"] = bad;
         if (!log.empty()) {
             auto* buf = (uint8_t*)ps_malloc(log.size());
-            if (!buf) return Result::errMemory("Out of memory");
+            if (!buf)
+                return Result::errMemory("Out of memory");
             std::copy(log.begin(), log.end(), buf);
             r.withStringData(buf, log.size());
         }
