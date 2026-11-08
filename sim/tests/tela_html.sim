@@ -136,6 +136,9 @@ expect @notes "Hello & welcome"
 expect @load 700
 expect @disk 900
 expect @city "Moscow"
+# a browser's <select>: 19 high, its longest option (at 13.33px) and 22 more wide
+expect @city :h 19
+expect @city :w 122
 expect $sent "no"
 tap "Send"
 expect $sent "yes"

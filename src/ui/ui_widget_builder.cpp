@@ -1921,6 +1921,30 @@ static SelectOptions parse_options(const char* content) {
     return out;
 }
 
+// A <select> HTML lays out, as Chromium draws it with the watch's font: 13.33px text (drawn at
+// 14, as a field's), a 1px border, 19 high (LVGL's line of 14px takes all of it), and as wide as
+// its longest option at 13.33px with 22 more for its arrow and padding. CSS comes after it
+static void browserSelect(lv_obj_t* dd, const SelectOptions& opts) {
+    const lv_font_t* font = UI::Font::get(14);
+    lv_obj_set_style_text_font(dd, font, LV_PART_MAIN);
+    lv_obj_set_style_text_font(dd, font, LV_PART_INDICATOR);  // the arrow
+    lv_obj_set_style_border_width(dd, 1, LV_PART_MAIN);
+    lv_obj_set_style_pad_top(dd, 0, LV_PART_MAIN);
+    lv_obj_set_style_pad_bottom(dd, 0, LV_PART_MAIN);
+    lv_obj_set_style_pad_left(dd, 4, LV_PART_MAIN);
+    lv_obj_set_style_pad_right(dd, 4, LV_PART_MAIN);
+    int32_t widest = 0;
+#if !defined(LVGL_MOCK_ENABLED)
+    for (const P::String& label : opts.labels) {
+        widest = std::max(widest, lv_text_get_width(label.c_str(), static_cast<uint32_t>(label.size()), font, 0));
+    }
+#else
+    (void)opts;
+#endif
+    // the text is measured at 14px: 20/21 of it is Chromium's 13.33, rounded up as Chromium does
+    lv_obj_set_size(dd, (widest * 20 + 20) / 21 + 22, 19);
+}
+
 void create_select(const char *astart, const char *aend, const char *content, lv_obj_t *parent) {
     auto attrs    = parseCommonAttrs(astart, aend);
     auto bind     = getAttr(astart, aend, "bind");
@@ -1956,6 +1980,12 @@ void create_select(const char *astart, const char *aend, const char *content, lv
         while (initIdx + 1 < (int)opts.disabled.size() && opts.disabled[initIdx]) ++initIdx;
     }
     lv_dropdown_set_selected(dd, (uint16_t)initIdx);
+
+    // A <select> HTML lays out is a browser's; one placed by x or y stays as TelaOS draws it
+    const bool browser = (HtmlFlow::browserSized() || HtmlFlow::inFlow(parent)) && getAttr(astart, aend, "x").empty() &&
+                         getAttr(astart, aend, "y").empty();
+    if (browser)
+        browserSelect(dd, opts);
 
     set_pos(dd, x, y);
     if (w != 0) lv_obj_set_width(dd, w);
