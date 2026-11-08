@@ -194,7 +194,8 @@ static const char* APP_BLOCKS = R"HTML(
     <tbody><tr><td>Moscow</td></tr></tbody>
   </table>
   <figure id="fig"><img id="im" src="pic.png" width="40" height="30"><figcaption>Cap</figcaption></figure>
-  <fieldset id="fs"><legend>Group</legend>Inside</fieldset>
+  <fieldset id="fs"><legend id="lg">Group</legend>Inside</fieldset>
+  <fieldset id="fs2"><p>No legend</p></fieldset>
 </page></ui></app>
 )HTML";
 
@@ -506,6 +507,15 @@ int main() {
     }
     expectText("<figure> with <figcaption>", "fig", "Cap");
     expectText("<fieldset> with <legend>", "fs", "Group Inside");
+    expectTrue("<legend>: as wide as its text, 2px aside, the fieldset's 6px under it", byId("lg") &&
+               byId("lg")->w == LV_SIZE_CONTENT && byId("lg")->padLeft == 2 && byId("lg")->padRight == 2 &&
+               byId("lg")->marginBottom == 6);
+    expectTrue("<fieldset> with a legend: on its top edge, the border drawn round it", byId("fs") &&
+               byId("fs")->padTop == 0 && byId("fs")->padLeft == 14 && byId("fs")->padBottom == 12 &&
+               byId("fs")->borderSide == LV_BORDER_SIDE_NONE);
+    expectTrue("<fieldset> without one: its border and padding as they were", byId("fs2") &&
+               byId("fs2")->padTop == 6 && byId("fs2")->padLeft == 12 && byId("fs2")->borderWidth == 2 &&
+               byId("fs2")->borderSide != LV_BORDER_SIDE_NONE);
 
     printf("\nForms:\n");
     render(APP_FORMS);
