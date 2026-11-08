@@ -216,6 +216,9 @@ static const char* APP_FORMS = R"HTML(
     <input id="tela" bind="name"/>
     <input checked type="checkbox" id="cb3">
     <input disabled id="off" type="checkbox">
+    <input type="text" id="small" size="10"> <input type="email" id="sized" w="300">
+    <textarea id="wide" cols="30" rows="1"></textarea>
+    <input id="placed" x="10" y="300"/>
   </form>
 </page></ui></app>
 )HTML";
@@ -518,6 +521,18 @@ int main() {
     expectTrue("<input type=submit>: a browser's button too", byId("go") && byId("go")->padLeft == 6 &&
                byId("go")->padTop == 1 && byId("go")->borderWidth == 2);
     expectTrue("textarea content", byId("ta") && byId("ta")->text == "Hi & bye");
+    expectTrue("<input type=text>: a browser's field, 210x21, 2px border, 2px padding aside",
+               byId("txt") && byId("txt")->w == 210 && byId("txt")->h == 21 && byId("txt")->borderWidth == 2 &&
+                   byId("txt")->padLeft == 2);
+    expectTrue("<input size=10>: 8px a character, 130 wide", byId("small") && byId("small")->w == 130 &&
+               byId("small")->h == 21);
+    expectTrue("<input w=300>: w= over the browser's width", byId("sized") && byId("sized")->w == 300 &&
+               byId("sized")->h == 21);
+    expectTrue("<textarea rows=3>: 20 columns, 182x51, 1px border", byId("ta") && byId("ta")->w == 182 &&
+               byId("ta")->h == 51 && byId("ta")->borderWidth == 1);
+    expectTrue("<textarea cols=30 rows=1>: 262x21", byId("wide") && byId("wide")->w == 262 && byId("wide")->h == 21);
+    expectTrue("<input x= y=>: placed by TelaOS, TelaOS's size", byId("placed") && byId("placed")->w == 150 &&
+               byId("placed")->h == 40);
     expectTrue("progress 0.25 -> 250/1000", byId("pg") && byId("pg")->curValue == 250);
     expectTrue("meter 5 of 0..10 -> 500/1000", byId("mt") && byId("mt")->curValue == 500);
     expectTrue("select stays TelaOS dropdown", byId("sel") && byId("sel")->type == "Dropdown");

@@ -2219,7 +2219,7 @@ void inputElement(const TagRef& t, lv_obj_t* parent) {
     }
     // text-like: text, password, email, search, tel, url, number, date, time, color, file...
     P::String a = keepAttrs(t, {"id", "class", "bind", "placeholder", "onchange", "oninput", "onenter", "onblur",
-                                "w", "h", "bgcolor", "color", "maxlength"}) +
+                                "w", "h", "bgcolor", "color", "maxlength", "size"}) +
                   flagFor(t, "readonly") + flagFor(t, "disabled");
     if (type == "password") a += " password=\"true\"";
     {
@@ -2232,15 +2232,11 @@ void inputElement(const TagRef& t, lv_obj_t* parent) {
 }
 
 void textareaElement(const TagRef& t, lv_obj_t* parent) {
-    P::String a = keepAttrs(t, {"id", "class", "bind", "placeholder", "onchange", "oninput", "onblur", "w",
-                                "bgcolor", "color", "maxlength"}) +
+    // the size: a browser's, from cols= and rows= (create_input), unless w= or h= says
+    P::String a = keepAttrs(t, {"id", "class", "bind", "placeholder", "onchange", "oninput", "onblur", "w", "h",
+                                "bgcolor", "color", "maxlength", "cols", "rows"}) +
                   flagFor(t, "readonly") + flagFor(t, "disabled");
     a += " multiline=\"true\"";
-    P::String h = attr(t, "h");
-    if (h.empty() && !attr(t, "rows").empty()) {
-        h = decimal(atoi(attr(t, "rows").c_str()) * 20 + 16);
-    }
-    if (!h.empty()) a += " h=\"" + h + "\"";
     {
         UI::Dom::As as(t.name, rawAttrs(t));
         create_input(a.c_str(), a.c_str() + a.size(), "", parent);
