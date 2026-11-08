@@ -62,7 +62,10 @@ struct App{
     void exec(const char*c){engine.execute(c);}
     std::string lbl(const char*id){
         auto*p=LvglMock::g_screen->first("Container");
-        if(!p)return "";auto*w=p->findById(id);return w?w->text:"";
+        if(!p)
+            return "";
+        auto*w=p->findById(id);
+        return w?w->text:"";
     }
 };
 

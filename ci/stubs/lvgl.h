@@ -236,6 +236,7 @@ typedef enum {
     LV_EVENT_DELETE,
     LV_EVENT_REFR_EXT_DRAW_SIZE,
     LV_EVENT_LAYOUT_CHANGED,
+    LV_EVENT_STYLE_CHANGED,
     LV_EVENT_SCROLL_END,
     LV_EVENT_ALL = 0xFF,
     LV_EVENT_PREPROCESS = 0x8000,  // a flag: the callback runs before the others
@@ -878,6 +879,15 @@ inline lv_flex_flow_t lv_obj_get_style_flex_flow(lv_obj_t* obj, int) {
 #define MOCK_GET(field, def) ((void)obj, (def))
 #endif
 inline lv_flex_align_t lv_obj_get_style_flex_main_place(lv_obj_t* obj, int) { return static_cast<lv_flex_align_t>(MOCK_GET(flexMainAlign, 0)); }
+inline void lv_obj_set_style_flex_main_place(lv_obj_t* obj, lv_flex_align_t v, int) {
+    if (obj && obj->mock_widget)
+        obj->mock_widget->flexMainAlign = (int)v;
+}
+// The element's own text-align only: the mock does not inherit styles
+inline lv_text_align_t lv_obj_get_style_text_align(lv_obj_t* obj, int) {
+    const int h = MOCK_GET(textAlignH, 0);
+    return h == 1 ? LV_TEXT_ALIGN_CENTER : h == 2 ? LV_TEXT_ALIGN_RIGHT : LV_TEXT_ALIGN_AUTO;
+}
 inline lv_flex_align_t lv_obj_get_style_flex_cross_place(lv_obj_t* obj, int) { return static_cast<lv_flex_align_t>(MOCK_GET(flexCrossAlign, 0)); }
 inline lv_flex_align_t lv_obj_get_style_flex_track_place(lv_obj_t* obj, int) { return static_cast<lv_flex_align_t>(MOCK_GET(flexTrackAlign, 0)); }
 inline int lv_obj_get_style_width(lv_obj_t* obj, int) { return MOCK_GET(w, 0); }

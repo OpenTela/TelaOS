@@ -160,6 +160,8 @@ static const char* APP_TEXT_DIR = R"HTML(
   <p id="bdo"><bdo dir="rtl">olleH</bdo>, <bdo dir="RTL">тевирП</bdo>!</p>
   <p id="rtl" dir="rtl">Right to left</p>
   <p id="rtlw" dir="rtl">Two <a href="/a">links</a> <a href="/b">here</a></p>
+  <p id="midw" style="text-align: center">Two <a href="/a">links</a> <a href="/b">here</a></p>
+  <p id="endw" style="text-align: right">Two <a href="/a">links</a> <a href="/b">here</a></p>
   <ul dir="rtl"><li>one<ul id="rin"><li>two</ul></ul>
   <table id="rtb" dir="rtl"><tr><td>1</td><td>2</td></tr></table>
 </page></ui></app>
@@ -439,6 +441,11 @@ int main() {
                byId("rtlw") && byId("rtlw")->flexMainAlign == LV_FLEX_ALIGN_END &&
                byId("rtlw")->baseDir == LV_BASE_DIR_LTR);
     expectText("dir=rtl, words with links: text unchanged", "rtlw", "Two links here");
+    expectTrue("a line of words starts at the start", byId("e") && byId("e")->flexMainAlign == LV_FLEX_ALIGN_START);
+    expectTrue("text-align: center: a line of links in the middle",
+               byId("midw") && byId("midw")->flexMainAlign == LV_FLEX_ALIGN_CENTER);
+    expectTrue("text-align: right: a line of links at the right",
+               byId("endw") && byId("endw")->flexMainAlign == LV_FLEX_ALIGN_END);
     expectTrue("dir=rtl list: a nested list is indented from the right",
                byId("rin") && byId("rin")->padRight > 0 && byId("rin")->padLeft == 0);
     expectTrue("<table dir=rtl>: rows go right to left", byId("rtb") && byId("rtb")->baseDir == LV_BASE_DIR_RTL);
