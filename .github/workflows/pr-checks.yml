@@ -46,6 +46,8 @@ jobs:
         run: python3 ci/test.py "$GITHUB_WORKSPACE"
       - name: Simulator tools tests
         run: python3 -m unittest discover -s sim/tools -p 'test_*.py'
+      - name: Workflow scripts tests
+        run: python3 -m unittest discover -s .github/scripts -p 'test_*.py'
 
   firmware:
     name: Firmware (${{ matrix.board }})
