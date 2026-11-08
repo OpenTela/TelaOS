@@ -44,6 +44,10 @@ void create(const char* tag, const char* astart, const char* aend, const char* c
 // a browser leaves out what it does not load
 void linkStylesheet(std::string_view rel, std::string_view href, std::string_view media, bool disabled);
 
+// The color the text of host's HTML inherits: what html {} and body {} say (Css::canvas()), in
+// place of the white of the dark screen. host: a page, after its content is built
+void setTextColor(lv_obj_t* host, uint32_t rgb, uint8_t opa);
+
 // Direct text and inline HTML (<b>, <a href>, <br>...) at p, up to the next block or TelaOS
 // element, rendered as one line box. Returns the end of the run, or p if there is none.
 const char* inlineRun(const char* p, const char* end, lv_obj_t* parent);

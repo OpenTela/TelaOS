@@ -177,6 +177,7 @@ jobs:
             out/report.md
             out/status.json
             out/judge.json
+            out/judge_tela.json
             out/anim_judge.json
             out/anim-head/
             out/publish/
