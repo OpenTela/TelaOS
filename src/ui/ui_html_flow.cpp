@@ -2371,8 +2371,11 @@ void barElement(const TagRef& t, lv_obj_t* parent, bool meter) {
     lv_obj_t* b = lv_bar_create(parent);
     P::String w = attr(t, "width");
     if (w.empty()) w = attr(t, "w");
-    // inline, browser default size: progress 10em, meter 5em
-    lv_obj_set_size(b, w.empty() ? (meter ? 80 : 160) : parse_size(w.c_str()), 10);
+    // inline, a browser's size: progress 10em, meter 5em, both 1em high. The bar is drawn 10px high
+    // in the middle of its 16 (transform_height), as before
+    lv_obj_set_size(b, w.empty() ? (meter ? 80 : 160) : parse_size(w.c_str()), 16);
+    lv_obj_set_style_transform_height(b, -3, LV_PART_MAIN);
+    lv_obj_set_style_transform_height(b, -3, LV_PART_INDICATOR);
     const double mn = meter ? attrNum(t.astart, t.aend, "min", 0) : 0;
     const double mx = attrNum(t.astart, t.aend, "max", meter ? 1 : 1);
     const double v = attrNum(t.astart, t.aend, "value", mn);

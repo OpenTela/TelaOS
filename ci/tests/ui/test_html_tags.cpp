@@ -541,6 +541,13 @@ int main() {
                byId("placed")->h == 40);
     expectTrue("progress 0.25 -> 250/1000", byId("pg") && byId("pg")->curValue == 250);
     expectTrue("meter 5 of 0..10 -> 500/1000", byId("mt") && byId("mt")->curValue == 500);
+    expectTrue("<progress>: a browser's 160x16", byId("pg") && byId("pg")->w == 160 && byId("pg")->h == 16);
+    expectTrue("<meter>: a browser's 80x16", byId("mt") && byId("mt")->w == 80 && byId("mt")->h == 16);
+    {
+        MW* r = byId("rng");
+        expectTrue("<input type=range>: a browser's 129x16, margin 2px", r && r->w == 129 && r->h == 16 &&
+                   r->marginTop == 2 && r->marginRight == 2 && r->marginBottom == 2 && r->marginLeft == 2);
+    }
     expectTrue("select stays TelaOS dropdown", byId("sel") && byId("sel")->type == "Dropdown");
     expectTrue("input without type= stays TelaOS input", byId("tela") && byId("tela")->type == "TextArea");
     expectTrue("checked before type=: still a checked checkbox", byId("cb3") && byId("cb3")->checked);

@@ -1,4 +1,4 @@
-# HTML Tags v0.23
+# HTML Tags v0.24
 
 Стандартные HTML-элементы в TelaOS: все элементы справочника MDN
 ([HTML elements reference](https://developer.mozilla.org/en-US/docs/Web/HTML/Reference/Elements)),
@@ -6,6 +6,9 @@
 
 ## Changelog
 
+- **v0.24**: Ползунок, `progress`, `meter` — размера браузера: ползунок 129×16 с полями 2px (дорожка 4px,
+  кружок 16), было 150×13; `progress` 160×16 и `meter` 80×16, полоса по-прежнему 10px в середине, было
+  высотой 10.
 - **v0.23**: Флажок и радио — размера браузера: квадрат 13px, как в Chromium, без места для текста,
   поля 3px 3px 3px 4px у флажка и 3px 3px 0 5px у радио. Было 22×22. Отметка — галочка у флажка и
   точка у радио — рисуется по размеру квадрата: CSS `width` и `height` меняют квадрат, как в браузере
@@ -235,7 +238,7 @@
 | `input type="text"` (и `email`, `search`, `tel`, `url`, `number`, `date`…) | актуальный | TelaOS-поле: `bind`, `placeholder`, `value`, `maxlength`, `readonly` (текст виден, клавиатура не открывается), `disabled`, события. Размера браузера: 8px на знак `size` (20) и ещё 50 — 210×21, рамка 2px, шрифт 14px; `w`, `h` и CSS важнее; с `x`/`y` — как рисует TelaOS (150×40) |
 | `input type="password"` | актуальный | поле с `password="true"` |
 | `input type="checkbox"`, `"radio"` | актуальный | флажок: `checked`, `disabled`, `bind` ("true"/"false"), `onchange`; радио — группа по `name`. Размера браузера: квадрат 13px, как в Chromium, поля 3px 3px 3px 4px (радио — 3px 3px 0 5px), вокруг ещё 15px зоны нажатия; отметка (галочка, у радио — точка) — по размеру квадрата, CSS `width`/`height` его меняют |
-| `input type="range"` | актуальный | TelaOS `<slider>`: `min`, `max`, `step` (ползунок встаёт на min + k·step, `value` тоже), `value`, `bind`, `disabled` |
+| `input type="range"` | актуальный | TelaOS `<slider>`: `min`, `max`, `step` (ползунок встаёт на min + k·step, `value` тоже), `value`, `bind`, `disabled`. Размера браузера: 129×16, поля 2px, дорожка 4px и кружок 16; `w` важнее; с `x`/`y` — как рисует TelaOS |
 | `input type="submit"`, `"reset"`, `"button"` | актуальный | TelaOS `<button>` с текстом `value`, `onclick`, `disabled`; размера браузера, как `<button>` |
 | `input type="image"` | актуальный | как `img` |
 | `input type="hidden"` | актуальный | ничего |
@@ -243,8 +246,8 @@
 | `button`, `label`, `select`, `option` | актуальный | **TelaOS**. `<label for="id">`: тап по подписи — как тап по полю (флажок переключается, радио включается, поле открывает клавиатуру, список раскрывается). `<option selected>` — выбран сразу, если `bind` не задаёт другое; `<option disabled>` выбрать нельзя; без них выбран первый доступный. `</option>` можно не писать. HTML внутри `<label>` и `<button>` — как в браузере: `<label>Имя <i>(необязательно)</i></label>`, `<button><b>Сохранить</b> сейчас</button>`; поле внутри подписи (`<label><input type="checkbox"> Запомнить</label>`) работает от тапа по её тексту; `<img>` в кнопке — её иконка. Кнопка, которую раскладывает HTML, — размера браузера: шрифт 14px, отступы 1px 6px, рамка 2px (прозрачная); вокруг неё 18px невидимой зоны нажатия; с `x`/`y`/`align` — как рисует TelaOS |
 | `optgroup`, `datalist` | актуальный | не отображаются |
 | `selectedcontent` | экспериментальный | внутри `<select>` игнорируется |
-| `progress` | актуальный | полоса 160px: `value`/`max` |
-| `meter` | актуальный | полоса 80px: `min`, `max`, `low`, `high`, `optimum`. `low` и `high` делят шкалу на три части: в части с `optimum` полоса зелёная, в соседней — жёлтая, в дальней — красная. Без `optimum` — середина шкалы, то есть вне `[low, high]` жёлтая |
+| `progress` | актуальный | полоса 160×16 (рисуется 10px в середине): `value`/`max` |
+| `meter` | актуальный | полоса 80×16 (рисуется 10px в середине): `min`, `max`, `low`, `high`, `optimum`. `low` и `high` делят шкалу на три части: в части с `optimum` полоса зелёная, в соседней — жёлтая, в дальней — красная. Без `optimum` — середина шкалы, то есть вне `[low, high]` жёлтая |
 | `output` | актуальный | обычный текст |
 
 ### Интерактивные, веб-компоненты
