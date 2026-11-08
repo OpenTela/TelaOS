@@ -12,6 +12,8 @@
 #
 # The ASan job runs the same simulator under AddressSanitizer and UBSan: every robot, every
 # screen, the random pages. A memory error often draws the right pixels; this fails on it.
+# Its random pages are new every time: in a PR, those of seed 1 and 300 of the PR's number; on
+# a merge into future, 3000 of the run's number. Seed 1 alone never found the crash seed 3 did.
 #
 # The style job holds the lines the PR adds to the rules of CONTRIBUTING «Код» that a robot can
 # check (.github/scripts/style_check.py): the body of `if` on its own line, a long condition in a
@@ -237,7 +239,13 @@ jobs:
           key: ccache-asan-${{ runner.os }}-${{ github.sha }}
           restore-keys: ccache-asan-${{ runner.os }}-
       - name: Robots, screens and random pages under ASan and UBSan
-        run: python3 sim/tools/sim_asan.py --head . --out asan --pages 300
+        env:
+          SEEDS: ${{ github.event_name == 'pull_request' && format('1 {0}', github.event.pull_request.number) || github.run_number }}
+          PAGES: ${{ github.event_name == 'pull_request' && '300' || '3000' }}
+        run: |
+          seeds=()
+          for s in $SEEDS; do seeds+=(--seed "$s"); done
+          python3 sim/tools/sim_asan.py --head . --out asan --pages "$PAGES" "${seeds[@]}"
       - name: Report in the job summary
         if: always()
         run: cat asan/asan.md >> "$GITHUB_STEP_SUMMARY" || true
