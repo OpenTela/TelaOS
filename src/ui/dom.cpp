@@ -1363,6 +1363,18 @@ lv_obj_t* objectOf(Node n) {
     return i ? node(i).obj : nullptr;
 }
 
+void inScopesOf(lv_obj_t* obj, const std::function<void()>& f) {
+    const uint32_t i = obj ? elementOf(obj) : 0;
+    if (!i) {
+        f();
+        return;
+    }
+    P::Array<uint32_t> chain = ancestorsOf(i);
+    chain.push_back(i);  // the element itself: its children's rules see it (#now span)
+    auto call = [&f] { f(); };
+    inScopes(chain, 0, true, call);
+}
+
 void release(Node n) {
     const uint32_t i = indexOf(n);
     if (!i || node(i).parent || !(node(i).flags & kDetached) || !node(i).obj) return;

@@ -1,0 +1,8 @@
+# tela_launcher.sim — the launcher's clock. The simulator's watch powers on at 10:09:30 UTC.
+# The launcher sets its clock every second, but a new text only once a minute: at rest the
+# launcher redraws nothing (the report's «Перерисовка в покое»), and the clock still moves on.
+
+wait 1000
+expect "10:09" :visible
+wait 30000
+expect "10:10" :visible

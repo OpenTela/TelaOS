@@ -21,6 +21,15 @@ get_filename_component(TELAOS_DEFAULT "${CMAKE_CURRENT_SOURCE_DIR}/.." ABSOLUTE)
 set(TELAOS_DIR "${TELAOS_DEFAULT}" CACHE PATH "TelaOS checkout to run (read-only)")
 set(TELA_SCREEN_W 480 CACHE STRING "SCREEN_WIDTH (esp4848s040: 480)")
 set(TELA_SCREEN_H 480 CACHE STRING "SCREEN_HEIGHT (esp4848s040: 480)")
+# AddressSanitizer and UBSan over everything, LVGL and Lua too (sim/tools/sim_asan.py, CI's
+# ASan job). The firmware's blocks go to the host's heap then, where ASan watches them:
+# the watch's memory is not measured in such a build (sim_heap.cpp)
+option(TELA_SIM_ASAN "Build with AddressSanitizer and UBSan" OFF)
+if(TELA_SIM_ASAN)
+  add_compile_options(-fsanitize=address,undefined -fno-omit-frame-pointer)
+  add_link_options(-fsanitize=address,undefined)
+  add_compile_definitions(SIM_ASAN=1)
+endif()
 if(NOT EXISTS "${TELAOS_DIR}/src/main.cpp")
   message(FATAL_ERROR "TelaOS not found at ${TELAOS_DIR}")
 endif()
@@ -68,11 +77,15 @@ set_source_files_properties(${TELA_C} PROPERTIES COMPILE_OPTIONS "-w")
 find_package(SDL2 REQUIRED)
 find_package(PNG REQUIRED)
 
-add_executable(telaos_sim
-  ${TELA_SRC}
+set(SIM_SRC
   sim_tela_main.cpp sim_tela_device.cpp sim_tela_shim.cpp sim_tela_fs.cpp
   sim_panel.cpp sim_window.cpp sim_robot.cpp sim_png.cpp
-  sim_heap.cpp third_party/tlsf/tlsf.c)
+  sim_heap.cpp sim_timers.cpp)
+# The simulator's own code: the body of `if` goes on its own line, braces optional (CONTRIBUTING
+# «Код»), so a line indented as if `if` guarded it stops the build. TelaCI does the same for src/
+set_source_files_properties(${SIM_SRC} PROPERTIES COMPILE_OPTIONS "-Werror=misleading-indentation")
+
+add_executable(telaos_sim ${TELA_SRC} ${SIM_SRC} third_party/tlsf/tlsf.c)
 # Order matters: sim shims first, real LVGL before TelaCI stubs (which carry a mock lvgl.h)
 target_include_directories(telaos_sim PRIVATE
   "${CMAKE_CURRENT_SOURCE_DIR}/shim"
@@ -86,5 +99,8 @@ target_include_directories(telaos_sim PRIVATE
   "${TELAOS_DIR}/lib/md4c"
   "${TELAOS_DIR}/ci/stubs")
 target_compile_definitions(telaos_sim PRIVATE TELAOS_DATA_DIR="${TELAOS_DIR}/data" PROGMEM=)
+# shim/freertos/timers.h comes before TelaCI's stub of the same name. A compiler cache that took the
+# objects built against the stub would not see the new header: the flag changes every command line
+target_compile_definitions(telaos_sim PRIVATE SIM_FREERTOS_TIMERS=1)
 target_link_libraries(telaos_sim PRIVATE tela_lvgl tela_lua SDL2::SDL2 PNG::PNG mbedcrypto m)
 target_link_options(telaos_sim PRIVATE -Wl,--wrap=time)  # wall clock = virtual clock (sim_tela_shim.cpp)
