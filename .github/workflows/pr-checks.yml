@@ -48,6 +48,8 @@ jobs:
         run: python3 -m unittest discover -s sim/tools -p 'test_*.py'
       - name: Workflow scripts tests
         run: python3 -m unittest discover -s .github/scripts -p 'test_*.py'
+      - name: Documents against code
+        run: python3 .github/scripts/doc_check.py .
 
   firmware:
     name: Firmware (${{ matrix.board }})
