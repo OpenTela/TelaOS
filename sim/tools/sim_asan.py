@@ -3,11 +3,13 @@
 the random pages. A memory error gives the right pixels as often as not (the slider map read
 after it was freed, #67): this sees what the screens cannot.
 
-    python3 sim/tools/sim_asan.py --head . --out build/asan [--pages 300] [--seed 1]
+    python3 sim/tools/sim_asan.py --head . --out build/asan [--pages 300] [--seed 1 [--seed 93 ...]]
 
 Builds sim/ of --head with -DTELA_SIM_ASAN=ON (sim/CMakeLists.txt), then runs on it the
 robot tests (sim/tests/*.sim), every screen of every app as sim_screens.py shoots them, and
---pages random pages (gen_pages.py, the seed CI uses). Writes:
+--pages random pages of each --seed (gen_pages.py; seed 1, the one of the screens, if none).
+Page N of a seed is always the same page: a page that fails here fails anywhere. CI gives a
+PR seed 1 and its own number, a merge into future 3000 pages of the run's number. Writes:
 
     out/asan.md      what the sanitizers said, by kind and place, with the first report in full
     out/logs/        the log of every run
@@ -58,9 +60,11 @@ def main():
     ap.add_argument("--head", required=True, help="TelaOS checkout to build and run")
     ap.add_argument("--out", required=True)
     ap.add_argument("--sim", help="simulator sources (default: <head>/sim)")
-    ap.add_argument("--pages", type=int, default=300, help="random pages (gen_pages.py)")
-    ap.add_argument("--seed", type=int, default=1)
+    ap.add_argument("--pages", type=int, default=300, help="random pages of each seed (gen_pages.py)")
+    ap.add_argument("--seed", type=int, action="append",
+                    help="seed of the random pages; again for more (default: 1, the screens' one)")
     args = ap.parse_args()
+    seeds = args.seed or [1]
 
     head = Path(args.head).resolve()
     out = Path(args.out).resolve()
@@ -86,10 +90,11 @@ def main():
     tests = sim_screens.run_tests(binary, sim_dir / "tests", fixtures, logs)
     print("[asan] every screen ...", flush=True)
     stopped = sim_screens.shoot(binary, [head / "data", fixtures], fixtures, out / "shots", logs / "screens")
-    if args.pages:
-        print(f"[asan] {args.pages} random pages ...", flush=True)
-        batches = gen_pages.write(out / "pages-src", args.pages, args.seed)
-        stopped += sim_pages.draw(binary, batches, logs / "pages", os.cpu_count() or 2)
+    for seed in seeds if args.pages else []:
+        print(f"[asan] {args.pages} random pages, seed {seed} ...", flush=True)
+        batches = gen_pages.write(out / "pages-src" / f"seed-{seed}", args.pages, seed)
+        drawn_by = logs / "pages" / f"seed-{seed}"
+        stopped += [f"pages/seed-{seed}/{b}" for b in sim_pages.draw(binary, batches, drawn_by, os.cpu_count() or 2)]
 
     found, first, runs = {}, None, 0
     for log in sorted(logs.rglob("*.log")):
@@ -102,8 +107,17 @@ def main():
             first = f
     failed = [t for t in tests if not t["ok"]]
 
+    lines = report(runs, tests, args.pages, seeds, found, failed, stopped, first)
+    (out / "asan.md").write_text("\n".join(lines) + "\n")
+    print("\n".join(lines), flush=True)
+    return 1 if found or failed or stopped else 0
+
+
+def report(runs, tests, pages, seeds, found, failed, stopped, first):
+    """The lines of asan.md. A page that failed is named with its seed: gen_pages.py makes it again"""
+    drawn = ", ".join(f"{pages} × seed {s}" for s in seeds) if pages else "0"
     lines = ["## ASan и UBSan", "",
-             f"Прогонов: {runs} — роботы ({len(tests)}), все экраны, случайные страницы: {args.pages}."]
+             f"Прогонов: {runs} — роботы ({len(tests)}), все экраны, случайные страницы: {drawn}."]
     if not found and not failed and not stopped:
         lines.append("Ни одного сообщения санитайзеров, все роботы прошли.")
     if failed:
@@ -118,9 +132,13 @@ def main():
             lines.append(f"- **{kind}** — `{where}` — {len(where_logs)} × (`{where_logs[0]}`)")
         lines += ["", "<details><summary>Первое сообщение целиком</summary>", "", "```", first.strip(), "```",
                   "", "</details>"]
-    (out / "asan.md").write_text("\n".join(lines) + "\n")
-    print("\n".join(lines), flush=True)
-    return 1 if found or failed or stopped else 0
+    in_pages = sorted({int(m) for x in stopped + [w for ws in found.values() for w in ws]
+                       for m in re.findall(r"^pages/seed-(\d+)/", x)})
+    if in_pages:
+        lines += ["", "Страницы повторить: " + "; ".join(
+            f"`python3 sim/tools/gen_pages.py <папка> --count {pages} --seed {s}`" for s in in_pages)
+            + " — какая страница, видно в логе пачки (`logs/pages/seed-N/batch_K.log`)."]
+    return lines
 
 
 if __name__ == "__main__":
