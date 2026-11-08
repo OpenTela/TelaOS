@@ -434,12 +434,14 @@ int main() {
         }
         expectTrue("<sup>, <sub>: smaller, 14px in 16px text (13.33 in a browser)",
                    twos.size() == 2 && twos[0]->fontSize == 14 && twos[1]->fontSize == 14);
-        // a browser's: up a third of the text around and 1px, down a fifth and 1px (16px: 6.33, 4.2);
-        // the mock's words have no baseline to line up, the move is just that
+        // a browser's: up a third of the text around and 1px, down a fifth and 1px (16px: 6.33, 4.2),
+        // off the baseline the line puts the word on
         expectTrue("<sup> 6px up, <sub> 4px down",
                    twos.size() == 2 && twos[0]->translateY == -6 && twos[1]->translateY == 4);
-        expectTrue("the line makes room above for <sup>; below, the moved <sub> is in its height",
-                   byId("e") && byId("e")->padTop > 0 && byId("e")->padBottom == 0);
+        // the room for them is their line's, made after a layout (real LVGL: tela_html.sim, the line
+        // with sub and sup is 26px high, as in a browser): flex puts the words at the top of their line
+        expectTrue("the words of a line wait at its top to be lined up on its baseline",
+                   byId("e") && byId("e")->flexCrossAlign == LV_FLEX_ALIGN_START);
     }
     expectText("<bdo dir=rtl>: letters right to left, Cyrillic too", "bdo", "Hello, Привет!");
     expectTrue("dir=rtl: the line sits at the right", byId("rtl") && byId("rtl")->textAlignH == 2 &&
@@ -535,6 +537,7 @@ int main() {
         for (const MW* c : row ? row->children : std::vector<MW*>{})
             lone = lone || (c->type == "Label" && c->text == " ");
         expectTrue("a space between two widgets: no word of its own", row && !lone);
+        expectTrue("a row of words: its lines touch, as a browser's", row && row->padRow == 0);
         // LVGL takes a margin off a width in %: the space goes to the widget after a 100% wide one
         const MW* full = byId("full");
         const MW* after = byId("after");
