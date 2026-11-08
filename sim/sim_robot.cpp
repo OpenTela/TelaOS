@@ -817,7 +817,8 @@ bool Robot::exec(const std::vector<std::string>& a, const std::string& where) {
     }
     // expect slept.ms <value | lo..hi>   how long the board light-slept since power-on
     if (cmd == "expect" && need(3) && a[1] == "slept.ms") {
-        if (!hooks_.sleptMs) return fail("no light sleep in this build");
+        if (!hooks_.sleptMs)
+            return fail("no light sleep in this build");
         const std::string actual = std::to_string(hooks_.sleptMs());
         if (valueMatches(actual, unquote(a[2]))) {
             ++passed_;

@@ -25,7 +25,8 @@ uint32_t s_sleptMs = 0;
 uint32_t s_sleeps = 0;
 
 void watchDisplay(bool asleep) {
-    if (asleep == s_wasAsleep) return;
+    if (asleep == s_wasAsleep)
+        return;
     s_wasAsleep = asleep;
     if (asleep) {
         s_asleepSince = millis();
@@ -40,7 +41,9 @@ void watchDisplay(bool asleep) {
 }  // namespace
 
 uint32_t sleepFor(const When& when, uint32_t untilNextMs) {
-    if (!when.enabled || !when.displayAsleep || when.ble || when.appTimers) return 0;
+    const bool stayAwake = !when.enabled || !when.displayAsleep || when.ble || when.appTimers;
+    if (stayAwake)
+        return 0;
     const uint32_t ms = std::min(untilNextMs, kMaxSleepMs);
     return ms >= kMinSleepMs ? ms : 0;
 }
