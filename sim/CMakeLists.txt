@@ -77,11 +77,15 @@ set_source_files_properties(${TELA_C} PROPERTIES COMPILE_OPTIONS "-w")
 find_package(SDL2 REQUIRED)
 find_package(PNG REQUIRED)
 
-add_executable(telaos_sim
-  ${TELA_SRC}
+set(SIM_SRC
   sim_tela_main.cpp sim_tela_device.cpp sim_tela_shim.cpp sim_tela_fs.cpp
   sim_panel.cpp sim_window.cpp sim_robot.cpp sim_png.cpp
-  sim_heap.cpp sim_timers.cpp third_party/tlsf/tlsf.c)
+  sim_heap.cpp sim_timers.cpp)
+# The simulator's own code: the body of `if` goes on its own line, braces optional (CONTRIBUTING
+# «Код»), so a line indented as if `if` guarded it stops the build. TelaCI does the same for src/
+set_source_files_properties(${SIM_SRC} PROPERTIES COMPILE_OPTIONS "-Werror=misleading-indentation")
+
+add_executable(telaos_sim ${TELA_SRC} ${SIM_SRC} third_party/tlsf/tlsf.c)
 # Order matters: sim shims first, real LVGL before TelaCI stubs (which carry a mock lvgl.h)
 target_include_directories(telaos_sim PRIVATE
   "${CMAKE_CURRENT_SOURCE_DIR}/shim"

@@ -112,9 +112,12 @@ def font_url(path):
         return Path(path).as_uri()  # not there: Chromium says so (MEASURE checks the faces)
 
 
-def document(body, fonts, resources):
-    """The page as a document for Chromium: the watch's fonts and the app's pictures"""
-    faces = "".join(f"@font-face {{ font-family: Ubuntu; src: url('{font_url(Path(fonts) / f'{f}.ttf')}'); "
+def document(body, fonts, resources, font_base=None):
+    """The page as a document for Chromium: the watch's fonts and the app's pictures. With
+    font_base the fonts are fetched from there (judge_pages.py serves them), not carried inside"""
+    def src(f):
+        return f"{font_base}/{f}.ttf" if font_base else font_url(Path(fonts) / f"{f}.ttf")
+    faces = "".join(f"@font-face {{ font-family: Ubuntu; src: url('{src(f)}'); "
                     f"font-weight: {w}; font-style: {s}; }}\n" for f, w, s in FACES)
     base = f'<base href="{Path(resources).as_uri()}/">' if resources else ""
     # :where(): no weight, the page's own CSS wins; the UA's monospace is not a font of the watch
@@ -387,7 +390,7 @@ def turned(head, base, ok, top=5):
     return [f"- {'Теперь совпадает' if ok else 'Перестало совпадать'}: {len(now)} — {names}{more}"]
 
 
-def lines(head, base=None, details=20):
+def lines(head, base=None, details=20, title=None):
     """The report's part: the number, how it moved, and what differs most"""
     if not head:
         return []
@@ -397,8 +400,8 @@ def lines(head, base=None, details=20):
         moved = f" (было {base['agree']} из {base['count']}, {percent(base['agree'], base['count'])})"
     elif base:
         moved = ", столько же"
-    out = [f"**Совместимость с Chromium:** {head['app']}, рамки элементов ±{TOLERANCE} px — "
-           f"**{a} из {n}, {percent(a, n)}**{moved}", ""]
+    title = title or f"**Совместимость с Chromium:** {head['app']}, рамки элементов ±{TOLERANCE} px"
+    out = [f"{title} — **{a} из {n}, {percent(a, n)}**{moved}", ""]
     if base:
         out += turned(head, base, True) + turned(head, base, False)
     b = head["boxes"]

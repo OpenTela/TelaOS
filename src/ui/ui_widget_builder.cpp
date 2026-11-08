@@ -30,6 +30,9 @@
 #include <cctype>
 
 #include "esp_heap_caps.h"
+#if !defined(LVGL_MOCK_ENABLED)
+#include "src/core/lv_obj_event_private.h"  // lv_hit_test_info_t: the point of a hit test and its answer
+#endif
 
 static const char* TAG = "ui_builder";
 
@@ -111,6 +114,55 @@ static CommonAttrs parseCommonAttrs(const char *astart, const char *aend) {
 // Auto-generate id if needed for dynamic bindings
 // Static disabled, disabled="true" / disabled="1" (no binding): grey the widget out at
 // creation time. Dynamic "{var}" initial state is handled in addElement().
+// ---- The finger's room around a control (ClickArea) ----
+// LVGL gives a point to the last control that has it in its room, so the room of a neighbour took
+// a tap right on a small button (two browser-sized buttons, one under the other). In HTML a point
+// in the room and off the control is the control's only when no other control is right under it.
+// Apps without HTML keep LVGL's hit test, and their memory: the check is an event callback each
+#if !defined(LVGL_MOCK_ENABLED)
+static bool s_onlyRightOn = false;  // while the control right under a point is looked for
+
+static bool isAncestorOf(const lv_obj_t* a, const lv_obj_t* o) {
+    for (const lv_obj_t* p = o ? lv_obj_get_parent(o) : nullptr; p; p = lv_obj_get_parent(p)) {
+        if (p == a) return true;
+    }
+    return false;
+}
+
+static void roomHitTest(lv_event_t* e) {
+    lv_hit_test_info_t* hit = lv_event_get_hit_test_info(e);
+    lv_obj_t* self = static_cast<lv_obj_t*>(lv_event_get_current_target(e));
+    lv_area_t a;
+    lv_obj_get_coords(self, &a);
+    const lv_point_t* pt = hit->point;
+    if (pt->x >= a.x1 && pt->x <= a.x2 && pt->y >= a.y1 && pt->y <= a.y2) return;  // right on it
+    if (s_onlyRightOn) {
+        hit->res = false;
+        return;
+    }
+    s_onlyRightOn = true;
+    lv_point_t p = *hit->point;
+    lv_display_t* d = lv_obj_get_display(self);
+    lv_obj_t* under = lv_indev_search_obj(lv_display_get_layer_top(d), &p);
+    if (!under) under = lv_indev_search_obj(lv_display_get_screen_active(d), &p);
+    s_onlyRightOn = false;
+    // another control right there takes it; the page or a box this one is in does not
+    if (under && under != self && !isAncestorOf(under, self)) hit->res = false;
+}
+#endif
+
+// html: a control HTML lays out (HtmlFlow::browserSized(), or right in a flow box)
+static void fingerRoom(lv_obj_t* o, int px, bool html) {
+    lv_obj_set_ext_click_area(o, px);
+#if !defined(LVGL_MOCK_ENABLED)
+    if (!html) return;
+    lv_obj_add_flag(o, LV_OBJ_FLAG_ADV_HITTEST);
+    lv_obj_add_event_cb(o, roomHitTest, LV_EVENT_HIT_TEST, nullptr);
+#else
+    (void)html;
+#endif
+}
+
 static void applyStaticDisabled(lv_obj_t* obj, const CommonAttrs& attrs) {
     if (attrs.disabledNow) lv_obj_add_state(obj, LV_STATE_DISABLED);
 }
@@ -976,7 +1028,26 @@ void create_button(const char *astart, const char *aend, const char *content, lv
     
     _unique_id(btn, attrs.id.c_str());  // For testing mock
     
-    lv_obj_set_ext_click_area(btn, ClickArea::BUTTON);
+    // A button HTML lays out (in a line of text, or a block of an HTML page), as a browser's:
+    // 13.33px text (drawn at 14), 1px 6px of padding, a 2px border (transparent: the button's
+    // color shows through it). CSS comes after it. One placed by x, y or align, or in a TelaOS
+    // container's own layout, stays as TelaOS draws it
+    const bool browser = (HtmlFlow::browserSized() || HtmlFlow::inFlow(parent)) && getAttr(astart, aend, "x").empty() &&
+                         getAttr(astart, aend, "y").empty() && align.empty();
+    fingerRoom(btn, ClickArea::BUTTON, browser);  // a browser-sized one has it too
+    if (browser) {
+        lv_obj_set_style_text_font(btn, UI::Font::get(14), LV_PART_MAIN);
+        lv_obj_set_style_pad_left(btn, 6, LV_PART_MAIN);
+        lv_obj_set_style_pad_right(btn, 6, LV_PART_MAIN);
+        lv_obj_set_style_pad_top(btn, 1, LV_PART_MAIN);
+        lv_obj_set_style_pad_bottom(btn, 1, LV_PART_MAIN);
+        lv_obj_set_style_border_width(btn, 2, LV_PART_MAIN);
+        lv_obj_set_style_border_opa(btn, LV_OPA_TRANSP, LV_PART_MAIN);
+        // its text in the button's font, not in the label's own 16px: CSS sizes the button
+        if (widget.label.handle && fontSize == 0) {
+            lv_obj_remove_local_style_prop(widget.label.handle, LV_STYLE_TEXT_FONT, LV_PART_MAIN);
+        }
+    }
     
     // 1. CSS cascade (tag < .class < tag.class < #id)
     {
@@ -1006,9 +1077,10 @@ void create_button(const char *astart, const char *aend, const char *content, lv
         }
     }
     
-    // Apply HTML default font on label, then override if font attr specified
+    // Apply HTML default font on label, then override if font attr specified (a browser-sized
+    // button's label takes the button's font: its 14px, or its CSS)
     if (widget.label.handle) {
-        lv_obj_set_style_text_font(widget.label.handle, UI::Font::get(), LV_PART_MAIN);
+        if (!browser) lv_obj_set_style_text_font(widget.label.handle, UI::Font::get(), LV_PART_MAIN);
         if (fontSize > 0) {
             widget.label.applyFont(fontSize);
         }
@@ -1103,7 +1175,7 @@ void create_switch(const char *astart, const char *aend, lv_obj_t *parent) {
     widget.create(parent);
     auto *sw = widget.handle;
     
-    lv_obj_set_ext_click_area(sw, ClickArea::SWITCH);
+    fingerRoom(sw, ClickArea::SWITCH, HtmlFlow::browserSized() || HtmlFlow::inFlow(parent));
     
     // CSS first, then inline overrides
     {
@@ -1158,6 +1230,7 @@ void create_slider(const char *astart, const char *aend, lv_obj_t *parent) {
     widget.create(parent);
     auto *slider = widget.handle;
     
+    // as before: a slider's own hit test (LV_OBJ_FLAG_ADV_HITTEST) would take only its knob
     lv_obj_set_ext_click_area(slider, ClickArea::SLIDER);
     
     // CSS first, then inline overrides
@@ -1330,7 +1403,7 @@ void create_image(const char *astart, const char *aend, lv_obj_t *parent) {
     // Make clickable if onclick specified
     if (!onclick.empty()) {
         lv_obj_add_flag(img, LV_OBJ_FLAG_CLICKABLE);
-        lv_obj_set_ext_click_area(img, ClickArea::IMAGE);
+        fingerRoom(img, ClickArea::IMAGE, HtmlFlow::browserSized() || HtmlFlow::inFlow(parent));
         ensureId(attrs, "_img", true);
         
         ElementDesc imd;

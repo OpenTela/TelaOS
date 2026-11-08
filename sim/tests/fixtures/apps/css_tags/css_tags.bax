@@ -50,6 +50,8 @@
     .spaced { letter-spacing: 3px; }
     .airy { line-height: 1.8; }
     .tdots { width: 220px; white-space: nowrap; text-overflow: ellipsis; color: #FFD54F; }
+    .mid { text-align: center; }
+    .end { text-align: right; }
     .tick:checked { outline: 3px solid #81C784; }
     .dimmed:disabled { opacity: 0.4; }
     .press { background: #333333; transition: background-color 0.3s ease; }
@@ -132,6 +134,9 @@
       <p class="spaced" id="spaced">letter-spacing: 3px</p>
       <p class="airy" id="airy">line-height: 1.8 on a paragraph that is long enough to wrap onto a second line</p>
       <label class="tdots" id="tdots">text-overflow: ellipsis cuts this long line with dots</label>
+      <p class="mid" id="midRow"><input type="checkbox" id="midBox"> text-align: center <button>with a button</button></p>
+      <div class="end"><p id="endRow"><input type="checkbox" id="endBox"> right, from the div</p></div>
+      <p class="mid" dir="rtl" id="rtlRow"><input type="checkbox" id="rtlBox"> rtl, center</p>
       <p><a href="/main">Back</a></p>
     </page>
 
