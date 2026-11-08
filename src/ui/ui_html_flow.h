@@ -48,6 +48,9 @@ bool isPositioned(const char* tag, const char* astart, const char* aend);
 lv_obj_t* flowBox(lv_obj_t* parent);
 // A flow box: a block of an HTML page, its children stack top to bottom
 bool inFlow(lv_obj_t* box);
+// While the flow builds a TelaOS control in its lines (a <button> in a paragraph, <input
+// type="submit">): one that flows (no x, y, align) takes a browser's size, before its CSS
+bool browserSized();
 
 // <label for="id">: a tap on `label` works the control with that id, as in a browser
 void labelFor(lv_obj_t* label, const char* id);

@@ -513,10 +513,15 @@ App state is owned by `BaxApp` — a single RAII object. Switching apps destroys
 
 ## Documentation
 
+How changes are made and checked — [CONTRIBUTING.md](CONTRIBUTING.md). The plan, the decisions and
+what waits for a check on a watch — [ROADMAP.md](docs/ROADMAP.md). Both are in Russian, like most
+of `docs/`.
+
 The `docs/` folder contains the core specs:
 
 | File | Description |
 |------|-------------|
+| [SIMULATOR.md](docs/SIMULATOR.md) | The simulator, its robot and the judges against Chromium |
 | [UI_HTML_SPEC.md](docs/UI_HTML_SPEC.md) | Full widget/state/binding/Lua API reference |
 | [CONSOLE_PROTOCOL_SPEC.md](docs/CONSOLE_PROTOCOL_SPEC.md) | BLE & Serial command protocol |
 | [NATIVE_APP_SPEC.md](docs/NATIVE_APP_SPEC.md) | Native app architecture & integration |

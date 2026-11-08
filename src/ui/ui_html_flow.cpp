@@ -767,6 +767,15 @@ P::Map<const lv_obj_t*, BoxMargins>& s_margins = *P::create<P::Map<const lv_obj_
 
 void forgetMargins(const lv_obj_t* box) { s_margins.erase(box); }
 
+// While the flow builds a control in its lines: browserSized()
+int s_browserSized = 0;
+struct BrowserSized {
+    BrowserSized() { ++s_browserSized; }
+    ~BrowserSized() { --s_browserSized; }
+    BrowserSized(const BrowserSized&) = delete;
+    BrowserSized& operator=(const BrowserSized&) = delete;
+};
+
 // CSS: the largest of the positive margins plus the most negative of the negative ones
 int collapsed(int a, int b) { return std::max({a, b, 0}) + std::min({a, b, 0}); }
 
@@ -819,6 +828,14 @@ void textDefaults(lv_obj_t* o) {
     fillWidth(o);
 }
 
+// The root box of host's HTML is a body, with the body's 8px margin: host is a page, a tab, or a
+// TelaOS container standing on its own (placed by TelaOS). A container in the flow of a page is a
+// browser's <div>: the body is around it already, it has no margin of its own
+bool hostsBody(lv_obj_t* host) {
+    lv_obj_t* const around = host ? lv_obj_get_parent(host) : nullptr;
+    return !(around && s_flow.count(around));
+}
+
 // HTML placed straight into a page or TelaOS container goes into its one implicit root box,
 // which also takes the container's TelaOS widgets that have no x/y/align (see parse_children)
 lv_obj_t* flowParent(lv_obj_t* parent) {
@@ -827,7 +844,7 @@ lv_obj_t* flowParent(lv_obj_t* parent) {
     if (it != s_rootOf.end()) return it->second;
     fillWidth(parent);
     lv_obj_t* root = newBox(parent);
-    lv_obj_set_style_pad_all(root, kBodyPad, LV_PART_MAIN);
+    lv_obj_set_style_pad_all(root, hostsBody(parent) ? kBodyPad : 0, LV_PART_MAIN);
     lv_obj_set_style_text_font(root, Font::get(UI::Font::SMALL), LV_PART_MAIN);
     lv_obj_set_style_text_color(root, lv_color_hex(kText), LV_PART_MAIN);
     s_rootOf[parent] = root;
@@ -994,7 +1011,7 @@ bool inList(lv_obj_t* box) {
     return false;
 }
 
-// The implicit root box of a page or TelaOS container: the body
+// The implicit root box of a page or TelaOS container: the body, or the inside of a <div> in the flow
 bool isRoot(const lv_obj_t* box) {
     for (const auto& kv : s_rootOf) {
         if (kv.second == box) return true;
@@ -1121,9 +1138,11 @@ bool collapse(lv_obj_t* box) {
         }
         bm.kids.swap(live);
     }
-    if (root) {  // the body's margin and its children's: one margin
-        setPx(box, LV_STYLE_PAD_TOP, collapsed(kBodyPad, in[kAbove]));
-        setPx(box, LV_STYLE_PAD_BOTTOM, collapsed(kBodyPad, in[kBelow]));
+    if (root) {  // the body's margin and its children's: one margin. A <div> in the flow has none of
+                 // its own: its children's stay inside it
+        const int own = hostsBody(lv_obj_get_parent(box)) ? kBodyPad : 0;
+        setPx(box, LV_STYLE_PAD_TOP, collapsed(own, in[kAbove]));
+        setPx(box, LV_STYLE_PAD_BOTTOM, collapsed(own, in[kBelow]));
     }
     const bool changed = in[0] != bm.in[0] || in[1] != bm.in[1] || out[0] != bm.out[0] || out[1] != bm.out[1];
     for (int s : {kAbove, kBelow}) {
@@ -1371,18 +1390,23 @@ void Seg::asSpans() {
     if (owner_ && memchr(owner_->cstart, '{', owner_->cend - owner_->cstart)) {
         const P::String tpl(owner_->cstart, owner_->cend - owner_->cstart);
         const Ctx ctx = ctx_;
-        auto update = [sg, ctx](const P::String& rendered) {
+        auto fill = [sg, ctx](const P::String& rendered) {
             UI::Dom::Pause again;  // its <b>, <a>... are recorded once, by the walk that read it first
             Seg tmp(nullptr, ctx);
             walk(rendered.c_str(), rendered.c_str() + rendered.size(), tmp, Style{}, true);
             fillSpans(sg, tmp.items());
         };
-        update(render_template(tpl.c_str()));
+        fill(render_template(tpl.c_str()));  // in the page's build: the scopes of the paragraph are open
         auto elem = P::create<UI::Element>();
         elem->id = autoId();
         elem->w.handle = sg;
         elem->tpl = tpl;
-        elem->updateFn = update;
+        // later, when a {var} changes, the page is built: its rules see the paragraph's ancestors
+        // again (#now span, .card b), as they did
+        elem->updateFn = [sg, fill](const P::String& rendered) {
+            UI::Dom::Pause again;  // the scopes opened again are elements already recorded
+            UI::Dom::inScopesOf(sg, [&fill, &rendered] { fill(rendered); });
+        };
         g_core.app().elements.push_back(std::move(elem));
     } else {
         fillSpans(sg, items_);
@@ -1412,11 +1436,34 @@ size_t wordEnd(const P::String& text, size_t i) {
     return text.size();
 }
 
-// An RTL line keeps its (left-to-right) words in their order and sits at the right
+// Where a row of words puts its words, as text-align puts a browser's line box: at the start,
+// the middle or the end. rtl: the row's line runs right to left, its start is at the right
+void placeWords(lv_obj_t* row, bool rtl) {
+    lv_flex_align_t place = rtl ? LV_FLEX_ALIGN_END : LV_FLEX_ALIGN_START;
+    switch (lv_obj_get_style_text_align(row, LV_PART_MAIN)) {  // the element's or inherited, as in CSS
+        case LV_TEXT_ALIGN_CENTER: place = LV_FLEX_ALIGN_CENTER; break;
+        case LV_TEXT_ALIGN_RIGHT: place = LV_FLEX_ALIGN_END; break;
+        case LV_TEXT_ALIGN_LEFT: place = LV_FLEX_ALIGN_START; break;
+        default: break;
+    }
+    if (lv_obj_get_style_flex_main_place(row, LV_PART_MAIN) != place) {  // else: its own change calls back
+        lv_obj_set_style_flex_main_place(row, place, LV_PART_MAIN);
+    }
+}
+
+// text-align of the row or above it changed (CSS applied later, a script's el.style)
+void onWordsStyle(lv_event_t* e) {
+    placeWords(static_cast<lv_obj_t*>(lv_event_get_current_target(e)), lv_event_get_user_data(e) != nullptr);
+}
+
+// An RTL line keeps its (left-to-right) words in their order and starts at the right; any line
+// follows text-align, now and when it changes
 void alignWordsRow(lv_obj_t* row) {
-    if (lv_obj_get_style_base_dir(row, LV_PART_MAIN) != LV_BASE_DIR_RTL) return;
-    lv_obj_set_style_base_dir(row, LV_BASE_DIR_LTR, LV_PART_MAIN);
-    lv_obj_set_flex_align(row, LV_FLEX_ALIGN_END, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_START);
+    const bool rtl = lv_obj_get_style_base_dir(row, LV_PART_MAIN) == LV_BASE_DIR_RTL;
+    if (rtl)
+        lv_obj_set_style_base_dir(row, LV_BASE_DIR_LTR, LV_PART_MAIN);
+    placeWords(row, rtl);
+    lv_obj_add_event_cb(row, onWordsStyle, LV_EVENT_STYLE_CHANGED, rtl ? row : nullptr);
 }
 
 // A word of a sup or sub run in a row of words: how far it moves from where the row puts it,
@@ -2444,6 +2491,7 @@ void thElement(const TagRef& t, lv_obj_t* parent) {
 
 void renderAtom(const TagRef& t, lv_obj_t* parent) {
     const char* n = t.name.c_str();
+    BrowserSized sized;
     if (is(n, "img")) imgElement(t, parent);
     else if (is(n, "input") && isHtmlInput(t.astart, t.aend)) inputElement(t, parent);
     else if (is(n, "textarea")) textareaElement(t, parent);
@@ -2662,6 +2710,8 @@ bool isPositioned(const char* tag, const char* astart, const char* aend) {
 lv_obj_t* flowBox(lv_obj_t* parent) { return flowParent(parent); }
 
 bool inFlow(lv_obj_t* box) { return s_flow.count(box) != 0; }
+
+bool browserSized() { return s_browserSized > 0; }
 
 bool setText(lv_obj_t* obj, const char* text) {
     if (!obj) return false;

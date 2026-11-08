@@ -65,5 +65,31 @@ class Reports(unittest.TestCase):
             self.assertTrue(lines[i - 1].startswith("#"), f"no why above {lines[i]!r}")
 
 
+class Report(unittest.TestCase):
+    """asan.md: which pages were drawn, and how to draw again the one that failed"""
+    TESTS = [{"name": "tela_hello", "passed": 7, "failed": 0, "ok": True}]
+
+    def test_clean_with_two_seeds(self):
+        lines = sim_asan.report(9, self.TESTS, 300, [1, 93], {}, [], [], None)
+        self.assertIn("случайные страницы: 300 × seed 1, 300 × seed 93.", lines[2])
+        self.assertEqual(lines[3], "Ни одного сообщения санитайзеров, все роботы прошли.")
+        self.assertFalse(any("повторить" in l for l in lines))
+
+    def test_a_page_that_stopped_says_its_seed(self):
+        lines = sim_asan.report(9, self.TESTS, 3000, [57], {}, [], ["pages/seed-57/batch_12"], None)
+        self.assertIn("Прогон остановился: `pages/seed-57/batch_12`", lines)
+        self.assertIn("`python3 sim/tools/gen_pages.py <папка> --count 3000 --seed 57`", lines[-1])
+
+    def test_a_report_on_a_page_and_one_on_a_screen(self):
+        found = {("AddressSanitizer: heap-use-after-free", "f x.cpp:1"): ["pages/seed-93/batch_0.log"],
+                 ("UBSan: shift", "y.cpp:2"): ["screens/html_tags.log"]}
+        lines = sim_asan.report(9, self.TESTS, 300, [1, 93], found, [], [], "==1==ERROR: AddressSanitizer")
+        self.assertIn("--seed 93`", lines[-1])
+        self.assertNotIn("--seed 1`", lines[-1])
+
+    def test_no_pages(self):
+        self.assertIn("случайные страницы: 0.", sim_asan.report(9, self.TESTS, 0, [1], {}, [], [], None)[2])
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -18,6 +18,10 @@ BUILD_DIR = COMPILER_DIR / "build"
 CXX = "g++"
 STD = "gnu++2a"
 
+# The body of `if` goes on its own line without braces (CONTRIBUTING «Код»), so a second line
+# indented as if `if` guarded it would not be guarded: the build stops on it
+WARNINGS_AS_ERRORS = ["-Werror=misleading-indentation"]
+
 DEFINES = [
     "SCREEN_WIDTH=480",
     "SCREEN_HEIGHT=480",
@@ -84,6 +88,7 @@ def compile_one(src: Path, obj: Path, includes: list, defines: list) -> tuple:
         cmd = ["gcc", "-std=gnu11", "-MMD", "-c", "-o", str(obj)]
     else:
         cmd = [CXX, f"-std={STD}", "-MMD", "-include", "cstring", "-c", "-o", str(obj)]
+    cmd += WARNINGS_AS_ERRORS
     cmd += [f"-D{d}" for d in defines]
     cmd += [f"-I{inc}" for inc in includes]
     cmd.append(str(src))
