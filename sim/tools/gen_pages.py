@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """gen_pages.py — random TelaOS apps, one page each, for checking the engine on markup nobody wrote.
 
-    python3 sim/tools/gen_pages.py <out_dir> [--count 2000] [--seed 1] [--per-batch 50]
+    python3 sim/tools/gen_pages.py <out_dir> [--count 2000] [--seed 1] [--per-batch 50] [--html]
 
 Writes <out_dir>/batch_K/apps/gen_NNNN/gen_NNNN.bax, ready for `telaos_sim --extra-data
 <out_dir>/batch_K`. Page N of a seed is always the same page, whatever the count.
@@ -14,6 +14,11 @@ A page mixes what the engine is asked to build:
 and what it must survive: comments holding tags and '>', stray end tags, a lone '<',
 <!DOCTYPE>, upper-case and over-long names, newlines inside tags, missing and implied end
 tags, attributes without a value before others, entities, unknown elements.
+
+--html writes other pages: plain HTML and CSS that a browser lays out the same, for Chromium
+to judge (judge_pages.py). Blocks, headings, lists, tables, buttons, text with inline elements,
+and a <style> of classes: margins, padding, borders, sizes, text-align, font-size, line-height,
+flex. No TelaOS widgets, no {var}, nothing broken: what differs there is layout, not parsing.
 Python standard library only.
 """
 
@@ -389,16 +394,119 @@ class Page:
                 f"  {templates}\n  {state}{css}\n</app>\n")
 
 
+# ---- plain HTML and CSS: what a browser lays out the same (--html, judge_pages.py) ----
+
+HTML_FLOW = ["div", "div", "div", "p", "p", "section", "article", "blockquote", "h1", "h2", "h3", "ul", "ol",
+             "table", "pre", "hr", "details", "figure", "button"]
+HTML_PHRASING = ["b", "i", "span", "a", "code", "small", "sub", "sup", "em", "strong"]
+PLAIN_WORDS = [w for w in WORDS if "{" not in w]
+CSS = {
+    "margin": ["0", "4px", "8px", "16px", "8px 0", "0 12px"],
+    "padding": ["0", "4px", "8px", "12px", "4px 8px"],
+    "border": ["1px solid #78909c", "2px solid #78909c", "4px solid #4fc3f7"],
+    "width": ["50%", "80%", "100%", "120px", "200px"],
+    "height": ["20px", "40px", "64px"],
+    "text-align": ["left", "center", "right"],
+    "font-size": ["12px", "14px", "16px", "20px", "24px", "32px"],
+    "line-height": ["1", "1.5", "24px", "normal"],
+    "display": ["block", "inline-block", "flex"],
+    "flex-direction": ["row", "column"],
+    "gap": ["0", "4px", "8px"],
+    "justify-content": ["flex-start", "center", "space-between", "flex-end"],
+    "align-items": ["flex-start", "center", "stretch"],
+    "background-color": ["#263238", "#4fc3f7", "#1c1c1c"],
+}
+
+
+class HtmlPage:
+    """One page of plain HTML and CSS; page N of a seed is always the same"""
+
+    def __init__(self, rng, index):
+        self.r = rng
+        self.index = index
+        self.ids = 0
+        self.classes = [f"k{i}" for i in range(rng.randint(1, 4))]
+
+    def chance(self, p):
+        return self.r.random() < p
+
+    def pick(self, xs):
+        return self.r.choice(xs)
+
+    def text(self, n=3):
+        return " ".join(self.pick(PLAIN_WORDS) for _ in range(self.r.randint(1, n)))
+
+    def attrs(self):
+        a = []
+        if self.chance(0.4):
+            self.ids += 1
+            a.append(f'id="e{self.ids}"')
+        if self.chance(0.4):
+            a.append(f'class="{self.pick(self.classes)}"')
+        return "".join(" " + x for x in a)
+
+    def phrasing(self, depth):
+        parts = [self.text()]
+        for _ in range(self.r.randint(0, 2)):
+            t = self.pick(HTML_PHRASING)
+            inner = self.text(2) if depth > 2 or self.chance(0.7) else self.phrasing(depth + 1)
+            href = ' href="#e1"' if t == "a" else ""
+            parts += [f"<{t}{href}{self.attrs()}>{inner}</{t}>", self.text(2)]
+        return " ".join(parts)
+
+    def flow(self, depth):
+        t = self.pick(HTML_FLOW) if depth < 4 else self.pick(["p", "h3", "button"])
+        a = self.attrs()
+        if t in ("div", "section", "article", "blockquote"):
+            inner = ("".join(self.flow(depth + 1) for _ in range(self.r.randint(1, 3)))
+                     if self.chance(0.7) else self.phrasing(depth))
+            return f"<{t}{a}>{inner}</{t}>"
+        if t in ("ul", "ol"):
+            items = "".join(f"<li{self.attrs()}>{self.phrasing(depth) if self.chance(0.8) else self.flow(depth + 1)}</li>"
+                            for _ in range(self.r.randint(1, 4)))
+            return f"<{t}{a}>{items}</{t}>"
+        if t == "table":
+            rows = "".join("<tr>" + "".join(f"<td{self.attrs()}>{self.text(2)}</td>"
+                                            for _ in range(self.r.randint(1, 3))) + "</tr>"
+                           for _ in range(self.r.randint(1, 3)))
+            return f"<table{a}>{rows}</table>"
+        if t == "pre":
+            return f"<pre{a}>{self.text(2)}\n{self.text(2)}</pre>"
+        if t == "hr":
+            return f"<hr{a}>"
+        if t == "details":
+            return f"<details open{a}><summary>{self.text(1)}</summary><p>{self.phrasing(depth)}</p></details>"
+        if t == "figure":
+            return f"<figure{a}><p>{self.text(2)}</p><figcaption>{self.text(1)}</figcaption></figure>"
+        if t == "button":
+            return f"<button{a}>{self.text(1)}</button>"
+        return f"<{t}{a}>{self.phrasing(depth)}</{t}>"
+
+    def style(self):
+        rules = []
+        for c in self.classes:
+            props = self.r.sample(sorted(CSS), self.r.randint(1, 4))
+            rules.append(f".{c} {{ " + " ".join(f"{k}: {self.pick(CSS[k])};" for k in props) + " }")
+        return "<style>\n        " + "\n        ".join(rules) + "\n      </style>"
+
+    def app(self):
+        body = "\n      ".join(self.flow(1) for _ in range(self.r.randint(2, 6)))
+        return (f'<app title="html {self.index}" version="1.0" os="1.0" category="test">\n'
+                f'  <ui default="/main">\n    <page id="main">\n      {self.style()}\n      {body}\n'
+                f"    </page>\n  </ui>\n</app>\n")
+
+
 def page_name(index):
     return f"gen_{index:04d}"
 
 
-def page(seed, index):
-    """The text of page `index` for `seed`"""
-    return Page(random.Random(f"{seed}/{index}"), index).app()
+def page(seed, index, html=False):
+    """The text of page `index` for `seed`; with html, the plain HTML and CSS one"""
+    rng = random.Random(f"{seed}/{index}" + ("/html" if html else ""))
+    return (HtmlPage if html else Page)(rng, index).app()
 
 
-def write(out_dir, count, seed=1, per_batch=50):
+def write(out_dir, count, seed=1, per_batch=50, html=False):
     """Writes the apps in batches; returns the batch folders (each one an --extra-data root)"""
     out = Path(out_dir)
     batches = []
@@ -408,7 +516,7 @@ def write(out_dir, count, seed=1, per_batch=50):
             batches.append(batch)
         d = batch / "apps" / page_name(i)
         d.mkdir(parents=True, exist_ok=True)
-        (d / f"{page_name(i)}.bax").write_text(page(seed, i), encoding="utf-8")
+        (d / f"{page_name(i)}.bax").write_text(page(seed, i, html), encoding="utf-8")
     return batches
 
 
@@ -418,9 +526,11 @@ def main():
     ap.add_argument("--count", type=int, default=2000)
     ap.add_argument("--seed", type=int, default=1)
     ap.add_argument("--per-batch", type=int, default=50)
+    ap.add_argument("--html", action="store_true", help="plain HTML and CSS, for Chromium to judge")
     args = ap.parse_args()
-    batches = write(args.out, args.count, args.seed, args.per_batch)
-    print(f"{args.count} pages (seed {args.seed}) in {len(batches)} batches under {args.out}")
+    batches = write(args.out, args.count, args.seed, args.per_batch, args.html)
+    kind = "plain HTML pages" if args.html else "pages"
+    print(f"{args.count} {kind} (seed {args.seed}) in {len(batches)} batches under {args.out}")
 
 
 if __name__ == "__main__":

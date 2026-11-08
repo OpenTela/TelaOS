@@ -18,6 +18,7 @@
     #evCard { display: flex; gap: 8px; }
     #todo li:last-child { color: #81C784; }
     .wide { margin-top: 40px; }
+    #liveRule span { font-size: 32px; }
   </style>
   <ui default="/main">
     <page id="main">
@@ -36,6 +37,7 @@
       <p id="count">Count: {count}</p>
       <p id="fixed">Count: {count}</p>
       <p id="liveB">Count <b>{count}</b> now</p>
+      <p id="liveRule">#liveRule span: <span>{count}</span></p>
       <p id="readLive">-</p>
       <div id="box"><p>Inside: {count}</p><label>two</label></div>
       <input type="checkbox" id="tick" label="Remember">

@@ -14,7 +14,8 @@ trees of every screen (the same pixels over another tree: changed unseen), and w
                          is left in src/, how the pages of JUDGED lay out
                          against Chromium (judge.py), how the animations of ANIMATED move
                          against it (anim_judge.py), and with --pages N: N random pages
-                         through both builds (sim_pages.py)
+                         through both builds (sim_pages.py) and N random pages of plain
+                         HTML and CSS laid out by both and by Chromium (judge_pages.py)
     out/judge.json       the judge's verdict on every element of those pages
     out/anim_judge.json  and on every value of those animations, frame by frame
     out/publish/         before/ after/ diff/ — only the screens that changed
@@ -45,6 +46,7 @@ from code_meter import measure as measure_code, summary as code_summary
 import anim_judge
 import idle_report
 import judge
+import judge_pages
 import mem_report
 import sim_pages
 from tree_diff import describe
@@ -400,6 +402,7 @@ def report(entries, tests, meta, url):
     if meta.get("code"):
         out += [code_summary(*meta["code"]), ""]
     out += meta.get("judge", [])
+    out += meta.get("judge_pages", [])
     out += meta.get("motion", [])
     out += meta.get("memory", [])
     out += meta.get("idle", [])
@@ -513,6 +516,10 @@ def main():
     verdict, verdict_base = judge.check(fixtures / "apps" / JUDGED, out / "shots-head", out / "shots-base")
     if verdict:
         (out / "judge.json").write_text(json.dumps(verdict, indent=1, ensure_ascii=False))
+    random_judged = (None, None)
+    if args.pages:
+        print(f"[screens] Chromium judges {args.pages} random pages of plain HTML ...", flush=True)
+        random_judged = judge_pages.check(head_bin, out / "judge-pages", args.pages, args.pages_seed, base_bin)
     print("[screens] Chromium judges the animations of %s ..." % ANIMATED, flush=True)
     motion, motion_base = anim_judge.check(fixtures / "apps" / ANIMATED, out / "anim-head", out / "anim-base")
     if motion:
@@ -523,6 +530,7 @@ def main():
             "code": code, "memory": mem_report.lines(mem_base, mem_head),
             "idle": idle_report.lines(idle_base, idle_head),
             "judge": judge.lines(verdict, verdict_base) or judge.unmeasured(),
+            "judge_pages": judge_pages.lines(*random_judged),
             "motion": anim_judge.lines(motion, motion_base) or anim_judge.unmeasured(),
             "pages": sim_pages.lines(pages)}
     (out / "report.md").write_text(report(entries, tests, meta, args.image_url.rstrip("/")))
@@ -536,6 +544,8 @@ def main():
                                                  "idle": {"head": idle_head, "base": idle_base},
                                                  "judge": {"head": judge.summary(verdict),
                                                            "base": judge.summary(verdict_base)},
+                                                 "judge_pages": {"head": judge.summary(random_judged[0]),
+                                                                 "base": judge.summary(random_judged[1])},
                                                  "motion": {"head": anim_judge.summary(motion),
                                                             "base": anim_judge.summary(motion_base)},
                                                  "pages": sim_pages.summary(pages)},
