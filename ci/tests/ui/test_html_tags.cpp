@@ -522,10 +522,19 @@ int main() {
     expectTrue("checkbox checked", byId("cb") && byId("cb")->checked);
     expectTrue("checkbox: a browser's box, 13x13", byId("cb") && byId("cb")->w == 13 && byId("cb")->h == 13);
     expectTrue("radio: a browser's box, 13x13", byId("r1") && byId("r1")->w == 13 && byId("r1")->h == 13);
-    expectTrue("checkbox: a browser's margins, 3px 3px 3px 4px", byId("cb") && byId("cb")->marginTop == 3 &&
-               byId("cb")->marginRight == 3 && byId("cb")->marginBottom == 3 && byId("cb")->marginLeft == 4);
-    expectTrue("radio: a browser's margins, 3px 3px 0 5px", byId("r1") && byId("r1")->marginTop == 3 &&
-               byId("r1")->marginRight == 3 && byId("r1")->marginBottom == 0 && byId("r1")->marginLeft == 5);
+    // each of them has a space and a widget after it: the space is its margin too (the mock's, 4px)
+    expectTrue("checkbox: a browser's margins, 3px 3px 3px 4px, and the space", byId("cb") &&
+               byId("cb")->marginTop == 3 && byId("cb")->marginRight == 3 + 4 && byId("cb")->marginBottom == 3 &&
+               byId("cb")->marginLeft == 4);
+    expectTrue("radio: a browser's margins, 3px 3px 0 5px, and the space", byId("r1") && byId("r1")->marginTop == 3 &&
+               byId("r1")->marginRight == 3 + 4 && byId("r1")->marginBottom == 0 && byId("r1")->marginLeft == 5);
+    {
+        const MW* row = byId("cb") ? byId("cb")->parent : nullptr;
+        bool lone = false;  // a word of only spaces in the line of the widgets
+        for (const MW* c : row ? row->children : std::vector<MW*>{})
+            lone = lone || (c->type == "Label" && c->text == " ");
+        expectTrue("a space between two widgets: no word of its own", row && !lone);
+    }
     expectTrue("checkbox unchecked", byId("cb2") && !byId("cb2")->checked);
     expectTrue("radio checked attribute", byId("r2") && byId("r2")->checked && byId("r1") && !byId("r1")->checked);
     {
@@ -557,8 +566,9 @@ int main() {
     expectTrue("<meter>: a browser's 80x16", byId("mt") && byId("mt")->w == 80 && byId("mt")->h == 16);
     {
         MW* r = byId("rng");
-        expectTrue("<input type=range>: a browser's 129x16, margin 2px", r && r->w == 129 && r->h == 16 &&
-                   r->marginTop == 2 && r->marginRight == 2 && r->marginBottom == 2 && r->marginLeft == 2);
+        expectTrue("<input type=range>: a browser's 129x16, margin 2px, and the space", r && r->w == 129 &&
+                   r->h == 16 && r->marginTop == 2 && r->marginRight == 2 + 4 && r->marginBottom == 2 &&
+                   r->marginLeft == 2);
     }
     expectTrue("select stays TelaOS dropdown", byId("sel") && byId("sel")->type == "Dropdown");
     expectTrue("<select>: a browser's, 19 high, 1px border, 14px text", byId("sel") && byId("sel")->h == 19 &&

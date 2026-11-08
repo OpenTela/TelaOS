@@ -1494,11 +1494,35 @@ void Seg::asWords() {
     decorate(row);
     alignWordsRow(row);
     int raise = 0;  // how far a sup goes above the line: the row makes room for it
-    for (const auto& it : items_) {
+    lv_obj_t* atom = nullptr;  // the widget made last, while only spaces came after it
+    bool spaced = false;       // and those spaces are its margin already
+    for (size_t k = 0; k < items_.size(); ++k) {
+        const Item& it = items_[k];
         if (it.type == Item::ATOM) {
+            const uint32_t before = lv_obj_get_child_count(row);
             renderAtom(it.atom, row);
+            if (lv_obj_get_child_count(row) == before + 1) {  // one made of nothing (type="hidden"):
+                atom = lv_obj_get_child(row, -1);             // the spaces around it are one
+                spaced = false;
+            }
             continue;
         }
+        // Only spaces between two widgets: a gap a browser drops where the line breaks between
+        // them. As the first one's margin it is a gap on one line and nothing at a break, where a
+        // word of its own would be a line of its own
+        const bool gap = atom && k + 1 < items_.size() && items_[k + 1].type == Item::ATOM &&
+                         it.type == Item::TEXT && it.text.find_first_not_of(' ') == P::String::npos;
+        if (gap) {
+            const lv_font_t* font = runFont(it.st, lv_obj_get_style_text_font(row, LV_PART_MAIN));
+            if (!font)
+                font = lv_obj_get_style_text_font(row, LV_PART_MAIN);
+            const int32_t space = spaced ? 0 : lv_font_get_glyph_width(font, ' ', 0);
+            lv_obj_set_style_margin_right(atom, lv_obj_get_style_margin_right(atom, LV_PART_MAIN) + space,
+                                          LV_PART_MAIN);
+            spaced = true;
+            continue;
+        }
+        atom = nullptr;
         if (it.type == Item::BREAK) {
             lv_obj_t* br = plainObj(row);
             lv_obj_set_size(br, lv_pct(100), 0);
