@@ -175,8 +175,14 @@ int main() {
         r.withStringData(buf, 5);
         const int freed = g_heap_caps_freed;
         Console::SerialTransport::instance().sendResult(1, r);
-        if (outputContains("[string: 5 bytes]") && outputContains("hello") && g_heap_caps_freed == freed + 1) PASS();
-        else { FAIL("not freed"); printf("      freed %d\n", g_heap_caps_freed - freed); }
+        const bool printed = outputContains("[string: 5 bytes]") && outputContains("hello");
+        const bool freedOnce = g_heap_caps_freed == freed + 1;
+        if (printed && freedOnce)
+            PASS();
+        else {
+            FAIL("not freed");
+            printf("      freed %d\n", g_heap_caps_freed - freed);
+        }
     }
 
     TEST("binary payload: printed as base64, then freed");
@@ -188,8 +194,14 @@ int main() {
         r.withBinaryData(buf, 3);
         const int freed = g_heap_caps_freed;
         Console::SerialTransport::instance().sendResult(1, r);
-        if (outputContains("[binary: 3 bytes]") && g_heap_caps_freed == freed + 1) PASS();
-        else { FAIL("not freed"); printf("      freed %d\n", g_heap_caps_freed - freed); }
+        const bool printed = outputContains("[binary: 3 bytes]");
+        const bool freedOnce = g_heap_caps_freed == freed + 1;
+        if (printed && freedOnce)
+            PASS();
+        else {
+            FAIL("not freed");
+            printf("      freed %d\n", g_heap_caps_freed - freed);
+        }
     }
 
     TEST("no payload: nothing freed");
@@ -197,8 +209,10 @@ int main() {
         resetTest();
         const int freed = g_heap_caps_freed;
         Console::SerialTransport::instance().sendResult(1, Console::Result::ok());
-        if (g_heap_caps_freed == freed) PASS();
-        else FAIL("freed something");
+        if (g_heap_caps_freed == freed)
+            PASS();
+        else
+            FAIL("freed something");
     }
 
     // === Summary ===
