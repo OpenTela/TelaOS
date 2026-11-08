@@ -1,4 +1,4 @@
-# HTML Tags v0.22
+# HTML Tags v0.23
 
 Стандартные HTML-элементы в TelaOS: все элементы справочника MDN
 ([HTML elements reference](https://developer.mozilla.org/en-US/docs/Web/HTML/Reference/Elements)),
@@ -6,6 +6,11 @@
 
 ## Changelog
 
+- **v0.23**: Флажок и радио — размера браузера: квадрат 13px, как в Chromium, без места для текста,
+  поля 3px 3px 3px 4px у флажка и 3px 3px 0 5px у радио. Было 22×22. Отметка — галочка у флажка и
+  точка у радио — рисуется по размеру квадрата: CSS `width` и `height` меняют квадрат, как в браузере
+  (у неквадратного поля — квадрат меньшей стороны посередине). Вокруг — ещё 15px зоны нажатия, как у
+  кнопки.
 - **v0.22**: Поле и `textarea`, которые раскладывает HTML, — размера браузера (Chromium со шрифтом часов):
   поле — 8px на знак `size` (20) и ещё 50, высота 21, рамка 2px; `textarea` — 8px на знак `cols` (20) и
   ещё 22, 15px на строку `rows` (2) и ещё 6, рамка 1px; шрифт 14px. Было 150×40 и 150×56. `w`, `h` и CSS
@@ -229,7 +234,7 @@
 | `input` без `type` | — | **TelaOS** `<input>` (как раньше) |
 | `input type="text"` (и `email`, `search`, `tel`, `url`, `number`, `date`…) | актуальный | TelaOS-поле: `bind`, `placeholder`, `value`, `maxlength`, `readonly` (текст виден, клавиатура не открывается), `disabled`, события. Размера браузера: 8px на знак `size` (20) и ещё 50 — 210×21, рамка 2px, шрифт 14px; `w`, `h` и CSS важнее; с `x`/`y` — как рисует TelaOS (150×40) |
 | `input type="password"` | актуальный | поле с `password="true"` |
-| `input type="checkbox"`, `"radio"` | актуальный | флажок: `checked`, `disabled`, `bind` ("true"/"false"), `onchange`; радио — группа по `name` |
+| `input type="checkbox"`, `"radio"` | актуальный | флажок: `checked`, `disabled`, `bind` ("true"/"false"), `onchange`; радио — группа по `name`. Размера браузера: квадрат 13px, как в Chromium, поля 3px 3px 3px 4px (радио — 3px 3px 0 5px), вокруг ещё 15px зоны нажатия; отметка (галочка, у радио — точка) — по размеру квадрата, CSS `width`/`height` его меняют |
 | `input type="range"` | актуальный | TelaOS `<slider>`: `min`, `max`, `step` (ползунок встаёт на min + k·step, `value` тоже), `value`, `bind`, `disabled` |
 | `input type="submit"`, `"reset"`, `"button"` | актуальный | TelaOS `<button>` с текстом `value`, `onclick`, `disabled`; размера браузера, как `<button>` |
 | `input type="image"` | актуальный | как `img` |

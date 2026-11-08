@@ -152,7 +152,7 @@ static void roomHitTest(lv_event_t* e) {
 #endif
 
 // html: a control HTML lays out (HtmlFlow::browserSized(), or right in a flow box)
-static void fingerRoom(lv_obj_t* o, int px, bool html) {
+void fingerRoom(lv_obj_t* o, int px, bool html) {
     lv_obj_set_ext_click_area(o, px);
 #if !defined(LVGL_MOCK_ENABLED)
     if (!html) return;
