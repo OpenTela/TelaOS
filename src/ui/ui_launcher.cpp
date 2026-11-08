@@ -18,6 +18,7 @@
 #include <cstring>
 #include <cctype>
 #include <ctime>
+#include <string_view>
 
 #include "ui_layout.h"
 #include "_generated_icons.h"
@@ -380,11 +381,15 @@ void Launcher::onCellClick(size_t appIdx, uint32_t duration) {
     }
 }
 
+// lv_label_set_text() redraws the label even when its text is the same, and the clock is set
+// every second while it changes once a minute: only a new text is set
+static void setText(lv_obj_t* lbl, const char* text) {
+    if (lbl && std::string_view(lv_label_get_text(lbl)) != text) lv_label_set_text(lbl, text);
+}
+
 void Launcher::updateClocks() {
     const char* timeStr = getTimeStr();
-    for (auto* lbl : m_clockLabels) {
-        if (lbl) lv_label_set_text(lbl, timeStr);
-    }
+    for (auto* lbl : m_clockLabels) setText(lbl, timeStr);
     
     // Update date labels once per minute (or when time just synced)
     static int lastMin = -1;
@@ -397,21 +402,15 @@ void Launcher::updateClocks() {
         // Big date: "Понедельник, 24 Фев"
         char bigDateBuf[64];
         snprintf(bigDateBuf, sizeof(bigDateBuf), "%s, %d %s", getDayName(), getDay(), getMonthShort());
-        for (auto* lbl : m_bigDateLabels) {
-            if (lbl) lv_label_set_text(lbl, bigDateBuf);
-        }
+        for (auto* lbl : m_bigDateLabels) setText(lbl, bigDateBuf);
         
         // Compact day: "понедельник"
         const char* dayLower = getDayNameLower();
-        for (auto* lbl : m_compactDayLabels) {
-            if (lbl) lv_label_set_text(lbl, dayLower);
-        }
+        for (auto* lbl : m_compactDayLabels) setText(lbl, dayLower);
         
         // Compact date: "24 февраля"
         const char* dateLower = getDateLower();
-        for (auto* lbl : m_compactDateLabels) {
-            if (lbl) lv_label_set_text(lbl, dateLower);
-        }
+        for (auto* lbl : m_compactDateLabels) setText(lbl, dateLower);
     }
 }
 

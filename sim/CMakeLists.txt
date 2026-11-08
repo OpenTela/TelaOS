@@ -81,7 +81,7 @@ add_executable(telaos_sim
   ${TELA_SRC}
   sim_tela_main.cpp sim_tela_device.cpp sim_tela_shim.cpp sim_tela_fs.cpp
   sim_panel.cpp sim_window.cpp sim_robot.cpp sim_png.cpp
-  sim_heap.cpp third_party/tlsf/tlsf.c)
+  sim_heap.cpp sim_timers.cpp third_party/tlsf/tlsf.c)
 # Order matters: sim shims first, real LVGL before TelaCI stubs (which carry a mock lvgl.h)
 target_include_directories(telaos_sim PRIVATE
   "${CMAKE_CURRENT_SOURCE_DIR}/shim"
@@ -95,5 +95,8 @@ target_include_directories(telaos_sim PRIVATE
   "${TELAOS_DIR}/lib/md4c"
   "${TELAOS_DIR}/ci/stubs")
 target_compile_definitions(telaos_sim PRIVATE TELAOS_DATA_DIR="${TELAOS_DIR}/data" PROGMEM=)
+# shim/freertos/timers.h comes before TelaCI's stub of the same name. A compiler cache that took the
+# objects built against the stub would not see the new header: the flag changes every command line
+target_compile_definitions(telaos_sim PRIVATE SIM_FREERTOS_TIMERS=1)
 target_link_libraries(telaos_sim PRIVATE tela_lvgl tela_lua SDL2::SDL2 PNG::PNG mbedcrypto m)
 target_link_options(telaos_sim PRIVATE -Wl,--wrap=time)  # wall clock = virtual clock (sim_tela_shim.cpp)
