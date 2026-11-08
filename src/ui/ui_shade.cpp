@@ -311,7 +311,8 @@ void Shade::showCode(uint32_t code) {
 }
 
 void Shade::hideCode() {
-    if (!m_code) return;
+    if (!m_code)
+        return;
     lv_obj_add_flag(m_code, LV_OBJ_FLAG_HIDDEN);
     LOG_I(Log::UI, "Pairing code hidden");
 }

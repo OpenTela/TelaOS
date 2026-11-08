@@ -467,8 +467,10 @@ static Result execSys(std::string_view cmd, JsonArray args) {
 #ifndef NO_BLE
         const std::string_view sub = argStr(args, 0);
         if (sub == "forget") {
-            if (!BLEBridge::isInitialized()) return Result::errInvalid("BLE is off");
-            if (!BLEBridge::forgetBonds()) return Result::errServer("Bonds not deleted");
+            if (!BLEBridge::isInitialized())
+                return Result::errInvalid("BLE is off");
+            if (!BLEBridge::forgetBonds())
+                return Result::errServer("Bonds not deleted");
             LOG_I(Log::BLE, "All bonds forgotten");
         } else if (!sub.empty()) {
             return Result::errInvalid("sys ble [forget]");

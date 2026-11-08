@@ -54,7 +54,8 @@ static std::atomic<bool> s_secure{false};      // the link now is encrypted and 
 // Six random digits, from the firmware's CSPRNG (mbedtls, not safe from two tasks: the main one)
 static bool makePasskey() {
     std::string bytes;
-    if (!Crypto::random(sizeof(uint32_t), bytes) || bytes.size() != sizeof(uint32_t)) {
+    const bool gotRandom = Crypto::random(sizeof(uint32_t), bytes) && bytes.size() == sizeof(uint32_t);
+    if (!gotRandom) {
         s_passkeyReady = false;
         LOG_E(Log::BLE, "Pairing: no random code, pairing refused");
         return false;
@@ -75,7 +76,8 @@ class ServerCallbacks : public NimBLEServerCallbacks {
         g_connected = true;
         s_secure = false;
         LOG_I(Log::BLE, "Client connected");
-        if (!s_pairing) return;
+        if (!s_pairing)
+            return;
         if (!s_passkeyReady) {  // no code to show: no pairing, and no open link either
             server->disconnect(connInfo.getConnHandle());
             return;
@@ -95,7 +97,8 @@ class ServerCallbacks : public NimBLEServerCallbacks {
         s_secure = connInfo.isEncrypted() && connInfo.isAuthenticated();
         if (s_pairing && !s_secure) {
             LOG_W(Log::BLE, "Pairing failed: disconnecting");
-            if (g_server) g_server->disconnect(connInfo.getConnHandle());
+            if (g_server)
+                g_server->disconnect(connInfo.getConnHandle());
             return;
         }
         LOG_I(Log::BLE, "Link %s%s", s_secure ? "encrypted" : "open", connInfo.isBonded() ? ", bonded" : "");
@@ -377,7 +380,8 @@ bool isConnected() {
 }
 
 void setPairing(bool on) {
-    if (on != s_pairing && g_initialized) LOG_I(Log::BLE, "Pairing %s: from the next BLE start", on ? "on" : "off");
+    if (on != s_pairing && g_initialized)
+        LOG_I(Log::BLE, "Pairing %s: from the next BLE start", on ? "on" : "off");
     s_pairing = on;
 }
 
@@ -392,13 +396,17 @@ bool forgetBonds() { return g_initialized && NimBLEDevice::deleteAllBonds(); }
 // The code on the screen while a pairing is on; then a new one for the next
 static void showCode() {
     const bool want = s_codeWanted.load();
-    if (want == s_codeShown) return;
+    if (want == s_codeShown)
+        return;
     s_codeShown = want;
     display_lock();
-    if (want) Shade::instance().showCode(s_passkey.load());
-    else Shade::instance().hideCode();
+    if (want)
+        Shade::instance().showCode(s_passkey.load());
+    else
+        Shade::instance().hideCode();
     display_unlock();
-    if (!want) makePasskey();
+    if (!want)
+        makePasskey();
 }
 
 void processBleQueue() {
