@@ -1,4 +1,7 @@
 #pragma once
+// NimBLE as TelaCI and the simulator have it: no radio. What the firmware creates is there (one
+// object of each kind, doing nothing), so it never calls a member of a null pointer: UBSan
+// (sim/tools/sim_asan.py) reports that, and the firmware's own null checks stay as they are
 #include <cstdint>
 #include <string>
 #include "freertos/FreeRTOS.h"
@@ -27,7 +30,10 @@ public:
 
 class NimBLEService {
 public:
-    NimBLECharacteristic* createCharacteristic(const char*, uint32_t) { return nullptr; }
+    NimBLECharacteristic* createCharacteristic(const char*, uint32_t) {
+        static NimBLECharacteristic c;
+        return &c;
+    }
     void start() {}
 };
 
@@ -47,21 +53,32 @@ public:
 
 class NimBLEServer {
 public:
-    NimBLEService* createService(const char*) { return nullptr; }
+    NimBLEService* createService(const char*) {
+        static NimBLEService s;
+        return &s;
+    }
     void setCallbacks(NimBLEServerCallbacks*) {}
-    NimBLEAdvertising* getAdvertising() { return nullptr; }
+    NimBLEAdvertising* getAdvertising();
 };
 
 class NimBLEDevice {
 public:
     static void init(const char*) {}
-    static NimBLEServer* createServer() { return nullptr; }
+    static NimBLEServer* createServer() {
+        static NimBLEServer s;
+        return &s;
+    }
     static void startAdvertising() {}
     static void setPower(int) {}
     static NimBLEAddress getAddress() { return {}; }
-    static NimBLEAdvertising* getAdvertising() { return nullptr; }
+    static NimBLEAdvertising* getAdvertising() {
+        static NimBLEAdvertising a;
+        return &a;
+    }
     static void deinit(bool) {}
 };
+
+inline NimBLEAdvertising* NimBLEServer::getAdvertising() { return NimBLEDevice::getAdvertising(); }
 
 namespace NIMBLE_PROPERTY {
     constexpr uint32_t READ = 1;
