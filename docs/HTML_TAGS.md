@@ -1,4 +1,4 @@
-# HTML Tags v0.21
+# HTML Tags v0.22
 
 Стандартные HTML-элементы в TelaOS: все элементы справочника MDN
 ([HTML elements reference](https://developer.mozilla.org/en-US/docs/Web/HTML/Reference/Elements)),
@@ -6,6 +6,10 @@
 
 ## Changelog
 
+- **v0.22**: Поле и `textarea`, которые раскладывает HTML, — размера браузера (Chromium со шрифтом часов):
+  поле — 8px на знак `size` (20) и ещё 50, высота 21, рамка 2px; `textarea` — 8px на знак `cols` (20) и
+  ещё 22, 15px на строку `rows` (2) и ещё 6, рамка 1px; шрифт 14px. Было 150×40 и 150×56. `w`, `h` и CSS
+  важнее; с `x`/`y` — как рисует TelaOS.
 - **v0.21**: `<link rel="stylesheet" href="…">` подключает файл стилей, как `<style>` на своём месте:
   в `<app>` — для всего приложения, на странице — для того, что после него (`docs/CSS.md`, «Где живут
   стили»). Раньше `<link>` не значил ничего. Страница `styles` образца `html_tags` берёт стили из
@@ -223,14 +227,14 @@
 |---------|--------|----------|
 | `form`, `fieldset`, `legend` | актуальный | блок; `fieldset` — рамка 2px, отступ 2px сбоку, внутри 0,35em 0,75em 0,625em; `legend` приглушена; `<fieldset disabled>` выключает все поля и кнопки внутри |
 | `input` без `type` | — | **TelaOS** `<input>` (как раньше) |
-| `input type="text"` (и `email`, `search`, `tel`, `url`, `number`, `date`…) | актуальный | TelaOS-поле: `bind`, `placeholder`, `value`, `maxlength`, `readonly` (текст виден, клавиатура не открывается), `disabled`, события |
+| `input type="text"` (и `email`, `search`, `tel`, `url`, `number`, `date`…) | актуальный | TelaOS-поле: `bind`, `placeholder`, `value`, `maxlength`, `readonly` (текст виден, клавиатура не открывается), `disabled`, события. Размера браузера: 8px на знак `size` (20) и ещё 50 — 210×21, рамка 2px, шрифт 14px; `w`, `h` и CSS важнее; с `x`/`y` — как рисует TelaOS (150×40) |
 | `input type="password"` | актуальный | поле с `password="true"` |
 | `input type="checkbox"`, `"radio"` | актуальный | флажок: `checked`, `disabled`, `bind` ("true"/"false"), `onchange`; радио — группа по `name` |
 | `input type="range"` | актуальный | TelaOS `<slider>`: `min`, `max`, `step` (ползунок встаёт на min + k·step, `value` тоже), `value`, `bind`, `disabled` |
 | `input type="submit"`, `"reset"`, `"button"` | актуальный | TelaOS `<button>` с текстом `value`, `onclick`, `disabled`; размера браузера, как `<button>` |
 | `input type="image"` | актуальный | как `img` |
 | `input type="hidden"` | актуальный | ничего |
-| `textarea` | актуальный | многострочное поле, содержимое — начальный текст, `rows` → высота, `maxlength`, `readonly`, `disabled` |
+| `textarea` | актуальный | многострочное поле, содержимое — начальный текст, `maxlength`, `readonly`, `disabled`. Размера браузера: 8px на знак `cols` (20) и ещё 22, 15px на строку `rows` (2) и ещё 6 — 182×36, рамка 1px, шрифт 14px |
 | `button`, `label`, `select`, `option` | актуальный | **TelaOS**. `<label for="id">`: тап по подписи — как тап по полю (флажок переключается, радио включается, поле открывает клавиатуру, список раскрывается). `<option selected>` — выбран сразу, если `bind` не задаёт другое; `<option disabled>` выбрать нельзя; без них выбран первый доступный. `</option>` можно не писать. HTML внутри `<label>` и `<button>` — как в браузере: `<label>Имя <i>(необязательно)</i></label>`, `<button><b>Сохранить</b> сейчас</button>`; поле внутри подписи (`<label><input type="checkbox"> Запомнить</label>`) работает от тапа по её тексту; `<img>` в кнопке — её иконка. Кнопка, которую раскладывает HTML, — размера браузера: шрифт 14px, отступы 1px 6px, рамка 2px (прозрачная); вокруг неё 18px невидимой зоны нажатия; с `x`/`y`/`align` — как рисует TelaOS |
 | `optgroup`, `datalist` | актуальный | не отображаются |
 | `selectedcontent` | экспериментальный | внутри `<select>` игнорируется |
