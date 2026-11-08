@@ -39,6 +39,7 @@ KDL_LIB = COMPILER_DIR / "lib" / "ckdl" / "build" / "libkdl.a"
 
 CXX = "g++"
 STD = "gnu++2a"
+WARNINGS_AS_ERRORS = ["-Werror=misleading-indentation"]  # as in build.py
 
 # Quick mode: key tests per category for fast smoke check
 # Picked for max coverage with min tests (~9 tests vs ~40 full)
@@ -102,7 +103,7 @@ def compile_test(test: TestInfo, project_dir: Path, objs: list) -> tuple:
     out = test.bin_path()
     out.parent.mkdir(parents=True, exist_ok=True)
 
-    cmd = [CXX, f"-std={STD}", "-DLVGL_MOCK_ENABLED"]
+    cmd = [CXX, f"-std={STD}", "-DLVGL_MOCK_ENABLED", *WARNINGS_AS_ERRORS]
     cmd += [f"-I{inc}" for inc in get_includes(project_dir)]
     cmd += [str(test.src), str(externals)]
     cmd += [str(o) for o in objs]
