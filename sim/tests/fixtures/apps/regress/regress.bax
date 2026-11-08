@@ -1,0 +1,25 @@
+<app os="1.0" title="Regress" version="0.1" category="test">
+  <!--
+    Test fixture: pages that once stopped the simulator (and the watch), kept so they do not again.
+    Robot test: sim/tests/tela_regress.sim.
+
+    Page "tabs": <tabs> 100% wide in a table cell that is as wide as its content — 0 wide. An
+    <input> in a tab scrolls the tab view, and LVGL divided by its width when the scroll ended
+    (lv_tabview.c, cont_scroll_end_event_cb). Found by random pages, seed 3, gen_0717.
+  -->
+  <ui default="/tabs">
+    <page id="tabs">
+      <label id="title">Tabs 0 wide</label>
+      <div w="80">
+        <table x="30%" y="86%">
+          <tr><td>
+            <tabs id="zero" w="100%" h="50%">
+              <tab title="a"><label>first</label></tab>
+              <tab title="b"><input type="number" x="13%" y="8%" min="0" max="10" value="7"></tab>
+            </tabs>
+          </td></tr>
+        </table>
+      </div>
+    </page>
+  </ui>
+</app>

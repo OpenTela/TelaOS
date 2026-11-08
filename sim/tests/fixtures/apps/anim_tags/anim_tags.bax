@@ -1,0 +1,93 @@
+<app os="1.0" title="Animations" version="0.1" category="test">
+  <!--
+    Test fixture for motion in TelaOS: CSS transitions (page "transition") and @keyframes
+    animations (page "keyframes"). Flashed by the simulator with --extra-data; each page is
+    seen frame by frame and judged against Chromium by sim/tools/anim_judge.py.
+    Nothing moves until go(): each .trigger gets the class "go", each .disable the attribute
+    disabled. anim_judge.py does the same in Chromium and compares the two at the same moments
+    after it. Each moving element has an id; the line above it (or its own text) says what
+    moves it.
+    No step of steps() falls on a moment the judge looks at (100, 250, 500, 750, 1000, 1500,
+    2000 and 2500 ms): a step a millisecond late would not be a difference.
+  -->
+  <style>
+    .bar { width: 120px; height: 14px; background-color: #1E88E5; margin: 2px 0 6px; }
+    .note { margin: 0; font-size: 14px; }
+
+    #fade { transition: opacity 1s linear; }
+    #fade.go { opacity: 0.2; }
+    #tint { transition: background-color 1s ease; }
+    #tint.go { background-color: #E53935; }
+    #grow { width: 40px; transition: width 1s ease-in-out; }
+    #grow.go { width: 200px; }
+    #slide { transition: transform 1s cubic-bezier(0.2, 0.8, 0.2, 1); }
+    #slide.go { transform: translateX(160px); }
+    #late { color: #FFFFFF; transition: color 0.5s linear 0.5s; }
+    #late.go { color: #FFD54F; }
+    #hop { position: relative; left: 0; transition: left 0.9s steps(3, end); }
+    #hop.go { left: 150px; }
+    button { color: #FFFFFF; background-color: #43A047; border: none; margin: 2px 0 6px; }
+    button:disabled { color: #FFFFFF; background-color: #8E24AA; }
+    #offLinear { transition: background-color 1s linear; }
+    #offEase { transition: background-color 1s ease; }
+
+    @keyframes pulse { from { opacity: 1; } to { opacity: 0.2; } }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    @keyframes walk {
+      0% { transform: translateX(0); }
+      50% { transform: translateX(160px); }
+      100% { transform: translateX(80px); }
+    }
+    @keyframes swell { from { transform: scale(1); } to { transform: scale(1.5); } }
+    @keyframes glow { from { background-color: #1E88E5; } to { background-color: #E53935; } }
+    #pulse.go { animation: pulse 1s linear 2 alternate; }
+    #spin { width: 40px; height: 40px; }
+    #spin.go { animation: spin 2s linear infinite; }
+    #walk.go { animation: walk 2s ease-in-out forwards; }
+    #swell { width: 60px; }
+    #swell.go { animation: swell 1s ease-out forwards; }
+    #glow.go { animation: glow 1.2s steps(3, end) 0.4s both; }
+  </style>
+
+  <ui default="/transition">
+
+    <page id="transition">
+      <h3>transition</h3>
+      <p class="note">opacity 1s linear</p>
+      <div id="fade" class="bar trigger"></div>
+      <p class="note">background-color 1s ease</p>
+      <div id="tint" class="bar trigger"></div>
+      <p class="note">width 1s ease-in-out</p>
+      <div id="grow" class="bar trigger"></div>
+      <p class="note">transform 1s cubic-bezier()</p>
+      <div id="slide" class="bar trigger"></div>
+      <p id="late" class="note trigger">color 0.5s linear, 0.5s late</p>
+      <p class="note">left 0.9s steps(3)</p>
+      <div id="hop" class="bar trigger"></div>
+      <button id="offLinear" class="disable">:disabled 1s linear</button>
+      <button id="offEase" class="disable">:disabled 1s ease</button>
+    </page>
+
+    <page id="keyframes">
+      <h3>@keyframes</h3>
+      <p class="note">opacity 1s linear 2 alternate</p>
+      <div id="pulse" class="bar trigger"></div>
+      <p class="note">rotate 2s linear infinite</p>
+      <div id="spin" class="bar trigger"></div>
+      <p class="note">translate 0% 50% 100%, ease-in-out forwards</p>
+      <div id="walk" class="bar trigger"></div>
+      <p class="note">scale 1s ease-out forwards</p>
+      <div id="swell" class="bar trigger"></div>
+      <p class="note">background 1.2s steps(3), 0.4s late, both</p>
+      <div id="glow" class="bar trigger"></div>
+    </page>
+
+  </ui>
+
+  <script language="lua">
+function go()
+  for _, e in ipairs(document:querySelectorAll(".trigger")) do e.classList:add("go") end
+  for _, e in ipairs(document:querySelectorAll(".disable")) do e:setAttribute("disabled", "") end
+end
+  </script>
+</app>

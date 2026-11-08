@@ -237,6 +237,7 @@ typedef enum {
     LV_EVENT_REFR_EXT_DRAW_SIZE,
     LV_EVENT_LAYOUT_CHANGED,
     LV_EVENT_STYLE_CHANGED,
+    LV_EVENT_SCROLL_END,
     LV_EVENT_ALL = 0xFF,
     LV_EVENT_PREPROCESS = 0x8000,  // a flag: the callback runs before the others
 } lv_event_code_t;
@@ -664,6 +665,7 @@ inline int lv_obj_get_y(lv_obj_t* obj) { return (obj && obj->mock_widget) ? obj-
 inline int lv_obj_get_width(lv_obj_t* obj) { return (obj && obj->mock_widget) ? obj->mock_widget->w : 100; }
 inline int lv_obj_get_height(lv_obj_t* obj) { return (obj && obj->mock_widget) ? obj->mock_widget->h : 100; }
 inline int lv_obj_get_content_height(lv_obj_t* obj) { return (obj && obj->mock_widget) ? obj->mock_widget->h : 100; }
+inline int lv_obj_get_content_width(lv_obj_t* obj) { return (obj && obj->mock_widget) ? obj->mock_widget->w : 100; }
 // Resolve lv_pct values to pixels from parent chain
 inline void lv_obj_update_layout(lv_obj_t* obj) {
     if (!obj || !obj->mock_widget || !obj->parent) return;
@@ -741,6 +743,7 @@ inline void lv_obj_set_grid_cell(lv_obj_t*, lv_grid_align_t, int, int, lv_grid_a
 inline void* lv_event_get_user_data(lv_event_t* e) { return e ? e->user_data : nullptr; }
 inline lv_obj_t* lv_event_get_target(lv_event_t* e) { return e ? static_cast<lv_obj_t*>(e->target) : nullptr; }
 inline void* lv_event_get_current_target(lv_event_t* e) { return e ? e->current_target : nullptr; }
+inline void lv_event_stop_processing(lv_event_t*) {}
 inline void* lv_event_get_param(lv_event_t* e) { return e ? e->param : nullptr; }
 inline lv_event_code_t lv_event_get_code(lv_event_t* e) {
     return e ? static_cast<lv_event_code_t>(e->code) : LV_EVENT_CLICKED;
