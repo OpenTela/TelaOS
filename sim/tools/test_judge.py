@@ -83,6 +83,21 @@ class Pages(unittest.TestCase):
         self.assertIn(":where(*) { font-family: Ubuntu; }", doc)
         self.assertIn("<body><p>x</p></body>", doc)
 
+    def test_the_css_of_the_app_is_every_pages(self):
+        bax = """<app>
+  <!-- <link rel="stylesheet" href="old.css"> -->
+  <link rel="stylesheet" href="a.css">
+  <style>p { color: red; }</style>
+  <ui default="/main"><page id="main"><link rel="stylesheet" href="page.css"><p>x</p></page></ui>
+  <link rel="stylesheet" href="/system/b.css"/>
+  <script language="lua">s = '<link rel="stylesheet" href="lua.css">'</script>
+</app>"""
+        head = judge.app_head(bax)
+        self.assertEqual(head, '<link rel="stylesheet" href="a.css"><style>p { color: red; }</style>'
+                               '<link rel="stylesheet" href="/system/b.css"/>')  # the page's link is the page's
+        doc = judge.document("<p>x</p>", "/nowhere", None, head=head)
+        self.assertIn(head + "</head><body><p>x</p></body>", doc)  # after the watch's fonts: the app's CSS wins
+
 
 class Pairs(unittest.TestCase):
     def test_align_pairs_in_order(self):

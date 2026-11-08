@@ -220,3 +220,18 @@ expect @taps "Taps: 2"
 # a button as large as a browser's keeps the finger's room around it: 14 px under it still counts
 tap @inc:0.5,2.2
 expect @taps "Taps: 3"
+
+# ---- styles: <link rel="stylesheet"> of the app (html_tags.css) and of the page (styles.css) ---
+> ui nav styles
+wait 200
+expect @fromApp :x 40
+expect @fromApp :w 240
+expect @fromPage :x 80
+expect @fromPage :w 160
+# both classes: the page's file comes after the app's, its rule wins
+expect @fromBoth :x 80
+expect @fromBoth :w 160
+shot html_10_styles
+> ui nav home
+wait 200
+expect @taps "Taps: 3"

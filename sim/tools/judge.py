@@ -60,6 +60,15 @@ def app_pages(text):
     return pages, state
 
 
+def app_head(text):
+    """The <link> and <style> of <app> itself, outside <ui>, in their order: they count for every
+    page, as a document's own in a browser"""
+    for part in (r"<!--.*?-->", r"<script\b[^>]*>.*?</script>", r"<ui\b[^>]*>.*?</ui>"):
+        text = re.sub(part, "", text, flags=re.S)
+    found = re.finditer(r"<link\b[^>]*>|<style\b[^>]*>.*?</style>", text, flags=re.S)
+    return "".join(m.group(0) for m in found)
+
+
 def fill(markup, state):
     """{var} → the state's default, as the first screen shows it; an unknown name stays"""
     return re.sub(r"\{(\w+)\}", lambda m: htmllib.escape(state[m.group(1)], quote=False)
@@ -112,9 +121,10 @@ def font_url(path):
         return Path(path).as_uri()  # not there: Chromium says so (MEASURE checks the faces)
 
 
-def document(body, fonts, resources, font_base=None):
-    """The page as a document for Chromium: the watch's fonts and the app's pictures. With
-    font_base the fonts are fetched from there (judge_pages.py serves them), not carried inside"""
+def document(body, fonts, resources, font_base=None, head=""):
+    """The page as a document for Chromium: the watch's fonts, the app's pictures and its own CSS
+    (head, app_head()). With font_base the fonts are fetched from there (judge_pages.py serves
+    them), not carried inside"""
     def src(f):
         return f"{font_base}/{f}.ttf" if font_base else font_url(Path(fonts) / f"{f}.ttf")
     faces = "".join(f"@font-face {{ font-family: Ubuntu; src: url('{src(f)}'); "
@@ -123,7 +133,7 @@ def document(body, fonts, resources, font_base=None):
     # :where(): no weight, the page's own CSS wins; the UA's monospace is not a font of the watch
     return ("<!doctype html>\n<html><head><meta charset=\"utf-8\">" + base +
             f"<style>\n{faces}:where(*) {{ font-family: Ubuntu; }}\nhtml {{ scrollbar-width: none; }}\n</style>"
-            f"</head><body>{body}</body></html>\n")
+            f"{head}</head><body>{body}</body></html>\n")
 
 
 # ============ Chromium ============
@@ -309,7 +319,8 @@ def check(app_dir, *shots, fonts=None):
     bax = app_dir / f"{app}.bax"
     if not bax.is_file():
         return [None] * len(shots)
-    pages, state = app_pages(bax.read_text("utf-8", "replace"))
+    text = bax.read_text("utf-8", "replace")
+    pages, state = app_pages(text)
     skipped = {page: NOT_JUDGED[(app, page)] for page, _ in pages if (app, page) in NOT_JUDGED}
     judged_pages = [page for page, _ in pages if page not in skipped]
     screens = [screens_of(app, judged_pages, s) for s in shots]
@@ -317,7 +328,9 @@ def check(app_dir, *shots, fonts=None):
     if not judged_pages or size is None:
         return [None] * len(shots)
     resources = app_dir / "resources"
-    docs = {page: document(standard(fill(markup, state)), fonts, resources if resources.is_dir() else None)
+    resources = resources if resources.is_dir() else None
+    head = app_head(text)
+    docs = {page: document(standard(fill(markup, state)), fonts, resources, head=head)
             for page, markup in pages if page in judged_pages}
     laid, version = layout(docs, *size)
     if laid is None:
