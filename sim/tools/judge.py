@@ -35,11 +35,14 @@ from pathlib import Path
 TOLERANCE = 2  # px, each of x, y, width, height
 FACES = (("Ubuntu-Regular", 400, "normal"), ("Ubuntu-Bold", 700, "normal"),
          ("Ubuntu-Italic", 400, "italic"), ("Ubuntu-BoldItalic", 700, "italic"))
+# html_tags with the watch style, /system/tela.css (sim_screens.styled_fixtures())
+STYLED = "html_tags_tela"
 # (app, page): why the judge does not judge it
 NOT_JUDGED = {
     ("html_tags", "icons"): "иконки и знаки ✓ ★ ☀: у Chromium нет шрифта Material Symbols, "
                             "он нарисовал бы их чужим шрифтом",
 }
+NOT_JUDGED.update({(STYLED, page): why for (app, page), why in list(NOT_JUDGED.items()) if app == "html_tags"})
 DIMS = (("x", "x"), ("y", "y"), ("w", "ширина"), ("h", "высота"))
 
 
@@ -58,6 +61,15 @@ def app_pages(text):
         if name:
             state[name.group(1)] = htmllib.unescape(default.group(1)) if default else ""
     return pages, state
+
+
+def watch_files(html, system):
+    """/system/… in href= and src= is a file of the watch; Chromium gets the same file of the
+    checkout (system: its data/system)"""
+    if not system:
+        return html
+    uri = Path(system).resolve().as_uri()
+    return re.sub(r'(\b(?:href|src)=["\'])/system/', lambda m: f"{m.group(1)}{uri}/", html)
 
 
 def app_head(text):
@@ -309,10 +321,11 @@ def screens_of(app, pages, shots):
     return trees, size
 
 
-def check(app_dir, *shots, fonts=None):
+def check(app_dir, *shots, fonts=None, system=None):
     """The judge on one app: its pages in Chromium against its screens in each shots/ folder (the
     robot's trees with "dom"), Chromium laid out once. One result per folder; None where its
-    screens have no elements, and for every folder without Playwright."""
+    screens have no elements, and for every folder without Playwright. system: the folder that is
+    /system/ of the watch (data/system), for <link href="/system/tela.css">."""
     app_dir = Path(app_dir).resolve()
     app = app_dir.name
     fonts = Path(fonts).resolve() if fonts else Path(__file__).resolve().parents[2] / "fonts" / "ubuntu"
@@ -329,8 +342,8 @@ def check(app_dir, *shots, fonts=None):
         return [None] * len(shots)
     resources = app_dir / "resources"
     resources = resources if resources.is_dir() else None
-    head = app_head(text)
-    docs = {page: document(standard(fill(markup, state)), fonts, resources, head=head)
+    head = watch_files(app_head(text), system)
+    docs = {page: document(watch_files(standard(fill(markup, state)), system), fonts, resources, head=head)
             for page, markup in pages if page in judged_pages}
     laid, version = layout(docs, *size)
     if laid is None:

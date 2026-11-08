@@ -94,5 +94,27 @@ class Screens(unittest.TestCase):
         self.assertNotIn("незаметно", text)
 
 
+class Styled(unittest.TestCase):
+    def test_the_judged_app_once_more_with_the_watch_style(self):
+        with tempfile.TemporaryDirectory() as d:
+            fixtures = Path(d) / "fixtures"
+            app = fixtures / "apps" / sim_screens.JUDGED
+            (app / "resources").mkdir(parents=True)
+            (app / "resources" / "own.css").write_text("p { color: red; }")
+            (app / f"{sim_screens.JUDGED}.bax").write_text(
+                '<app title="t">\n  <!-- <app> in a comment -->\n  <link rel="stylesheet" href="own.css">\n'
+                '  <ui default="/main"><page id="main"><p>x</p></page></ui>\n</app>\n')
+            copy = sim_screens.styled_fixtures(fixtures, Path(d) / "out")
+            styled = copy / "apps" / sim_screens.STYLED
+            text = (styled / f"{sim_screens.STYLED}.bax").read_text()
+            self.assertTrue(text.startswith('<app title="t">\n  <link rel="stylesheet" href="/system/tela.css">\n'))
+            self.assertEqual(text.count("/system/tela.css"), 1)
+            self.assertLess(text.index("/system/tela.css"), text.index("own.css"))  # the app's own CSS wins
+            self.assertTrue((styled / "resources" / "own.css").is_file())
+            self.assertEqual((copy / "apps" / sim_screens.JUDGED / f"{sim_screens.JUDGED}.bax").read_text(),
+                             (app / f"{sim_screens.JUDGED}.bax").read_text())  # the judged app as it is
+            self.assertFalse((app.parent / sim_screens.STYLED).exists())  # sim/tests/fixtures untouched
+
+
 if __name__ == "__main__":
     unittest.main()

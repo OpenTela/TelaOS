@@ -83,6 +83,15 @@ class Pages(unittest.TestCase):
         self.assertIn(":where(*) { font-family: Ubuntu; }", doc)
         self.assertIn("<body><p>x</p></body>", doc)
 
+    def test_the_files_of_the_watch_are_the_checkouts(self):
+        html = '<link rel="stylesheet" href="/system/tela.css"><img src=\'/system/resources/a.png\'><a href="/home">'
+        out = judge.watch_files(html, "/repo/data/system")
+        self.assertIn('href="file:///repo/data/system/tela.css"', out)
+        self.assertIn("src='file:///repo/data/system/resources/a.png'", out)
+        self.assertIn('<a href="/home">', out)  # a page of the app, not a file
+        self.assertEqual(judge.watch_files(html, None), html)
+        self.assertIn((judge.STYLED, "icons"), judge.NOT_JUDGED)  # what is not judged without the style
+
     def test_the_css_of_the_app_is_every_pages(self):
         bax = """<app>
   <!-- <link rel="stylesheet" href="old.css"> -->
