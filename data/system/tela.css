@@ -10,7 +10,7 @@
      <style> :root { --tela-accent: #4caf50; } </style> */
 
 :root {
-  --tela-bg: #15171a;        /* the screen */
+  --tela-bg: #0a0a12;        /* the screen */
   --tela-text: #fafafa;
   --tela-accent: #2196f3;    /* buttons and links */
   --tela-on-accent: #ffffff; /* text on a button */
@@ -21,6 +21,12 @@
 
 html, body {
   background: var(--tela-bg);
+  color: var(--tela-text);
+}
+
+/* The screen of the watch draws text white and headings a little dimmer: with the style, the
+   theme's text is every heading's too, as in a browser */
+h1, h2, h3, h4, h5, h6 {
   color: var(--tela-text);
 }
 

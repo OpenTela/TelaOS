@@ -197,6 +197,19 @@ public:
     // The custom properties (--x) el declares, in its style="" too: what its content inherits
     P::Array<CssDecl> customProperties(const CssElement& el) const;
 
+    // What html {} and body {} give the page, as a browser gives them to the canvas: html's
+    // background, or body's when html has none (or a transparent one); the text, body's color, or
+    // html's. var()s put in; has* false where the sheets say nothing
+    struct Canvas {
+        bool hasBackground = false;
+        uint32_t background = 0;
+        uint8_t backgroundOpa = 255;
+        bool hasColor = false;
+        uint32_t color = 0;
+        uint8_t colorOpa = 255;
+    };
+    Canvas canvas() const;
+
     // A selector of the sheets looks at attribute `name` (class and id too): changing it may
     // change what applies
     bool looksAt(std::string_view name) const;

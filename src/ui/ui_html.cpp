@@ -1342,6 +1342,26 @@ static bool isInsideGroup(const char* html, const char* pos) {
     return false;
 }
 
+// html {} and body {} on a page, as a browser puts them on its canvas: the background (unless
+// the page has its own bgcolor=""), square, and the color its text inherits, TelaOS widgets' and
+// HTML's. After the page's content: a <style> or <link> in it counts too, as it does for what
+// comes after it
+static void apply_canvas(lv_obj_t* page, std::string_view attrs) {
+    const UI::Css::Canvas c = UI::Css::instance().canvas();
+    const bool own = !getAttr(attrs.data(), attrs.data() + attrs.size(), "bgcolor").empty();
+    if (c.hasBackground && !own) {
+        lv_obj_set_style_bg_color(page, lv_color_hex(c.background), LV_PART_MAIN);
+        lv_obj_set_style_bg_opa(page, c.backgroundOpa, LV_PART_MAIN);
+        lv_obj_set_style_radius(page, 0, LV_PART_MAIN);
+    }
+    if (c.hasColor) {
+        lv_obj_set_style_text_color(page, lv_color_hex(c.color), LV_PART_MAIN);
+        if (c.colorOpa < LV_OPA_COVER)
+            lv_obj_set_style_text_opa(page, c.colorOpa, LV_PART_MAIN);
+        HtmlFlow::setTextColor(page, c.color, c.colorOpa);
+    }
+}
+
 // Create a fullscreen transparent page container
 static lv_obj_t* createPageObj(lv_obj_t* parent) {
     lv_obj_t *scr = lv_obj_create(parent);
@@ -2276,9 +2296,12 @@ int ui_html_render_internal(const char *html) {
     for (int i = 0; i < content_count; i++) {
         LOG_I(Log::UI, "  page[%d]: len=%d parent=%p", i, contents[i].len, contents[i].parent);
         UI::Dom::element(contents[i].parent, "page", contents[i].attrs);
-        UI::CssScope page("page", contents[i].attrs,  // #settings button {} sees its page
-                          std::string_view(contents[i].start, static_cast<size_t>(contents[i].len)));
-        parse_children(contents[i].start, contents[i].len, contents[i].parent);
+        {
+            UI::CssScope page("page", contents[i].attrs,  // #settings button {} sees its page
+                              std::string_view(contents[i].start, static_cast<size_t>(contents[i].len)));
+            parse_children(contents[i].start, contents[i].len, contents[i].parent);
+        }
+        apply_canvas(contents[i].parent, contents[i].attrs);
     }
     UI::Dom::end();
     

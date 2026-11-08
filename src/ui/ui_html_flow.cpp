@@ -2595,6 +2595,15 @@ bool isNestable(const char* tag) { return handles(tag) && !isVoidName(tag) && !i
 
 bool isHtmlInput(const char* astart, const char* aend) { return !getAttr(astart, aend, "type").empty(); }
 
+void setTextColor(lv_obj_t* host, uint32_t rgb, uint8_t opa) {
+    const auto it = s_rootOf.find(host);
+    if (it == s_rootOf.end())
+        return;
+    lv_obj_set_style_text_color(it->second, lv_color_hex(rgb), LV_PART_MAIN);
+    if (opa < LV_OPA_COVER)
+        lv_obj_set_style_text_opa(it->second, opa, LV_PART_MAIN);
+}
+
 void linkStylesheet(std::string_view rel, std::string_view href, std::string_view media, bool disabled) {
     if (disabled || href.empty() || !linksStylesheet(rel))
         return;

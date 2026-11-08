@@ -1201,6 +1201,57 @@ P::Array<CssDecl> Css::customProperties(const CssElement& el) const {
     return own;
 }
 
+Css::Canvas Css::canvas() const {
+    Canvas out;
+    if (m_rules.empty())
+        return out;
+    CssElement html;
+    html.tag = "html";
+    html.root = true;
+    CssElement body;
+    body.tag = "body";
+    static const P::Array<CssElement> kNone;
+    static const P::Array<P::Array<CssDecl>> kNoCustom;
+    P::Array<CssElement> above;  // body's ancestor: html, whose custom properties are :root's
+    above.push_back(html);
+    P::Array<P::Array<CssDecl>> aboveCustom(1);
+    const auto asIs = [](P::Array<CssStateDecls> groups) {
+        return groups.empty() || groups[0].state != 0 ? P::Array<CssDecl>{} : std::move(groups[0].decls);
+    };
+    const P::Array<CssDecl> ofHtml = asIs(cascadeIn(html, {}, kNone, -1, kNoCustom, true));
+    const P::Array<CssDecl> ofBody = asIs(cascadeIn(body, {}, above, 0, aboveCustom, true));
+    // In cascade order, one per property: of background and background-color the later one wins
+    const auto background = [](const P::Array<CssDecl>& decls, CssColor& c) {
+        bool found = false;
+        for (const CssDecl& d : decls) {
+            const bool named = d.name == "background" || d.name == "background-color";
+            if (named && backgroundColor(d.name, d.value, c))
+                found = true;
+        }
+        return found;
+    };
+    const auto color = [](const P::Array<CssDecl>& decls, CssColor& c) {
+        for (const CssDecl& d : decls) {
+            if (d.name == "color" && cssColor(d.value, c))
+                return true;
+        }
+        return false;
+    };
+    CssColor c;
+    const bool htmlPaints = background(ofHtml, c) && c.alpha > 0;
+    if (htmlPaints || background(ofBody, c)) {
+        out.hasBackground = true;
+        out.background = c.rgb;
+        out.backgroundOpa = c.alpha;
+    }
+    if (color(ofBody, c) || color(ofHtml, c)) {
+        out.hasColor = true;
+        out.color = c.rgb;
+        out.colorOpa = c.alpha;
+    }
+    return out;
+}
+
 const P::Array<CssDecl>& Css::rootCustom() const {
     if (!m_rootReady) {
         m_rootReady = true;
