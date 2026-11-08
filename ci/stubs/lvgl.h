@@ -896,6 +896,9 @@ inline lv_border_side_t lv_obj_get_style_border_side(lv_obj_t* obj, int) {
     return static_cast<lv_border_side_t>(side < 0 ? LV_BORDER_SIDE_FULL : side);
 }
 inline int lv_obj_get_style_border_width(lv_obj_t* obj, int) { return MOCK_GET(borderWidth, 0); }
+inline int lv_obj_get_style_margin_right(lv_obj_t* obj, int) { return MOCK_GET(marginRight, 0); }
+inline int lv_obj_get_style_margin_left(lv_obj_t* obj, int) { return MOCK_GET(marginLeft, 0); }
+inline uint16_t lv_font_get_glyph_width(const lv_font_t*, uint32_t, uint32_t) { return 4; }  // a space
 inline void lv_obj_mark_layout_as_dirty(lv_obj_t*) {}  // the mock lays nothing out
 inline int lv_obj_get_style_height(lv_obj_t* obj, int) { return MOCK_GET(h, 0); }
 inline void lv_obj_set_style_translate_x(lv_obj_t* obj, int v, int sel) { MOCK_STYLE("translate_x", translateX, v); }

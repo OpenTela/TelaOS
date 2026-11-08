@@ -1482,6 +1482,21 @@ int baselineMove(const lv_font_t* around, const lv_font_t* own, int shift) {
     return ascent - ownAscent - (line - ownLine) / 2 + shift;
 }
 
+// The spaces between two widgets of a row of words, as a margin: the first one's on its right, or
+// the second one's on its left where the first is as wide as a share of the line (LVGL takes a
+// margin off a width in %; 100% wide, a browser's widget does not share its line anyway)
+void gapBetween(lv_obj_t* first, lv_obj_t* second, int32_t space) {
+    if (!first || !space)
+        return;
+    const bool firstShares = LV_COORD_IS_PCT(lv_obj_get_style_width(first, LV_PART_MAIN));
+    const bool secondShares = LV_COORD_IS_PCT(lv_obj_get_style_width(second, LV_PART_MAIN));
+    if (!firstShares) {
+        lv_obj_set_style_margin_right(first, lv_obj_get_style_margin_right(first, LV_PART_MAIN) + space, LV_PART_MAIN);
+    } else if (!secondShares) {
+        lv_obj_set_style_margin_left(second, lv_obj_get_style_margin_left(second, LV_PART_MAIN) + space, LV_PART_MAIN);
+    }
+}
+
 // Text with widgets, several links or sup/sub: a row that wraps word by word, like an HTML line box
 void Seg::asWords() {
     lv_obj_t* row = plainObj(box_);
@@ -1494,11 +1509,35 @@ void Seg::asWords() {
     decorate(row);
     alignWordsRow(row);
     int raise = 0;  // how far a sup goes above the line: the row makes room for it
-    for (const auto& it : items_) {
+    lv_obj_t* atom = nullptr;  // the widget made last, while only spaces came after it
+    int32_t space = 0;         // those spaces: the gap to the next widget
+    for (size_t k = 0; k < items_.size(); ++k) {
+        const Item& it = items_[k];
         if (it.type == Item::ATOM) {
+            const uint32_t before = lv_obj_get_child_count(row);
             renderAtom(it.atom, row);
+            if (lv_obj_get_child_count(row) == before + 1) {  // one made of nothing (type="hidden"):
+                lv_obj_t* made = lv_obj_get_child(row, -1);   // the spaces around it are one
+                gapBetween(atom, made, space);
+                atom = made;
+                space = 0;
+            }
             continue;
         }
+        // Only spaces between two widgets: a gap a browser drops where the line breaks between
+        // them. As a margin of one of the two it is a gap on one line and nothing at a break, where
+        // a word of its own would be a line of its own
+        const bool gap = atom && k + 1 < items_.size() && items_[k + 1].type == Item::ATOM &&
+                         it.type == Item::TEXT && it.text.find_first_not_of(' ') == P::String::npos;
+        if (gap) {
+            const lv_font_t* font = runFont(it.st, lv_obj_get_style_text_font(row, LV_PART_MAIN));
+            if (!font)
+                font = lv_obj_get_style_text_font(row, LV_PART_MAIN);
+            space = lv_font_get_glyph_width(font, ' ', 0);
+            continue;
+        }
+        atom = nullptr;
+        space = 0;
         if (it.type == Item::BREAK) {
             lv_obj_t* br = plainObj(row);
             lv_obj_set_size(br, lv_pct(100), 0);
