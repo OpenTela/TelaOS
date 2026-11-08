@@ -115,6 +115,11 @@ wait 200
 # ---- forms -----------------------------------------------------------------------------
 tap "Forms"
 wait 200
+# a browser's box: 13x13, the mark drawn in it
+expect @agree :w 13
+expect @agree :h 13
+expect @r1 :w 13
+expect @r1 :h 13
 expect @agree off
 tap @agree
 expect @agree on

@@ -508,6 +508,12 @@ int main() {
     printf("\nForms:\n");
     render(APP_FORMS);
     expectTrue("checkbox checked", byId("cb") && byId("cb")->checked);
+    expectTrue("checkbox: a browser's box, 13x13", byId("cb") && byId("cb")->w == 13 && byId("cb")->h == 13);
+    expectTrue("radio: a browser's box, 13x13", byId("r1") && byId("r1")->w == 13 && byId("r1")->h == 13);
+    expectTrue("checkbox: a browser's margins, 3px 3px 3px 4px", byId("cb") && byId("cb")->marginTop == 3 &&
+               byId("cb")->marginRight == 3 && byId("cb")->marginBottom == 3 && byId("cb")->marginLeft == 4);
+    expectTrue("radio: a browser's margins, 3px 3px 0 5px", byId("r1") && byId("r1")->marginTop == 3 &&
+               byId("r1")->marginRight == 3 && byId("r1")->marginBottom == 0 && byId("r1")->marginLeft == 5);
     expectTrue("checkbox unchecked", byId("cb2") && !byId("cb2")->checked);
     expectTrue("radio checked attribute", byId("r2") && byId("r2")->checked && byId("r1") && !byId("r1")->checked);
     {
