@@ -23,6 +23,8 @@
 //   tree <name>              save <out>/<name>.json: widget tree with boxes, values and
 //                            the ids the app gave its elements ("name"); the app's elements
 //                            as its script sees them, with the boxes of their objects ("dom")
+//   idle <name> <ms>         <ms> without a touch; what the panel redrew meanwhile into
+//                            <out>/<name>.idle.json: pixels, refreshes, the areas redrawn
 //   log <text> | quit
 #pragma once
 

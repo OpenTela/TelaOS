@@ -9,6 +9,9 @@
 # Pictures live in the sim-screens branch (one commit, no history). A merged PR keeps them, so
 # its comment still shows what it changed; a PR closed without merging has them removed.
 # PRs from forks get the same report in the job summary and the artifact, without pictures.
+#
+# The ASan job runs the same simulator under AddressSanitizer and UBSan: every robot, every
+# screen, the random pages. A memory error often draws the right pixels; this fails on it.
 name: PR checks
 
 on:
@@ -43,6 +46,10 @@ jobs:
         run: python3 ci/test.py "$GITHUB_WORKSPACE"
       - name: Simulator tools tests
         run: python3 -m unittest discover -s sim/tools -p 'test_*.py'
+      - name: Workflow scripts tests
+        run: python3 -m unittest discover -s .github/scripts -p 'test_*.py'
+      - name: Documents against code
+        run: python3 .github/scripts/doc_check.py .
 
   firmware:
     name: Firmware (${{ matrix.board }})
@@ -116,8 +123,8 @@ jobs:
           path: ~/.cache/ccache
           key: ccache-sim-${{ runner.os }}-${{ github.sha }}
           restore-keys: ccache-sim-${{ runner.os }}-
-      # The judge (sim/tools/judge.py): one Playwright version, so the same Chromium every run.
-      # Without it the report says the compatibility was not measured; the screens go on
+      # The judges (sim/tools/judge.py, anim_judge.py): one Playwright version, so the same Chromium
+      # every run. Without it the report says they were not measured; the screens go on
       - name: Chromium for the judge
         continue-on-error: true
         run: |
@@ -151,6 +158,8 @@ jobs:
             out/report.md
             out/status.json
             out/judge.json
+            out/anim_judge.json
+            out/anim-head/
             out/publish/
             out/shots-head/
             out/tests/
@@ -191,6 +200,41 @@ jobs:
         run: |
           echo "::error::The simulator did not build or a robot test failed: see the report and the sim-screens artifact"
           exit 1
+
+  asan:
+    name: Simulator ASan
+    if: github.event.action != 'closed'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v6
+      - name: Dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends cmake ninja-build ccache \
+            libsdl2-dev libpng-dev libmbedtls-dev
+      - name: Compiler cache
+        uses: actions/cache@v5
+        with:
+          path: ~/.cache/ccache
+          key: ccache-asan-${{ runner.os }}-${{ github.sha }}
+          restore-keys: ccache-asan-${{ runner.os }}-
+      - name: Robots, screens and random pages under ASan and UBSan
+        run: python3 sim/tools/sim_asan.py --head . --out asan --pages 300
+      - name: Report in the job summary
+        if: always()
+        run: cat asan/asan.md >> "$GITHUB_STEP_SUMMARY" || true
+      - name: Logs
+        if: failure()
+        uses: actions/upload-artifact@v6
+        with:
+          name: sim-asan
+          path: |
+            asan/asan.md
+            asan/build.log
+            asan/logs/**/*.log
+          retention-days: 14
+          if-no-files-found: ignore
 
   cleanup:
     name: Remove PR screens

@@ -767,6 +767,15 @@ P::Map<const lv_obj_t*, BoxMargins>& s_margins = *P::create<P::Map<const lv_obj_
 
 void forgetMargins(const lv_obj_t* box) { s_margins.erase(box); }
 
+// While the flow builds a control in its lines: browserSized()
+int s_browserSized = 0;
+struct BrowserSized {
+    BrowserSized() { ++s_browserSized; }
+    ~BrowserSized() { --s_browserSized; }
+    BrowserSized(const BrowserSized&) = delete;
+    BrowserSized& operator=(const BrowserSized&) = delete;
+};
+
 // CSS: the largest of the positive margins plus the most negative of the negative ones
 int collapsed(int a, int b) { return std::max({a, b, 0}) + std::min({a, b, 0}); }
 
@@ -1441,7 +1450,8 @@ void onWordsStyle(lv_event_t* e) {
 // follows text-align, now and when it changes
 void alignWordsRow(lv_obj_t* row) {
     const bool rtl = lv_obj_get_style_base_dir(row, LV_PART_MAIN) == LV_BASE_DIR_RTL;
-    if (rtl) lv_obj_set_style_base_dir(row, LV_BASE_DIR_LTR, LV_PART_MAIN);
+    if (rtl)
+        lv_obj_set_style_base_dir(row, LV_BASE_DIR_LTR, LV_PART_MAIN);
     placeWords(row, rtl);
     lv_obj_add_event_cb(row, onWordsStyle, LV_EVENT_STYLE_CHANGED, rtl ? row : nullptr);
 }
@@ -2471,6 +2481,7 @@ void thElement(const TagRef& t, lv_obj_t* parent) {
 
 void renderAtom(const TagRef& t, lv_obj_t* parent) {
     const char* n = t.name.c_str();
+    BrowserSized sized;
     if (is(n, "img")) imgElement(t, parent);
     else if (is(n, "input") && isHtmlInput(t.astart, t.aend)) inputElement(t, parent);
     else if (is(n, "textarea")) textareaElement(t, parent);
@@ -2689,6 +2700,8 @@ bool isPositioned(const char* tag, const char* astart, const char* aend) {
 lv_obj_t* flowBox(lv_obj_t* parent) { return flowParent(parent); }
 
 bool inFlow(lv_obj_t* box) { return s_flow.count(box) != 0; }
+
+bool browserSized() { return s_browserSized > 0; }
 
 bool setText(lv_obj_t* obj, const char* text) {
     if (!obj) return false;

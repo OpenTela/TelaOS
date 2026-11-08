@@ -237,6 +237,7 @@ typedef enum {
     LV_EVENT_REFR_EXT_DRAW_SIZE,
     LV_EVENT_LAYOUT_CHANGED,
     LV_EVENT_STYLE_CHANGED,
+    LV_EVENT_SCROLL_END,
     LV_EVENT_ALL = 0xFF,
     LV_EVENT_PREPROCESS = 0x8000,  // a flag: the callback runs before the others
 } lv_event_code_t;
@@ -664,6 +665,7 @@ inline int lv_obj_get_y(lv_obj_t* obj) { return (obj && obj->mock_widget) ? obj-
 inline int lv_obj_get_width(lv_obj_t* obj) { return (obj && obj->mock_widget) ? obj->mock_widget->w : 100; }
 inline int lv_obj_get_height(lv_obj_t* obj) { return (obj && obj->mock_widget) ? obj->mock_widget->h : 100; }
 inline int lv_obj_get_content_height(lv_obj_t* obj) { return (obj && obj->mock_widget) ? obj->mock_widget->h : 100; }
+inline int lv_obj_get_content_width(lv_obj_t* obj) { return (obj && obj->mock_widget) ? obj->mock_widget->w : 100; }
 // Resolve lv_pct values to pixels from parent chain
 inline void lv_obj_update_layout(lv_obj_t* obj) {
     if (!obj || !obj->mock_widget || !obj->parent) return;
@@ -741,6 +743,7 @@ inline void lv_obj_set_grid_cell(lv_obj_t*, lv_grid_align_t, int, int, lv_grid_a
 inline void* lv_event_get_user_data(lv_event_t* e) { return e ? e->user_data : nullptr; }
 inline lv_obj_t* lv_event_get_target(lv_event_t* e) { return e ? static_cast<lv_obj_t*>(e->target) : nullptr; }
 inline void* lv_event_get_current_target(lv_event_t* e) { return e ? e->current_target : nullptr; }
+inline void lv_event_stop_processing(lv_event_t*) {}
 inline void* lv_event_get_param(lv_event_t* e) { return e ? e->param : nullptr; }
 inline lv_event_code_t lv_event_get_code(lv_event_t* e) {
     return e ? static_cast<lv_event_code_t>(e->code) : LV_EVENT_CLICKED;
@@ -877,7 +880,8 @@ inline lv_flex_flow_t lv_obj_get_style_flex_flow(lv_obj_t* obj, int) {
 #endif
 inline lv_flex_align_t lv_obj_get_style_flex_main_place(lv_obj_t* obj, int) { return static_cast<lv_flex_align_t>(MOCK_GET(flexMainAlign, 0)); }
 inline void lv_obj_set_style_flex_main_place(lv_obj_t* obj, lv_flex_align_t v, int) {
-    if (obj && obj->mock_widget) obj->mock_widget->flexMainAlign = (int)v;
+    if (obj && obj->mock_widget)
+        obj->mock_widget->flexMainAlign = (int)v;
 }
 // The element's own text-align only: the mock does not inherit styles
 inline lv_text_align_t lv_obj_get_style_text_align(lv_obj_t* obj, int) {
@@ -917,7 +921,8 @@ enum {
     LV_STYLE_BORDER_SIDE, LV_STYLE_TEXT_DECOR, LV_STYLE_TEXT_LETTER_SPACE,
     LV_STYLE_LAST_BUILT_IN_PROP = LV_STYLE_TEXT_LETTER_SPACE,
     // set and read one at a time (the margins of HTML blocks); css_undo.cpp's mock walks none of them
-    LV_STYLE_MARGIN_TOP, LV_STYLE_MARGIN_BOTTOM, LV_STYLE_PAD_TOP, LV_STYLE_PAD_BOTTOM
+    LV_STYLE_MARGIN_TOP, LV_STYLE_MARGIN_BOTTOM, LV_STYLE_PAD_TOP, LV_STYLE_PAD_BOTTOM,
+    LV_STYLE_TEXT_FONT  // taken off only (a browser-sized button's label: the button's font)
 };
 typedef struct {
     const lv_style_prop_t* props;
@@ -1137,6 +1142,7 @@ inline bool lv_obj_remove_local_style_prop(lv_obj_t* obj, lv_style_prop_t prop, 
     if (prop == LV_STYLE_BORDER_COLOR) { w->borderColor = 0; return true; }
     if (prop == LV_STYLE_MARGIN_TOP) { w->hasMarginTop = false; w->marginTop = 0; return true; }
     if (prop == LV_STYLE_MARGIN_BOTTOM) { w->hasMarginBottom = false; w->marginBottom = 0; return true; }
+    if (prop == LV_STYLE_TEXT_FONT) { w->font = nullptr; w->fontSize = 0; return true; }
     int unset = 0;
     int* f = mockField(w, prop, unset);
     if (!f) return false;

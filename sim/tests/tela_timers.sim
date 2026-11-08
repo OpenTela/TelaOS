@@ -1,0 +1,32 @@
+# tela_timers.sim — an app's <timer> tags are FreeRTOS timers: in the simulator they fire on its
+# virtual clock, as the timer task fires them on the watch. The stopwatch of data/apps/timers
+# counts its 100 ms timer.
+
+wait 500
+> app launch timers
+wait 1000
+expect $sw_ms 0
+
+tap "Старт"
+wait 1000
+expect $sw_ms 900..1100
+wait 2000
+expect $sw_ms 2900..3100
+expect $sw_time contains "00:03."
+
+# paused: the timer still fires, the stopwatch does not count
+tap "Пауза"
+wait 300
+expect $sw_running "false"
+expect $sw_ms 3100..3400
+wait 1000
+expect $sw_ms 3100..3400
+
+# the timers go with the app and come back with it
+> app home
+wait 500
+> app launch timers
+wait 1000
+tap "Старт"
+wait 1000
+expect $sw_ms 900..1100
