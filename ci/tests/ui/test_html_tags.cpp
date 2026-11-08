@@ -219,6 +219,8 @@ static const char* APP_FORMS = R"HTML(
     <input type="text" id="small" size="10"> <input type="email" id="sized" w="300">
     <textarea id="wide" cols="30" rows="1"></textarea>
     <input id="placed" x="10" y="300"/>
+    <select id="selw" w="200"><option>W</option></select>
+    <select id="selx" x="10" y="340"><option>P</option></select>
   </form>
 </page></ui></app>
 )HTML";
@@ -549,6 +551,12 @@ int main() {
                    r->marginTop == 2 && r->marginRight == 2 && r->marginBottom == 2 && r->marginLeft == 2);
     }
     expectTrue("select stays TelaOS dropdown", byId("sel") && byId("sel")->type == "Dropdown");
+    expectTrue("<select>: a browser's, 19 high, 1px border, 14px text", byId("sel") && byId("sel")->h == 19 &&
+               byId("sel")->borderWidth == 1 && byId("sel")->fontSize == 14);
+    expectTrue("<select w=200>: w= over the browser's width", byId("selw") && byId("selw")->w == 200 &&
+               byId("selw")->h == 19);
+    expectTrue("<select x= y=>: placed by TelaOS, TelaOS's size", byId("selx") && byId("selx")->h != 19 &&
+               byId("selx")->borderWidth != 1);
     expectTrue("input without type= stays TelaOS input", byId("tela") && byId("tela")->type == "TextArea");
     expectTrue("checked before type=: still a checked checkbox", byId("cb3") && byId("cb3")->checked);
     expectTrue("disabled before id=: the id is kept", byId("off") != nullptr);
