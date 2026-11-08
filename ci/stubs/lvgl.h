@@ -1228,6 +1228,8 @@ inline void lv_textarea_set_one_line(lv_obj_t*, bool) {}
 inline void lv_textarea_set_max_length(lv_obj_t*, uint32_t) {}
 #endif
 inline void lv_dropdown_open(lv_obj_t*) {}
+inline void lv_dropdown_set_symbol(lv_obj_t*, const void*) {}
+inline lv_obj_t* lv_dropdown_get_list(lv_obj_t*) { return nullptr; }
 inline const char* lv_textarea_get_text(lv_obj_t* obj) {
     if (obj && obj->mock_widget) return obj->mock_widget->text.c_str();
     return "";
