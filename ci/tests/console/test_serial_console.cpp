@@ -162,7 +162,59 @@ int main() {
         if (outputContains("[1] OK") && val == "bar") PASS();
         else { FAIL("chain failed"); printf("      val='%s'\n", val.c_str()); }
     }
-    
+
+    // === payload ===
+    printf("\npayload (sys screen, app pull: a buffer the transport takes):\n");
+
+    TEST("text payload: printed, then freed");
+    {
+        resetTest();
+        auto r = Console::Result::ok();
+        auto* buf = (uint8_t*)ps_malloc(5);
+        memcpy(buf, "hello", 5);
+        r.withStringData(buf, 5);
+        const int freed = g_heap_caps_freed;
+        Console::SerialTransport::instance().sendResult(1, r);
+        const bool printed = outputContains("[string: 5 bytes]") && outputContains("hello");
+        const bool freedOnce = g_heap_caps_freed == freed + 1;
+        if (printed && freedOnce)
+            PASS();
+        else {
+            FAIL("not freed");
+            printf("      freed %d\n", g_heap_caps_freed - freed);
+        }
+    }
+
+    TEST("binary payload: printed as base64, then freed");
+    {
+        resetTest();
+        auto r = Console::Result::ok();
+        auto* buf = (uint8_t*)ps_malloc(3);
+        memcpy(buf, "abc", 3);
+        r.withBinaryData(buf, 3);
+        const int freed = g_heap_caps_freed;
+        Console::SerialTransport::instance().sendResult(1, r);
+        const bool printed = outputContains("[binary: 3 bytes]");
+        const bool freedOnce = g_heap_caps_freed == freed + 1;
+        if (printed && freedOnce)
+            PASS();
+        else {
+            FAIL("not freed");
+            printf("      freed %d\n", g_heap_caps_freed - freed);
+        }
+    }
+
+    TEST("no payload: nothing freed");
+    {
+        resetTest();
+        const int freed = g_heap_caps_freed;
+        Console::SerialTransport::instance().sendResult(1, Console::Result::ok());
+        if (g_heap_caps_freed == freed)
+            PASS();
+        else
+            FAIL("freed something");
+    }
+
     // === Summary ===
     printf("\n");
     if (passed == total) {

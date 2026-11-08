@@ -8,6 +8,7 @@
 #include "console/transport.h"
 #include <Arduino.h>
 #include <base64.h>
+#include <esp_heap_caps.h>
 
 namespace Console {
 
@@ -52,6 +53,7 @@ public:
                 Serial.println();
             }
         }
+        heap_caps_free(result.payload);  // printed: it was ours (over BLE, BinTransfer frees it once sent)
     }
     
     void sendText(const char* text) override {
