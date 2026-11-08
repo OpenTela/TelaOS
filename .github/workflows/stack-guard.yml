@@ -1,0 +1,29 @@
+# Stack guard: a PR stacked on another targets the other's branch. Once that one is merged, the
+# PR on it has to move onto future before it is merged itself, or it lands in a branch nobody
+# merges (#41–#43, #83–#84). The guard (.github/scripts/stack_guard.py) puts a "Stack guard"
+# status on each PR: green on future, or on the branch of a PR still open; red on a branch whose
+# PR is merged or closed. A PR merged or closed turns the PRs on its branch red at once.
+name: Stack guard
+
+on:
+  pull_request:
+    types: [opened, reopened, edited, synchronize, closed]
+
+permissions:
+  contents: read
+  pull-requests: read
+  statuses: write
+
+jobs:
+  guard:
+    name: Stack guard
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          sparse-checkout: .github/scripts
+      - name: The base of this PR, and of the PRs on its branch once it is closed
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: python3 .github/scripts/stack_guard.py
