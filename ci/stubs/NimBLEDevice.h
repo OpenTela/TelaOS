@@ -1,7 +1,9 @@
 #pragma once
 // NimBLE stub for TelaCI and the simulator: no radio. The objects are real, so the firmware's
-// setup runs as on the watch, and NimBLEMock keeps what it asked for (security, the properties of
-// each characteristic) and the server's callbacks, for a test to call as the host task would.
+// setup runs as on the watch and never calls a member of a null pointer (UBSan in
+// sim/tools/sim_asan.py reports that); NimBLEMock keeps what it asked for (security, the
+// properties of each characteristic) and the server's callbacks, for a test to call as the host
+// task would.
 #include <cstdint>
 #include <map>
 #include <string>

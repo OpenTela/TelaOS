@@ -415,7 +415,31 @@ bool hiddenInTree(const lv_obj_t* o) {
     return false;
 }
 
-// The elements as nested JSON: each one with the box of its object, if it has one
+std::string hexColor(lv_color_t c) {
+    char s[8];
+    std::snprintf(s, sizeof s, "#%02X%02X%02X", c.red, c.green, c.blue);
+    return s;
+}
+
+// What moves on an element, as LVGL has it now (mid-transition too): opa and the colors' opa
+// 0..255, scale 256 = 1, rotation in 0.1°, translate in px (a % of the object's own size too)
+void dumpMotion(std::ostream& f, const lv_obj_t* o) {
+    int32_t tx = lv_obj_get_style_translate_x(o, LV_PART_MAIN), ty = lv_obj_get_style_translate_y(o, LV_PART_MAIN);
+    if (LV_COORD_IS_PCT(tx)) tx = LV_COORD_GET_PCT(tx) * lv_obj_get_width(o) / 100;
+    if (LV_COORD_IS_PCT(ty)) ty = LV_COORD_GET_PCT(ty) * lv_obj_get_height(o) / 100;
+    f << ", \"style\": {\"opa\": " << int(lv_obj_get_style_opa(o, LV_PART_MAIN))
+      << ", \"bg\": \"" << hexColor(lv_obj_get_style_bg_color(o, LV_PART_MAIN))
+      << "\", \"bg_opa\": " << int(lv_obj_get_style_bg_opa(o, LV_PART_MAIN))
+      << ", \"color\": \"" << hexColor(lv_obj_get_style_text_color(o, LV_PART_MAIN))
+      << "\", \"color_opa\": " << int(lv_obj_get_style_text_opa(o, LV_PART_MAIN))
+      << ", \"translate\": [" << tx << ", " << ty << "]"
+      << ", \"scale\": [" << lv_obj_get_style_transform_scale_x(o, LV_PART_MAIN) << ", "
+      << lv_obj_get_style_transform_scale_y(o, LV_PART_MAIN) << "]"
+      << ", \"rotation\": " << lv_obj_get_style_transform_rotation(o, LV_PART_MAIN) << "}";
+}
+
+// The elements as nested JSON: each one with the box of its object, if it has one, and, if it
+// has an id, what moves on it (anim_judge.py)
 void dumpDom(std::ostream& f, const std::vector<DomNode>& nodes) {
     f << "[";
     int open = -1;  // the depth of the element written last: its "}" is not written yet
@@ -437,6 +461,7 @@ void dumpDom(std::ostream& f, const std::vector<DomNode>& nodes) {
             f << ", \"x\": " << a.x1 << ", \"y\": " << a.y1 << ", \"w\": " << lv_area_get_width(&a)
               << ", \"h\": " << lv_area_get_height(&a);
             if (hiddenInTree(n.obj)) f << ", \"hidden\": true";
+            if (!n.id.empty()) dumpMotion(f, n.obj);
         }
     }
     if (open >= 0) {
