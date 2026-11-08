@@ -147,7 +147,8 @@ void display_sleep() {
     // wake the refresh timer again (LV_EVENT_REFR_REQUEST); the app runs on, the touch is read
     if (s_display && !s_asleep) {
         lv_display_enable_invalidation(s_display, false);
-        if (lv_timer_t* refr = lv_display_get_refr_timer(s_display)) lv_timer_pause(refr);
+        if (lv_timer_t* refr = lv_display_get_refr_timer(s_display))
+            lv_timer_pause(refr);
     }
     s_asleep = true;
 }
@@ -156,7 +157,8 @@ void display_wake() {
     // TODO: per-board wake sequence (re-init panel if needed)
     if (s_display && s_asleep) {
         lv_display_enable_invalidation(s_display, true);
-        if (lv_timer_t* refr = lv_display_get_refr_timer(s_display)) lv_timer_resume(refr);
+        if (lv_timer_t* refr = lv_display_get_refr_timer(s_display))
+            lv_timer_resume(refr);
         // What changed while asleep was not marked: the whole screen, before the backlight
         lv_obj_invalidate(lv_display_get_screen_active(s_display));
         lv_refr_now(s_display);
