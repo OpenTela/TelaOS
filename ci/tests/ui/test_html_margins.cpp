@@ -4,7 +4,7 @@
  * instead, collapsing between blocks, out of a parent with nothing in their way, into the body's
  * 8px. The objects carry the used margins: flex adds the one below to the next one's above.
  * And aside: 40px on both sides of <blockquote> and <figure>, on the side lines start of <dd>,
- * <fieldset>'s 2px with its frame and padding; the page's CSS instead.
+ * <fieldset>'s 2px with its frame and padding, and with a <legend> on its frame; the page's CSS instead.
  */
 #include <cstdio>
 #include <string>
@@ -52,7 +52,8 @@ static const char* APP_ASIDE = R"HTML(
       <figure id="fig"><figcaption>Caption</figcaption></figure>
       <dl><dt>Term</dt><dd id="dd">Definition</dd></dl>
       <dl dir="rtl"><dt>Term</dt><dd id="ddRtl">Definition</dd></dl>
-      <fieldset id="fs"><legend>Group</legend>Inside</fieldset>
+      <fieldset id="fs">Inside</fieldset>
+      <fieldset id="fsLegend"><legend>Group</legend>Inside</fieldset>
       <blockquote id="flat" class="flat">The page's CSS</blockquote>
       <figure id="oneSide" style="margin-left: 0">The page's CSS, one side</figure>
     </page>
@@ -168,6 +169,23 @@ int main() {
             if (w && w->padTop == 6 && w->padBottom == 10) PASS();
             else FAIL(w ? ("pad " + std::to_string(w->padTop) + " / " + std::to_string(w->padBottom)).c_str()
                         : "no widget");
+        }
+    }
+    // with a legend on its top edge the fieldset draws its frame itself: the frame's 2px go into the
+    // padding of the three sides below the legend, and the 0.35em above go under the legend
+    expectAside("<fieldset> with a <legend>: the same 2px, the frame's 2px in its padding", "fsLegend", 2, 2, 14,
+                14, 2);
+    {
+        const MW* w = byId("fsLegend");
+        const bool padded = w && w->padTop == 0 && w->padBottom == 12;
+        const bool drawn = w && w->borderSide == LV_BORDER_SIDE_NONE;  // drawFieldsetBorder draws it
+        TEST("<fieldset> with a <legend>: the legend at its top, the frame's 2px in the padding below") {
+            if (padded && drawn)
+                PASS();
+            else
+                FAIL(w ? ("pad " + std::to_string(w->padTop) + " / " + std::to_string(w->padBottom) + ", side " +
+                          std::to_string(w->borderSide)).c_str()
+                       : "no widget");
         }
     }
     expectAside("the page's CSS instead: margin: 0", "flat", 0, 0, 0, 0, 0);

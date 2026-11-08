@@ -1778,7 +1778,25 @@ void delegate(const TagRef& t, lv_obj_t* box) {  // a TelaOS tag inside HTML con
     }
 }
 
+// The fieldset being rendered, and its rendered legend: the first <legend> right in it, which a
+// browser draws on its top border (legendOnBorder)
+struct Fieldset {
+    lv_obj_t* box = nullptr;
+    lv_obj_t* legend = nullptr;
+};
+Fieldset s_fieldset;
+
+void textBlock(const TagRef& t, lv_obj_t* box, const Ctx& ctx);
+
 void textElement(const TagRef& t, lv_obj_t* box, const Ctx& ctx) {
+    const bool legend = is(t.name, "legend") && box == s_fieldset.box && !s_fieldset.legend;
+    const auto before = lv_obj_get_child_count(box);
+    textBlock(t, box, ctx);
+    if (legend && lv_obj_get_child_count(box) == before + 1)
+        s_fieldset.legend = lv_obj_get_child(box, -1);
+}
+
+void textBlock(const TagRef& t, lv_obj_t* box, const Ctx& ctx) {
     const TextLook look = lookFor(t.name, UI::Font::sizeOf(lv_obj_get_style_text_font(box, LV_PART_MAIN)));
     if (!hasBlockOrAtom(t.cstart, t.cend)) {
         Inside in(t);  // its runs and widgets are inside it; its own style ignores this (see CssScope)
@@ -1800,6 +1818,81 @@ void textElement(const TagRef& t, lv_obj_t* box, const Ctx& ctx) {
 }
 
 void disableControls(lv_obj_t* o);
+
+#if !defined(LVGL_MOCK_ENABLED)
+// A fieldset's border with its legend on it, as a browser draws it: the top line through the
+// middle of the legend, stopped either side of it. The border is the fieldset's own, as CSS and the
+// theme give it, drawn three times clipped: left of the legend, right of it and below it
+void drawFieldsetBorder(lv_event_t* e) {
+    auto* fs = static_cast<lv_obj_t*>(lv_event_get_current_target(e));
+    lv_draw_rect_dsc_t frame;
+    lv_draw_rect_dsc_init(&frame);
+    lv_obj_init_draw_rect_dsc(fs, LV_PART_MAIN, &frame);
+    if (frame.border_width <= 0 || frame.border_opa <= LV_OPA_MIN)
+        return;
+    frame.bg_opa = LV_OPA_TRANSP;  // the rest of the fieldset lv_obj has drawn
+    frame.bg_image_src = nullptr;
+    frame.shadow_width = 0;
+    frame.outline_width = 0;
+    frame.border_side = LV_BORDER_SIDE_FULL;
+    lv_area_t area;
+    lv_obj_get_coords(fs, &area);
+    lv_layer_t* layer = lv_event_get_layer(e);
+    auto* legend = static_cast<lv_obj_t*>(lv_event_get_user_data(e));
+    bool shown = false;  // the legend may have gone (ui.remove) or be hidden: then the whole border
+    for (uint32_t i = 0; i < lv_obj_get_child_count(fs) && !shown; ++i) {
+        shown = lv_obj_get_child(fs, static_cast<int32_t>(i)) == legend && !lv_obj_has_flag(legend, LV_OBJ_FLAG_HIDDEN);
+    }
+    if (!shown) {
+        lv_draw_rect(layer, &frame, &area);
+        return;
+    }
+    lv_area_t lg;
+    lv_obj_get_coords(legend, &lg);
+    area.y1 = (lg.y1 + lg.y2 + 1) / 2 - frame.border_width / 2;
+    const lv_area_t clip = layer->_clip_area;  // as LVGL's widgets clip a part of what they draw
+    const lv_area_t parts[] = {{LV_COORD_MIN, LV_COORD_MIN, lg.x1 - 1, LV_COORD_MAX},
+                               {lg.x2 + 1, LV_COORD_MIN, LV_COORD_MAX, LV_COORD_MAX},
+                               {lg.x1, lg.y2 + 1, lg.x2, LV_COORD_MAX}};
+    for (const lv_area_t& part : parts) {
+        const lv_area_t c = {LV_MAX(clip.x1, part.x1), LV_MAX(clip.y1, part.y1), LV_MIN(clip.x2, part.x2),
+                             LV_MIN(clip.y2, part.y2)};
+        if (c.x1 > c.x2 || c.y1 > c.y2)
+            continue;
+        layer->_clip_area = c;
+        lv_draw_rect(layer, &frame, &area);
+    }
+    layer->_clip_area = clip;
+}
+#endif
+
+// A fieldset's rendered legend, as a browser lays it out: on the top border, as wide as its text
+// with 2px aside (no wider than the fieldset), the fieldset's padding above under it. LVGL draws
+// none of the border, drawFieldsetBorder all of it: its width goes into the padding of the three
+// sides below the legend, so what is inside stays where the border left it
+void legendOnBorder(lv_obj_t* fs, lv_obj_t* legend) {
+    lv_obj_set_width(legend, LV_SIZE_CONTENT);
+    lv_obj_set_style_max_width(legend, lv_pct(100), LV_PART_MAIN);
+    lv_obj_set_style_pad_left(legend, 2, LV_PART_MAIN);
+    lv_obj_set_style_pad_right(legend, 2, LV_PART_MAIN);
+    const int32_t padTop = lv_obj_get_style_pad_top(fs, LV_PART_MAIN);
+    const int32_t bw = lv_obj_get_style_border_width(fs, LV_PART_MAIN);
+    lv_obj_set_style_pad_top(fs, 0, LV_PART_MAIN);
+    lv_obj_set_style_pad_left(fs, lv_obj_get_style_pad_left(fs, LV_PART_MAIN) + bw, LV_PART_MAIN);
+    lv_obj_set_style_pad_right(fs, lv_obj_get_style_pad_right(fs, LV_PART_MAIN) + bw, LV_PART_MAIN);
+    lv_obj_set_style_pad_bottom(fs, lv_obj_get_style_pad_bottom(fs, LV_PART_MAIN) + bw, LV_PART_MAIN);
+    lv_obj_set_style_border_side(fs, LV_BORDER_SIDE_NONE, LV_PART_MAIN);
+    // The padding under the legend is not a margin that joins the next one's: the legend keeps it
+    // as its own, and what comes after keeps its margin above (collapse writes them)
+    Margin& m = s_margins[fs].kids[legend];
+    m.keep = true;
+    m.own[kAbove] = 0;
+    m.own[kBelow] = static_cast<int16_t>(padTop);
+    collapse(fs);
+#if !defined(LVGL_MOCK_ENABLED)
+    lv_obj_add_event_cb(fs, drawFieldsetBorder, LV_EVENT_DRAW_MAIN, legend);
+#endif
+}
 
 void blockElement(const TagRef& t, lv_obj_t* box, const Ctx& ctx) {
     const char* n = t.name.c_str();
@@ -1834,8 +1927,18 @@ void blockElement(const TagRef& t, lv_obj_t* box, const Ctx& ctx) {
         lv_obj_set_style_text_align(b, LV_TEXT_ALIGN_CENTER, LV_PART_MAIN);
     }
     applyGlobal(t, b);
+    if (!is(n, "fieldset")) {
+        renderInto(t, b, ctx);
+        return;
+    }
+    const Fieldset outer = s_fieldset;  // a fieldset in a fieldset
+    s_fieldset = {b, nullptr};
     renderInto(t, b, ctx);
-    if (is(n, "fieldset") && has(t, "disabled")) disableControls(b);  // every control inside is off
+    if (s_fieldset.legend)
+        legendOnBorder(b, s_fieldset.legend);
+    s_fieldset = outer;
+    if (has(t, "disabled"))  // every control inside is off
+        disableControls(b);
 }
 
 // ---- Lists ----
