@@ -1,10 +1,11 @@
-/* tela.css 0.1 — the look of TelaOS for plain HTML (docs/CSS.md, «Стиль часов»)
+/* tela.css 0.2 — the look of TelaOS for plain HTML (docs/CSS.md, «Стиль часов»)
 
      <link rel="stylesheet" href="/system/tela.css">
 
    No classes: the tags as they are look like the apps of TelaOS without HTML — the dark screen,
-   blue buttons a finger hits: rounded, not lower than 44px, text 16px. Chromium shows a page
-   with this file the same way, and the judge holds it to that.
+   blue buttons a finger hits: rounded, not lower than 44px, text 16px; fields and lists across
+   the screen, as high as a button. Chromium shows a page with this file the same way, and the
+   judge holds it to that.
 
    A theme is the variables again, after this file:
      <style> :root { --tela-accent: #4caf50; } </style> */
@@ -17,6 +18,9 @@
   --tela-pressed: #1976d2;   /* a button under the finger */
   --tela-radius: 10px;
   --tela-tap: 44px;          /* the least height of what a finger presses */
+  --tela-surface: #1e1e2a;   /* a field and a list on the screen */
+  --tela-line: #3a3a4c;      /* their border */
+  color-scheme: dark;        /* what a browser draws of its own controls: dark too */
 }
 
 html, body {
@@ -57,4 +61,45 @@ input[type="reset"]:active {
 button:disabled,
 input:disabled {
   opacity: 0.5;
+}
+
+/* Fields a finger types in and lists it picks from: across the screen, not lower than a button,
+   the text 16px on the screen's cards, 8px apart one under another (4px above and below each:
+   a field is a word of its line, its line as high as it with them). A textarea is as high as
+   its rows */
+input[type="text"],
+input[type="password"],
+input[type="email"],
+input[type="search"],
+input[type="tel"],
+input[type="url"],
+input[type="number"],
+select,
+textarea {
+  box-sizing: border-box;
+  width: 100%;
+  min-height: var(--tela-tap);
+  margin-top: 4px;
+  margin-bottom: 4px;
+  padding: 10px 12px;
+  border: 1px solid var(--tela-line);
+  border-radius: var(--tela-radius);
+  background: var(--tela-surface);
+  color: var(--tela-text);
+  font-size: 16px;
+}
+
+/* Boxes a finger can see: 22px, as TelaOS has them; the finger has more room around them */
+input[type="checkbox"],
+input[type="radio"] {
+  width: 22px;
+  height: 22px;
+  accent-color: var(--tela-accent);
+}
+
+/* The accent a browser draws its controls in: the watch's are in it already */
+input[type="range"],
+progress,
+meter {
+  accent-color: var(--tela-accent);
 }

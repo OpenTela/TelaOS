@@ -165,6 +165,9 @@ tap @remember:0.85,0.5
 expect @remcb on
 tap @remember:0.85,0.5
 expect @remcb off
+# a field in its own font (style=""): as high as a browser makes it, the line of 20px and 1px + 2px
+expect @bigText :h 30
+expect @bigText :w 300
 shot html_05_forms_attrs
 # typing opens the on-screen keyboard over the lower half: last on this page
 expect @who ""
