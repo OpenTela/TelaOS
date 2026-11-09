@@ -54,7 +54,7 @@ public:
     void processPendingLaunch();
     bool inLauncher() const { return m_inLauncher; }
     const P::String& currentApp() const { return m_currentApp; }
-    const std::vector<AppInfo>& apps() const { return m_apps; }
+    const P::Array<AppInfo>& apps() const { return m_apps; }
     
     YamlConfig systemConfig{"/system/config.yml", "SysConfig"};
 
@@ -69,7 +69,9 @@ private:
     bool loadApp(const P::String& path);
     bool launchNative(NativeApp* app);
     
-    std::vector<AppInfo> m_apps;
+    // In PSRAM, with the icons. A std::vector is malloc's, and malloc puts what is under 4 KB in
+    // DRAM: the 18 apps of data/, sorted into a list of exactly their size, are 2.4 KB on the watch
+    P::Array<AppInfo> m_apps;
     std::unique_ptr<IScriptEngine> m_scriptEngine;
     std::unique_ptr<ScriptManager> m_scriptMgr;
     UI::Launcher m_launcher;
