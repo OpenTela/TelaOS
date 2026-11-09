@@ -21,6 +21,7 @@
 #include <lvgl.h>
 #include <LittleFS.h>
 #include <algorithm>
+#include <ctime>
 #include <string>
 #include <string_view>
 
