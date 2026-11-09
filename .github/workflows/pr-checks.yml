@@ -15,6 +15,11 @@
 # Its random pages are new every time: in a PR, those of seed 1 and 300 of the PR's number; on
 # a merge into future, 3000 of the run's number. Seed 1 alone never found the crash seed 3 did.
 #
+# The browser job builds the simulator as WebAssembly (Emscripten, sim/sim_wasm.cmake): the page
+# that opens without installing anything, and a build for Node.js on which the same robots run.
+# Their screenshots are compared with the PC's pixel by pixel, their trees without the memory
+# (sim/tools/sim_wasm.py). The page goes into the sim-web artifact.
+#
 # The style job holds the lines the PR adds to the rules of CONTRIBUTING «Код» that a robot can
 # check (.github/scripts/style_check.py): the body of `if` on its own line, a long condition in a
 # variable with a name, unique file names. It takes seconds, so it answers first.
@@ -259,6 +264,50 @@ jobs:
             asan/asan.md
             asan/build.log
             asan/logs/**/*.log
+          retention-days: 14
+          if-no-files-found: ignore
+
+  wasm:
+    name: Simulator in the browser
+    if: github.event.action != 'closed'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v6
+      - name: Dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends cmake ninja-build ccache \
+            libsdl2-dev libpng-dev libmbedtls-dev
+      - name: Emscripten packages
+        uses: actions/cache@v5
+        with:
+          path: ~/emsdk
+          key: emsdk-7.0.0-${{ runner.os }}
+      - name: Emscripten 7.0.0
+        run: |
+          [ -d ~/emsdk/.git ] || git clone --depth 1 https://github.com/emscripten-core/emsdk.git ~/emsdk
+          ~/emsdk/emsdk install 7.0.0
+          ~/emsdk/emsdk activate 7.0.0
+      - name: The page, and the robots in WebAssembly against the PC
+        run: python3 sim/tools/sim_wasm.py --head . --out wasm --emsdk ~/emsdk
+      - name: Report in the job summary
+        if: always()
+        run: cat wasm/wasm.md >> "$GITHUB_STEP_SUMMARY" || true
+      - name: The page
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: sim-web
+          path: wasm/page/
+          retention-days: 14
+          if-no-files-found: ignore
+      - name: Logs
+        if: failure()
+        uses: actions/upload-artifact@v6
+        with:
+          name: sim-web-logs
+          path: wasm/logs/
           retention-days: 14
           if-no-files-found: ignore
 

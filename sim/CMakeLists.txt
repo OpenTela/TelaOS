@@ -13,6 +13,15 @@ project(telaos_sim C CXX)
 set(CMAKE_C_STANDARD 11)
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_EXTENSIONS ON)  # gnu++2a, as in platformio.ini
+# Under emcmake the simulator is WebAssembly (sim_wasm.cmake): a page, or the robot under Node.js
+if(EMSCRIPTEN)
+  set(TELA_SIM_WASM "web" CACHE STRING "web: the page; node: the robot under Node.js")
+  set(TELA_SIM_WEB_APPS "html_tags;css_tags;dom_tags;anim_tags" CACHE STRING
+      "Sample apps from sim/tests/fixtures/apps the page shows next to data/apps")
+endif()
+if(NOT CMAKE_BUILD_TYPE AND EMSCRIPTEN)
+  set(CMAKE_BUILD_TYPE Release)  # debug info would make the page's .wasm several times larger
+endif()
 if(NOT CMAKE_BUILD_TYPE)
   set(CMAKE_BUILD_TYPE RelWithDebInfo)
 endif()
@@ -74,8 +83,10 @@ list(FILTER TELA_C INCLUDE REGEX "\\.c$")
 set_source_files_properties(${TELA_CPP} PROPERTIES COMPILE_OPTIONS "-w;-include;cstring")
 set_source_files_properties(${TELA_C} PROPERTIES COMPILE_OPTIONS "-w")
 
-find_package(SDL2 REQUIRED)
-find_package(PNG REQUIRED)
+if(NOT EMSCRIPTEN)  # Emscripten brings its own (sim_wasm.cmake)
+  find_package(SDL2 REQUIRED)
+  find_package(PNG REQUIRED)
+endif()
 
 set(SIM_SRC
   sim_tela_main.cpp sim_tela_device.cpp sim_tela_shim.cpp sim_tela_fs.cpp
@@ -98,9 +109,17 @@ target_include_directories(telaos_sim PRIVATE
   "${TELAOS_DIR}/lib/blowfish"
   "${TELAOS_DIR}/lib/md4c"
   "${TELAOS_DIR}/ci/stubs")
-target_compile_definitions(telaos_sim PRIVATE TELAOS_DATA_DIR="${TELAOS_DIR}/data" PROGMEM=)
+set(TELA_SIM_DATA "${TELAOS_DIR}/data")
+if(EMSCRIPTEN AND TELA_SIM_WASM STREQUAL "web")
+  set(TELA_SIM_DATA "/data")  # packed into the page's .data file (sim_wasm.cmake)
+endif()
+target_compile_definitions(telaos_sim PRIVATE TELAOS_DATA_DIR="${TELA_SIM_DATA}" PROGMEM=)
 # shim/freertos/timers.h comes before TelaCI's stub of the same name. A compiler cache that took the
 # objects built against the stub would not see the new header: the flag changes every command line
 target_compile_definitions(telaos_sim PRIVATE SIM_FREERTOS_TIMERS=1)
-target_link_libraries(telaos_sim PRIVATE tela_lvgl tela_lua SDL2::SDL2 PNG::PNG mbedcrypto m)
 target_link_options(telaos_sim PRIVATE -Wl,--wrap=time)  # wall clock = virtual clock (sim_tela_shim.cpp)
+if(EMSCRIPTEN)
+  include("${CMAKE_CURRENT_SOURCE_DIR}/sim_wasm.cmake")
+else()
+  target_link_libraries(telaos_sim PRIVATE tela_lvgl tela_lua SDL2::SDL2 PNG::PNG mbedcrypto m)
+endif()

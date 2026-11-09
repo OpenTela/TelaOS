@@ -10,6 +10,13 @@ namespace Sim {
 bool Window::open(Panel& panel, int zoom, const char* title) {
     panel_ = &panel;
     zoom_ = zoom < 1 ? 1 : zoom;
+#ifdef __EMSCRIPTEN__
+    // With Asyncify in the build SDL would hand the thread to the page from inside its own
+    // calls (SDL_Delay, presenting). Only main() does that here (sim_tela_main.cpp)
+    SDL_SetHint(SDL_HINT_EMSCRIPTEN_ASYNCIFY, "0");
+    // Keys go to the watch only from its screen: Tab and the arrows keep working on the page
+    SDL_SetHint(SDL_HINT_EMSCRIPTEN_KEYBOARD_ELEMENT, "#canvas");
+#endif
     if (SDL_Init(SDL_INIT_VIDEO) != 0) {
         std::fprintf(stderr, "[sim] SDL_Init failed: %s\n", SDL_GetError());
         return false;
@@ -48,7 +55,9 @@ bool Window::pump() {
             case SDL_QUIT:
                 return false;
             case SDL_KEYDOWN:
+#ifndef __EMSCRIPTEN__  // a page has no window to close: Esc would only stop the watch
                 if (ev.key.keysym.sym == SDLK_ESCAPE) return false;
+#endif
                 break;
             case SDL_WINDOWEVENT:
                 if (ev.window.event == SDL_WINDOWEVENT_CLOSE) return false;

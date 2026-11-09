@@ -1,4 +1,4 @@
-# Как вносить изменения v0.6
+# Как вносить изменения v0.7
 
 Правила TelaOS для всех, кто меняет код, — людей и моделей. Ничего здесь не требует конкретной
 модели, сервиса или редактора. План, решения и то, что ждёт проверки на часах, — в
@@ -6,6 +6,8 @@
 
 ## Changelog
 
+- **v0.7**: В «Проверке» — симулятор в браузере: `sim/tools/sim_wasm.py` собирает страницу и
+  сверяет роботов в WebAssembly с ПК (задание «Simulator in the browser» в CI).
 - **v0.6**: Робот стиля (`.github/scripts/style_check.py`, задание «Style» в CI) проверяет `if` и
   имена файлов на строках PR. Длинное условие — длиннее 60 знаков или на нескольких строках.
   Строка с отступом, будто её охраняет `if`, — ошибка сборки TelaCI и симулятора.
@@ -68,6 +70,9 @@ python3 sim/tools/sim_screens.py --head . --base <папка с базой PR> -
 
 # То же под ASan и UBSan
 python3 sim/tools/sim_asan.py --head . --out build/asan --pages 300
+
+# Симулятор в браузере: страница и роботы в WebAssembly против ПК (Emscripten 7.0.0 в ~/emsdk)
+python3 sim/tools/sim_wasm.py --head . --out build/wasm --emsdk ~/emsdk
 
 # Прошивка
 pio run -e esp4848s040 && pio run -e twatch2020

@@ -1,0 +1,212 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<!-- sim_web_shell.html — the page around the simulator built as WebAssembly (sim/sim_wasm.cmake).
+     Emscripten puts its script where SCRIPT stands below. #snake opens an app by its folder name
+     (data/apps/snake); a hyphen stands for "_": #html-tags is html_tags -->
+<title>Симулятор TelaOS</title>
+<link rel="icon" href="data:,">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Ubuntu:wght@400;500;700&family=Ubuntu+Mono&display=swap">
+<style>
+/* One column: the watch first, the words on the column's left edge. The face is Ubuntu, the
+   one the watch draws with; the blue is the watch's own link blue */
+:root {
+  --bg: #eef2f5;
+  --fg: #16202a;
+  --muted: #566573;
+  --line: #d2dae1;
+  --chip: #e1e7ec;
+  --accent: #0b6fa4;
+  --bezel: #1a1f25;
+  --bezel-edge: rgba(0, 0, 0, 0);
+  --screen: #000000;
+  --screen-ink: #9fb4c3;
+  --screen-accent: #4fc3f7;
+  --font-text: "Ubuntu", "Segoe UI", system-ui, sans-serif;
+  --font-mono: "Ubuntu Mono", ui-monospace, "SFMono-Regular", Menlo, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0d1218; --fg: #e2e8ed; --muted: #8b9aa7; --line: #223041; --chip: #18222d;
+    --accent: #4fc3f7; --bezel: #04070a; --bezel-edge: #263343; color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #0d1218; --fg: #e2e8ed; --muted: #8b9aa7; --line: #223041; --chip: #18222d;
+  --accent: #4fc3f7; --bezel: #04070a; --bezel-edge: #263343; color-scheme: dark;
+}
+* { box-sizing: border-box; }
+[hidden] { display: none !important; }
+html { -webkit-text-size-adjust: 100%; }
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--fg);
+  font: 16px/1.5 var(--font-text);
+  padding-block: max(24px, env(safe-area-inset-top, 0px)) max(32px, env(safe-area-inset-bottom, 0px));
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+}
+.page { max-width: 34rem; margin: 0 auto; display: grid; gap: 20px; }
+header { display: grid; gap: 6px; }
+h1 { margin: 0; font-size: 1.75rem; font-weight: 700; letter-spacing: -0.01em; text-wrap: balance; }
+h1 span { color: var(--muted); font-weight: 400; }
+.lead { margin: 0; color: var(--muted); max-width: 60ch; }
+.device {
+  background: var(--bezel);
+  border-radius: 26px;
+  padding: clamp(10px, 3vw, 16px);
+  box-shadow: 0 0 0 1px var(--bezel-edge), 0 1px 0 rgba(255, 255, 255, 0.06) inset,
+    0 22px 44px -24px rgba(0, 0, 0, 0.55);
+}
+.screen {
+  position: relative;
+  width: 100%;
+  max-width: 100%;
+  aspect-ratio: 1;
+  background: var(--screen);
+  border-radius: 6px;
+  overflow: hidden;
+}
+#canvas { display: block; width: 100%; height: 100%; touch-action: none; outline: none; }
+#canvas:focus-visible { box-shadow: 0 0 0 2px var(--screen-accent) inset; }
+.status {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-content: center;
+  justify-items: center;
+  gap: 12px;
+  padding: 24px;
+  text-align: center;
+  color: var(--screen-ink);
+  font: 15px/1.4 var(--font-mono);
+  background: var(--screen);
+}
+.bar { width: min(200px, 60%); height: 3px; background: rgba(159, 180, 195, 0.18); border-radius: 2px; overflow: hidden; }
+.bar i { display: block; height: 100%; width: 0; background: var(--screen-accent); transition: width 0.2s ease-out; }
+.status.error { color: #ffb4a8; }
+.now { margin: 0; font: 15px/1.4 var(--font-mono); color: var(--muted); overflow-wrap: anywhere; }
+.now b { color: var(--accent); font-weight: 400; }
+.apps { display: grid; gap: 10px; }
+.apps h2 { margin: 0; font-size: 0.8rem; font-weight: 500; letter-spacing: 0.06em; text-transform: uppercase; color: var(--muted); }
+.chips { display: flex; flex-wrap: wrap; gap: 8px; margin: 0; padding: 0; list-style: none; }
+.chips a {
+  display: inline-block;
+  padding: 6px 12px;
+  border-radius: 999px;
+  background: var(--chip);
+  color: var(--fg);
+  text-decoration: none;
+  font: 15px/1.3 var(--font-mono);
+}
+.chips a:hover { color: var(--accent); }
+.chips a:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.chips a[aria-current="page"] { background: var(--accent); color: var(--bg); }
+.note { margin: 0; padding-top: 16px; border-top: 1px solid var(--line); color: var(--muted); font-size: 0.9rem; max-width: 60ch; }
+@media (prefers-reduced-motion: reduce) { .bar i { transition: none; } }
+</style>
+</head>
+<body>
+<main class="page">
+  <header>
+    <h1>TelaOS <span>в браузере</span></h1>
+    <p class="lead">Настоящая прошивка часов, собранная в WebAssembly: тот же код, LVGL и Lua, что на
+      ESP32. Экран 480×480, мышь или палец — это палец.</p>
+  </header>
+
+  <div class="device">
+    <div class="screen">
+      <canvas id="canvas" width="480" height="480" tabindex="-1" aria-label="Экран часов"
+              oncontextmenu="event.preventDefault()"></canvas>
+      <div class="status" id="status" role="status">
+        <span id="status-text">Загрузка прошивки…</span>
+        <div class="bar" aria-hidden="true"><i id="status-bar"></i></div>
+      </div>
+    </div>
+  </div>
+
+  <p class="now" id="now">Лаунчер — как после включения.</p>
+
+  <section class="apps" aria-labelledby="apps-title">
+    <h2 id="apps-title">Открыть сразу</h2>
+    <ul class="chips" id="chips"></ul>
+  </section>
+
+  <p class="note">Без телефона: сети и Bluetooth нет, поэтому погода и всё, что ходит в интернет,
+    покажут «нет связи», а часы идут от 30 октября 2026, 10:09 UTC — время на часы ставит телефон.</p>
+</main>
+
+<script>
+  // Apps by folder name: data/apps and the samples the page carries (sim_wasm.cmake)
+  var TELA_APPS = ["snake", "paint", "calculator", "crossword", "dice", "pomodoro", "excel",
+                   "html_tags", "css_tags", "dom_tags", "anim_tags"];
+
+  function appFromHash() {
+    var name = decodeURIComponent(location.hash.slice(1)).replace(/-/g, "_");
+    return /^[a-z0-9_]{1,40}$/.test(name) ? name : "";
+  }
+
+  var app = appFromHash();
+  var statusBox = document.getElementById("status");
+  var statusText = document.getElementById("status-text");
+  var statusBar = document.getElementById("status-bar");
+
+  var chips = document.getElementById("chips");
+  [""].concat(TELA_APPS).forEach(function (name) {
+    var li = document.createElement("li");
+    var a = document.createElement("a");
+    a.href = "#" + name.replace(/_/g, "-");
+    a.textContent = name || "лаунчер";
+    if (name === app) a.setAttribute("aria-current", "page");
+    li.appendChild(a);
+    chips.appendChild(li);
+  });
+  if (app) {
+    document.getElementById("now").innerHTML = "<b>&gt; app launch " + app + "</b> — в консоль часов, как по USB и BLE.";
+  }
+  // Another app: the watch starts over, as after power-on
+  window.addEventListener("hashchange", function () { location.reload(); });
+
+  function showError(text) {
+    statusBox.hidden = false;
+    statusBox.classList.add("error");
+    statusText.textContent = "Не запустилось: " + text;
+    statusBar.parentNode.hidden = true;
+  }
+
+  function mb(bytes) { return (bytes / 1048576).toFixed(1).replace(".", ","); }
+
+  var Module = {
+    canvas: document.getElementById("canvas"),
+    arguments: app ? ["--run", "> app launch " + app] : [],
+    print: function (t) { console.log(t); },
+    printErr: function (t) { console.warn(t); },
+    setStatus: function (t) {
+      var m = /\((\d+(?:\.\d+)?)\/(\d+)\)/.exec(t);
+      if (m) {
+        var got = +m[1], all = +m[2];
+        statusText.textContent = "Загрузка прошивки " + mb(got) + " из " + mb(all) + " МБ";
+        statusBar.style.width = Math.round(100 * got / all) + "%";
+      } else if (t) {
+        statusText.textContent = "Запуск…";
+      }
+    },
+    onRuntimeInitialized: function () {
+      statusText.textContent = "Запуск…";
+      statusBar.style.width = "100%";
+      // main() runs setup() and draws, then hands the page its thread: hide the cover then
+      requestAnimationFrame(function () { statusBox.hidden = true; });
+    },
+    onAbort: function (what) { showError(String(what)); }
+  };
+  if (typeof WebAssembly !== "object") showError("браузер без WebAssembly");
+  window.addEventListener("error", function (e) { if (e && e.message) showError(e.message); });
+</script>
+{{{ SCRIPT }}}
+</body>
+</html>

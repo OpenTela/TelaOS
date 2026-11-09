@@ -18,10 +18,14 @@
 #include "ui/dom.h"
 
 #include <SDL.h>
+#ifdef __EMSCRIPTEN__
+#include <emscripten.h>
+#endif
 
 #include <cctype>
 #include <cstdio>
 #include <cstdlib>
+#include <ctime>
 #include <functional>
 #include <string>
 #include <vector>
@@ -106,9 +110,13 @@ int main(int argc, char** argv) {
         SimTela::setDelayHook([&window, &closed, wall_start](uint32_t) {
             SimHeap::Host host;  // the window is the simulator's, not the watch's memory
             if (!window.pump()) closed = true;
+#ifdef __EMSCRIPTEN__
+            (void)wall_start;  // in a page main() shows the panel and keeps the pace, once a frame
+#else
             window.present();
             const uint32_t wall = SDL_GetTicks() - wall_start;
             if (SimTela::now() > wall) SDL_Delay(SimTela::now() - wall);  // pace to the wall clock
+#endif
         });
     }
 
@@ -193,8 +201,28 @@ int main(int argc, char** argv) {
     }
 
     if (has_window && !closed && !robot.quitRequested()) {
+#ifdef __EMSCRIPTEN__
+        // A page owns the thread. Each frame the firmware catches up with the wall clock, the
+        // panel goes to the canvas, and the page gets the thread back. A frame runs at most
+        // 100 ms of the firmware: a tab that was hidden skips the time, it does not replay it.
+        // Only main() is on the stack in emscripten_sleep(): Asyncify rewrites main() alone
+        uint32_t wall_start = SDL_GetTicks() - SimTela::now();
+        for (;;) {
+            const uint32_t wall = SDL_GetTicks() - wall_start;
+            uint32_t lag = wall > SimTela::now() ? wall - SimTela::now() : 0;
+            if (lag > 100) {
+                wall_start += lag - 100;
+                lag = 100;
+            }
+            if (!advance(lag))
+                break;
+            window.present();
+            emscripten_sleep(16);
+        }
+#else
         while (advance(100)) {
         }
+#endif
     } else if (!has_window && opt.scripts.empty() && opt.runs.empty()) {
         advance(2000);
         {
@@ -214,5 +242,12 @@ int main(int argc, char** argv) {
     }
     std::printf("[sim] robot: %d passed, %d failed\n", robot.passed(), robot.failed());
     if (has_window) window.close();
-    return (ok && robot.failed() == 0) ? 0 : 1;
+    const int status = (ok && robot.failed() == 0) ? 0 : 1;
+#ifdef __EMSCRIPTEN__
+    // The watch never destroys the firmware's statics; WebAssembly does not either. The PC
+    // build does, at exit, in its own order: libc++ orders them otherwise, and the flow's
+    // registries (ui_html_flow.cpp) would be gone before the objects that still use them
+    std::_Exit(status);
+#endif
+    return status;
 }
