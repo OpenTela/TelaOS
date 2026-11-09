@@ -22,10 +22,16 @@ namespace SimHeap {
 
 enum Region { DRAM = 0, PSRAM = 1 };
 
-// Default sizes: an ESTIMATE of what the watch has free for the firmware after boot,
-// until calibrated against `sys info` on a real watch
-constexpr size_t kDefaultDram = 320 * 1024;
-constexpr size_t kDefaultPsram = 8 * 1024 * 1024;
+// Default sizes: what the watch has for the firmware. From the log of a real watch (esp4848s040,
+// BLE on, Arduino's 8 KB loop task, 2026-11-09), the clicker drawn: "[Heap] After render:
+// DRAM=82236 PSRAM=7475699" there, 51 648 and 481 661 bytes less than the first estimate (320 KB,
+// 8 MB) gave the same firmware at the same moment here. On the watch and not here they take BLE,
+// ESP-IDF and Arduino (DRAM) and the panel's frame, 480 x 480 x 2 (PSRAM)
+constexpr size_t kDefaultDram = 320 * 1024 - 51648;
+constexpr size_t kDefaultPsram = 8 * 1024 * 1024 - 481661;
+// The loop task of that watch. A larger one (SET_LOOP_TASK_STACK_SIZE) is DRAM the watch takes
+// before setup(): the firmware gets that much less (sim_heap.cpp)
+constexpr size_t kCalibratedLoopStack = 8192;
 constexpr size_t kAlwaysInternal = 4096;  // CONFIG_SPIRAM_MALLOC_ALWAYSINTERNAL
 
 struct Stats {
@@ -37,12 +43,12 @@ struct Stats {
     size_t failed = 0;        // allocations that did not fit
 };
 
-// Before the first allocation; later calls are ignored. 0 = default
+// Before the first allocation; later calls are ignored. 0 = default. The simulator's --dram-kb
+// and --psram-kb are read earlier, before the firmware's static constructors (sim_heap.cpp)
 void configure(size_t dram_bytes, size_t psram_bytes);
-bool estimated();  // sizes are the defaults, not calibrated
 
 Stats stats(Region r);
-std::string json();  // {"dram": {...}, "psram": {...}, "estimate": true}
+std::string json();  // {"dram": {...}, "psram": {...}}
 
 // The firmware's explicit allocations (esp_heap_caps.h)
 void* capsMalloc(size_t n, uint32_t caps);

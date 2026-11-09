@@ -37,8 +37,6 @@ namespace {
 struct Options {
     bool headless = false;
     int zoom = 1;
-    size_t dram_kb = 0;   // the watch's heaps; 0 = the estimate in sim_heap.h
-    size_t psram_kb = 0;
     long stack_bytes = -1;  // the firmware's stack; -1 = the watch's loop task, 0 = the PC's own
     std::string out_dir = "shots";
     std::string data_dir = TELAOS_DATA_DIR;
@@ -63,8 +61,9 @@ bool parseArgs(int argc, char** argv, Options& o) {
         else if (a == "--zoom") o.zoom = std::atoi(v);
         else if (a == "--data") o.data_dir = v;
         else if (a == "--extra-data") o.extra_data.push_back(v);
-        else if (a == "--dram-kb") o.dram_kb = std::strtoul(v, nullptr, 10);
-        else if (a == "--psram-kb") o.psram_kb = std::strtoul(v, nullptr, 10);
+        else if (a == "--dram-kb" || a == "--psram-kb") {
+            // the watch's heaps: sim_heap.cpp reads these before main, the firmware allocates earlier
+        }
         else if (a == "--stack")
             o.stack_bytes = std::strtol(v, nullptr, 10);
         else return false;
@@ -130,8 +129,6 @@ int main(int argc, char** argv) {
         });
     }
 
-    // The firmware's memory is the watch's: two heaps sized like the chip's (sim_heap.h)
-    SimHeap::configure(opt.dram_kb * 1024, opt.psram_kb * 1024);
     {
         SimHeap::Firmware fw;
         SimStack::run(setup);  // firmware boot: display_init() → SimDevice, launcher
@@ -186,7 +183,7 @@ int main(int argc, char** argv) {
     };
 #endif
     hooks.memJson = [] {
-        std::string j = SimHeap::json();  // {"dram": …, "psram": …, "estimate": …}
+        std::string j = SimHeap::json();  // {"dram": …, "psram": …}
         j.insert(j.rfind('}'), ", \"stack\": " + SimStack::json());
         return j;
     };
@@ -244,9 +241,9 @@ int main(int argc, char** argv) {
                 panel.flushes());
     for (const SimHeap::Region r : {SimHeap::DRAM, SimHeap::PSRAM}) {
         const SimHeap::Stats s = SimHeap::stats(r);
-        std::printf("[sim] %s%s: free %zu of %zu, lowest %zu, largest block %zu, %zu blocks, %zu failed\n",
-                    r == SimHeap::DRAM ? "DRAM" : "PSRAM", SimHeap::estimated() ? " (estimate)" : "", s.free,
-                    s.total, s.min_free, s.largest_free, s.blocks, s.failed);
+        std::printf("[sim] %s: free %zu of %zu, lowest %zu, largest block %zu, %zu blocks, %zu failed\n",
+                    r == SimHeap::DRAM ? "DRAM" : "PSRAM", s.free, s.total, s.min_free, s.largest_free, s.blocks,
+                    s.failed);
     }
     if (SimStack::size())
         std::printf("[sim] stack: used %zu of %zu bytes (the watch's loop task has %zu)\n", SimStack::used(),
