@@ -4,6 +4,7 @@ python3 -m unittest discover -s sim/tools -p 'test_*.py'"""
 
 import json
 import os
+import subprocess
 import sys
 import tempfile
 import unittest
@@ -114,6 +115,17 @@ class Styled(unittest.TestCase):
             self.assertEqual((copy / "apps" / sim_screens.JUDGED / f"{sim_screens.JUDGED}.bax").read_text(),
                              (app / f"{sim_screens.JUDGED}.bax").read_text())  # the judged app as it is
             self.assertFalse((app.parent / sim_screens.STYLED).exists())  # sim/tests/fixtures untouched
+
+
+class Roomy(unittest.TestCase):
+    def test_the_base_runs_on_a_stack_of_a_megabyte(self):
+        with tempfile.TemporaryDirectory() as d:
+            sim = Path(d) / "telaos_sim"
+            sim.write_text('#!/bin/sh\necho "$@"\n')  # a simulator that says what it was given
+            sim.chmod(0o755)
+            wrapper = sim_screens.roomy(sim)
+            out = subprocess.run([str(wrapper), "--headless", "--out", "x"], capture_output=True, text=True)
+            self.assertEqual(out.stdout.split(), ["--stack", str(1 << 20), "--headless", "--out", "x"])
 
 
 if __name__ == "__main__":

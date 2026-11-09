@@ -15,6 +15,11 @@ inline uint32_t millis() { return 0; }
 inline uint32_t micros() { return 0; }
 inline void delay(uint32_t) {}
 
+// The stack of the loop task, as Arduino-ESP32 2.0.17 lets the firmware set it (main.cpp)
+size_t getArduinoLoopTaskStackSize();
+#define SET_LOOP_TASK_STACK_SIZE(sz) \
+    size_t getArduinoLoopTaskStackSize() { return sz; }
+
 class SerialClass {
 private:
     std::string _inputBuffer;

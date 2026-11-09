@@ -26,6 +26,12 @@ inline uint32_t micros() { return sim_millis() * 1000u; }
 inline void delay(uint32_t ms) { sim_delay(ms); }
 inline void yield() {}
 
+// The stack of the loop task, as Arduino-ESP32 2.0.17 lets the firmware set it (main.cpp): the
+// simulator runs the firmware on a stack of that size (sim_stack.h)
+size_t getArduinoLoopTaskStackSize();
+#define SET_LOOP_TASK_STACK_SIZE(sz) \
+    size_t getArduinoLoopTaskStackSize() { return sz; }
+
 class SerialClass {
     std::string in_;
     size_t pos_ = 0;

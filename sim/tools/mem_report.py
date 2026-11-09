@@ -75,6 +75,16 @@ def lines(base, head):
     if bad:
         out.append("- ⚠️ Не хватило памяти: " + ", ".join(f"{title(s)} ({failed[s]})" for s in bad))
 
+    # The loop task's stack (sim_stack.h): the most a screen's simulator went down it, from boot
+    stacks = {s: m["stack"] for s, m in head.items() if m.get("stack", {}).get("size")}
+    if stacks:
+        deep = max(stacks, key=lambda s: (stacks[s]["used"], s))
+        st = stacks[deep]
+        before = base.get(deep, {}).get("stack", {})
+        was = f" (до: {kb(before['used'])})" if before.get("size") else ""
+        out.append(f"- Глубже всего стек на {title(deep)}: {kb(st['used'])} из {kb(st['size'])}{was}. "
+                   f"У часов {kb(st['watch'])}: симулятор даёт прошивке 4/5, на часах кадры LVGL больше")
+
     changed = []
     for s in sorted(head):
         if s not in base:

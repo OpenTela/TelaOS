@@ -113,5 +113,19 @@ P::String decodeEntities(const P::String& s) {
     return out;
 }
 
+void appendInt(P::String& s, long n) {
+    char digits[24];
+    int count = 0;
+    unsigned long v = n < 0 ? 0UL - static_cast<unsigned long>(n) : static_cast<unsigned long>(n);
+    do {
+        digits[count++] = static_cast<char>('0' + v % 10);
+        v /= 10;
+    } while (v);
+    if (n < 0)
+        s += '-';
+    while (count)
+        s += digits[--count];
+}
+
 } // namespace StringUtils
 } // namespace UI

@@ -12,6 +12,7 @@
 #include "sim_tela.h"
 #include "sim_window.h"
 #include "sim_heap.h"
+#include "sim_stack.h"
 
 #include "Arduino.h"
 #include "core/core.h"
@@ -28,6 +29,7 @@
 
 void setup();  // TelaOS src/main.cpp
 void loop();
+size_t getArduinoLoopTaskStackSize();  // the watch's loop task: Arduino's 8 KB or the firmware's own
 extern Core g_core;
 
 namespace {
@@ -37,6 +39,7 @@ struct Options {
     int zoom = 1;
     size_t dram_kb = 0;   // the watch's heaps; 0 = the estimate in sim_heap.h
     size_t psram_kb = 0;
+    long stack_bytes = -1;  // the firmware's stack; -1 = the watch's loop task, 0 = the PC's own
     std::string out_dir = "shots";
     std::string data_dir = TELAOS_DATA_DIR;
     std::vector<std::string> extra_data;  // test fixtures flashed on top of data/
@@ -62,6 +65,8 @@ bool parseArgs(int argc, char** argv, Options& o) {
         else if (a == "--extra-data") o.extra_data.push_back(v);
         else if (a == "--dram-kb") o.dram_kb = std::strtoul(v, nullptr, 10);
         else if (a == "--psram-kb") o.psram_kb = std::strtoul(v, nullptr, 10);
+        else if (a == "--stack")
+            o.stack_bytes = std::strtol(v, nullptr, 10);
         else return false;
     }
     return true;
@@ -73,9 +78,17 @@ int main(int argc, char** argv) {
     Options opt;
     if (!parseArgs(argc, argv, opt)) {
         std::printf("TelaOS simulator: --headless | --script <file> | --run \"<cmds>\" | --out <dir> | "
-                    "--zoom <n> | --data <dir> | --extra-data <dir> | --dram-kb <n> | --psram-kb <n>\n");
+                    "--zoom <n> | --data <dir> | --extra-data <dir> | --dram-kb <n> | --psram-kb <n> | "
+                    "--stack <bytes>\n");
         return 2;
     }
+#ifndef SIM_ASAN  // ASan's frames are its own, larger: the firmware stays on the PC's stack there
+    // The firmware's stack: 4/5 of the watch's loop task, for the frames that are larger there
+    // (sim_stack.h). A deeper call stops the simulator
+    const size_t watch = getArduinoLoopTaskStackSize();
+    const long stack = opt.stack_bytes < 0 ? static_cast<long>(watch * 4 / 5) : opt.stack_bytes;
+    SimStack::init(static_cast<size_t>(stack), watch);
+#endif
     std::setvbuf(stdout, nullptr, _IOLBF, 0);
     setenv("TZ", "UTC0", 1);  // like the watch before its first BLE time sync
     tzset();
@@ -104,11 +117,16 @@ int main(int argc, char** argv) {
         const uint32_t wall_start = SDL_GetTicks();
         // wall_start by value: the hook outlives this block
         SimTela::setDelayHook([&window, &closed, wall_start](uint32_t) {
-            SimHeap::Host host;  // the window is the simulator's, not the watch's memory
-            if (!window.pump()) closed = true;
-            window.present();
-            const uint32_t wall = SDL_GetTicks() - wall_start;
-            if (SimTela::now() > wall) SDL_Delay(SimTela::now() - wall);  // pace to the wall clock
+            // the window is the simulator's: not the watch's memory, not the watch's stack
+            SimStack::onHost([&window, &closed, wall_start] {
+                SimHeap::Host host;
+                if (!window.pump())
+                    closed = true;
+                window.present();
+                const uint32_t wall = SDL_GetTicks() - wall_start;
+                if (SimTela::now() > wall)
+                    SDL_Delay(SimTela::now() - wall);  // pace to the wall clock
+            });
         });
     }
 
@@ -116,15 +134,16 @@ int main(int argc, char** argv) {
     SimHeap::configure(opt.dram_kb * 1024, opt.psram_kb * 1024);
     {
         SimHeap::Firmware fw;
-        setup();  // firmware boot: display_init() → SimDevice, launcher
+        SimStack::run(setup);  // firmware boot: display_init() → SimDevice, launcher
     }
 
     // Virtual time moves only through the firmware's own loop(): each pass ends with delay(5).
+    const std::function<void()> pass = loop;
     auto advance = [&](uint32_t ms) -> bool {
         const uint32_t target = SimTela::now() + ms;
         while (SimTela::now() < target && !closed) {
             SimHeap::Firmware fw;
-            loop();
+            SimStack::run(pass);
         }
         return !closed;
     };
@@ -166,11 +185,28 @@ int main(int argc, char** argv) {
         return out;
     };
 #endif
-    hooks.memJson = [] { return SimHeap::json(); };
+    hooks.memJson = [] {
+        std::string j = SimHeap::json();  // {"dram": …, "psram": …, "estimate": …}
+        j.insert(j.rfind('}'), ", \"stack\": " + SimStack::json());
+        return j;
+    };
     hooks.memValue = [](const std::string& figure, double& value) {
         const size_t cut = figure.find('_');
         if (cut == std::string::npos) return false;
         const std::string heap = figure.substr(0, cut), field = figure.substr(cut + 1);
+        if (heap == "stack") {  // the firmware's stack: size, used, free
+            const double size = static_cast<double>(SimStack::size());
+            const double used = static_cast<double>(SimStack::used());
+            if (field == "size")
+                value = size;
+            else if (field == "used")
+                value = used;
+            else if (field == "free")
+                value = size - used;
+            else
+                return false;
+            return true;
+        }
         if (heap != "dram" && heap != "psram") return false;
         const SimHeap::Stats s = SimHeap::stats(heap == "dram" ? SimHeap::DRAM : SimHeap::PSRAM);
         if (field == "free") value = static_cast<double>(s.free);
@@ -199,7 +235,7 @@ int main(int argc, char** argv) {
         advance(2000);
         {
             SimHeap::Firmware fw;
-            lv_refr_now(nullptr);
+            SimStack::run([] { lv_refr_now(nullptr); });
         }
         panel.savePng(opt.out_dir + "/screen.png");
     }
@@ -212,6 +248,9 @@ int main(int argc, char** argv) {
                     r == SimHeap::DRAM ? "DRAM" : "PSRAM", SimHeap::estimated() ? " (estimate)" : "", s.free,
                     s.total, s.min_free, s.largest_free, s.blocks, s.failed);
     }
+    if (SimStack::size())
+        std::printf("[sim] stack: used %zu of %zu bytes (the watch's loop task has %zu)\n", SimStack::used(),
+                    SimStack::size(), SimStack::watch());
     std::printf("[sim] robot: %d passed, %d failed\n", robot.passed(), robot.failed());
     if (has_window) window.close();
     return (ok && robot.failed() == 0) ? 0 : 1;

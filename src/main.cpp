@@ -25,6 +25,13 @@ Core g_core;
 #include "ui/ui_shade.h"
 #include "native/counter_app.h"
 
+// The stack of the loop task, where all of TelaOS runs: 16 KB, not Arduino's 8. LVGL draws an
+// object nested in another inside its parent's call, 560 bytes of stack a level on the watch, and
+// an HTML page nests 11-13 objects deep; building a page goes as deep as its markup. On 8 KB the
+// watch rebooted on the calculator ("Stack canary watchpoint triggered (loopTask)"). The simulator
+// runs the firmware on this stack and stops where it would run out (sim/sim_stack.h). It is DRAM
+SET_LOOP_TASK_STACK_SIZE(16 * 1024);
+
 // BOOT button — PIN_BOOT from board_config.h
 static volatile bool g_buttonPressed = false;
 static unsigned long g_lastButtonTime = 0;
