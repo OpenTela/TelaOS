@@ -289,8 +289,10 @@ typedef enum {
     LV_GRID_ALIGN_SPACE_BETWEEN
 } lv_grid_align_t;
 
+typedef int lv_color_format_t;
 #define LV_COLOR_FORMAT_ARGB8888 1
 #define LV_COLOR_FORMAT_RGB565 2
+inline uint8_t lv_color_format_get_size(lv_color_format_t cf) { return cf == LV_COLOR_FORMAT_RGB565 ? 2 : 4; }
 
 inline lv_color_t lv_color_hex(uint32_t c) { return lv_color_t{c}; }
 inline lv_color_t lv_color_white() { return lv_color_t{0xFFFFFF}; }
