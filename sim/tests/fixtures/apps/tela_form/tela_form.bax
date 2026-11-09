@@ -1,0 +1,31 @@
+<app os="1.0" title="Form" version="0.1" category="test">
+  <link rel="stylesheet" href="/system/tela.css">
+  <!--
+    Test fixture for the watch style (/system/tela.css, docs/CSS.md) on a form as an app writes
+    one: fields one under another, a list, a textarea, boxes and radios, a range, two buttons in a
+    row and more buttons than a line holds. Flashed by the simulator with --extra-data; driven by
+    tests/tela_form.sim: what a finger presses sticks to nothing next to it.
+  -->
+  <ui default="/form">
+    <page id="form">
+      <form id="signup">
+        <h2>Sign up</h2>
+        <label>Name</label>
+        <input type="text" id="name" placeholder="Your name">
+        <input type="email" id="mail" placeholder="Email">
+        <input type="password" id="pass" placeholder="Password">
+        <select id="lang"><option>English</option><option>Русский</option></select>
+        <textarea id="about" rows="2" placeholder="About you"></textarea>
+        <label><input type="checkbox" id="news"> News</label>
+        <label><input type="checkbox" id="terms"> Terms</label>
+        <p><input type="radio" name="plan" id="free" checked> Free
+           <input type="radio" name="plan" id="pro"> Pro</p>
+        <input type="range" id="level" min="0" max="10" value="5">
+        <button id="save">Save</button> <button id="cancel">Cancel</button>
+        <p id="keys"><button id="k1">One</button> <button id="k2">Two</button> <button id="k3">Three</button>
+          <button id="k4">Four</button> <button id="k5">Five</button> <button id="k6">Six</button>
+          <button id="k7">Seven</button> <button id="k8">Eight</button></p>
+      </form>
+    </page>
+  </ui>
+</app>

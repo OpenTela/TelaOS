@@ -407,6 +407,36 @@ void dumpObj(std::ostream& f, lv_obj_t* o, int depth, const NameOf& nameOf) {
     f << "}";
 }
 
+// What a finger presses: a button, a field, a list, a box, a slider, a switch, a roller. What is in
+// one (a button's text, a field's line) is the control itself
+bool isControl(const lv_obj_t* o) {
+    const bool pressed = lv_obj_has_class(o, &lv_button_class) || lv_obj_has_class(o, &lv_checkbox_class);
+    const bool typed = lv_obj_has_class(o, &lv_textarea_class) || lv_obj_has_class(o, &lv_dropdown_class);
+    const bool moved = lv_obj_has_class(o, &lv_slider_class) || lv_obj_has_class(o, &lv_switch_class) ||
+                       lv_obj_has_class(o, &lv_roller_class);
+    return pressed || typed || moved;
+}
+
+// The controls under o, not hidden (scrolled away counts: a whole page is checked, not its window)
+void collectControls(lv_obj_t* o, std::vector<lv_obj_t*>& out) {
+    if (lv_obj_has_flag(o, LV_OBJ_FLAG_HIDDEN))
+        return;
+    if (isControl(o)) {
+        out.push_back(o);
+        return;
+    }
+    for (uint32_t i = 0; i < lv_obj_get_child_count(o); ++i)
+        collectControls(lv_obj_get_child(o, static_cast<int32_t>(i)), out);
+}
+
+// How far apart two boxes are, px: across the gap along the axis they do not overlap on; 0 they
+// touch, below 0 they overlap
+int apartBy(const lv_area_t& a, const lv_area_t& b) {
+    const int across = std::max(b.x1 - a.x2 - 1, a.x1 - b.x2 - 1);
+    const int down = std::max(b.y1 - a.y2 - 1, a.y1 - b.y2 - 1);
+    return std::max(across, down);
+}
+
 // Hidden: it or a parent of it (lv_obj_is_visible says no to what is only scrolled away too)
 bool hiddenInTree(const lv_obj_t* o) {
     for (; o; o = lv_obj_get_parent(o)) {
@@ -758,6 +788,57 @@ bool Robot::exec(const std::vector<std::string>& a, const std::string& where) {
             std::printf("[robot %6u] ✓ %s %s = %s\n", t, a[1].c_str(), a[2].c_str(), actual.c_str());
         } else {
             fail(a[1] + " " + a[2] + " = " + actual + ", expected " + expected);
+        }
+        return true;
+    }
+    // expect [@id] apart <px>   every two controls on the screen (in @id) at least <px> apart: none
+    // sticks to another or covers it (isControl; a page that scrolls is checked whole)
+    const bool apartAll = cmd == "expect" && need(3) && a[1] == "apart";
+    const bool apartIn = cmd == "expect" && need(4) && a[1][0] == '@' && a[2] == "apart";
+    if (apartAll || apartIn) {
+        std::vector<lv_obj_t*> controls;
+        if (apartIn) {
+            lv_obj_t* scope = findById(a[1].substr(1));
+            if (!scope)
+                return fail("no widget " + a[1]);
+            lv_obj_update_layout(scope);
+            collectControls(scope, controls);
+        } else {
+            lv_obj_t* const* roots = layers();
+            for (int i = 1; i < 3; ++i) {  // the top layer and the screen
+                if (!roots[i])
+                    continue;
+                lv_obj_update_layout(roots[i]);
+                collectControls(roots[i], controls);
+            }
+        }
+        const int least = std::atoi(a[apartIn ? 3 : 2].c_str());
+        auto name = [&](lv_obj_t* o) {
+            const std::string id = hooks_.nameOf ? hooks_.nameOf(o) : "";
+            lv_area_t c;
+            lv_obj_get_coords(o, &c);
+            const std::string what = id.empty() ? std::string(o->class_p->name ? o->class_p->name : "?") : "@" + id;
+            return what + " (" + std::to_string(c.x1) + "," + std::to_string(c.y1) + ")";
+        };
+        std::string close;
+        int count = 0;
+        for (size_t i = 0; i < controls.size(); ++i) {
+            for (size_t j = i + 1; j < controls.size(); ++j) {
+                lv_area_t p1, p2;
+                lv_obj_get_coords(controls[i], &p1);
+                lv_obj_get_coords(controls[j], &p2);
+                const int gap = apartBy(p1, p2);
+                if (gap >= least)
+                    continue;
+                if (++count <= 3)
+                    close += "; " + name(controls[i]) + " and " + name(controls[j]) + " " + std::to_string(gap) + " px";
+            }
+        }
+        if (!count) {
+            ++passed_;
+            std::printf("[robot %6u] ✓ %zu controls %d px apart or more\n", t, controls.size(), least);
+        } else {
+            fail(std::to_string(count) + " pairs of controls closer than " + std::to_string(least) + " px" + close);
         }
         return true;
     }
