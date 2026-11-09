@@ -1293,7 +1293,7 @@ static int htmlCount(const char* astart, const char* aend, const char* name, int
 // a text input 1px 2px of padding in a 2px border, 8px a character of size= (20) and 50 more, 21
 // high; a textarea 2px in 1px, 8px a character of cols= (20) and 22 more, 15 a line of rows= (2)
 // and 6 more. CSS comes after it
-static void browserField(lv_obj_t* ta, bool multiline, const char* astart, const char* aend) {
+static int32_t browserField(lv_obj_t* ta, bool multiline, const char* astart, const char* aend) {
     lv_obj_set_style_text_font(ta, UI::Font::get(14), LV_PART_MAIN);
     lv_obj_set_style_border_width(ta, multiline ? 1 : 2, LV_PART_MAIN);
     lv_obj_set_style_pad_left(ta, 2, LV_PART_MAIN);
@@ -1302,11 +1302,32 @@ static void browserField(lv_obj_t* ta, bool multiline, const char* astart, const
     // from its padding, so the text stays whole in the same 21px
     lv_obj_set_style_pad_top(ta, multiline ? 2 : 0, LV_PART_MAIN);
     lv_obj_set_style_pad_bottom(ta, multiline ? 2 : 0, LV_PART_MAIN);
-    if (multiline) {
-        lv_obj_set_size(ta, 8 * htmlCount(astart, aend, "cols", 20) + 22, 15 * htmlCount(astart, aend, "rows", 2) + 6);
-    } else {
-        lv_obj_set_size(ta, 8 * htmlCount(astart, aend, "size", 20) + 50, 21);
+    const int32_t h = multiline ? 15 * htmlCount(astart, aend, "rows", 2) + 6 : 21;
+    if (multiline)
+        lv_obj_set_size(ta, 8 * htmlCount(astart, aend, "cols", 20) + 22, h);
+    else
+        lv_obj_set_size(ta, 8 * htmlCount(astart, aend, "size", 20) + 50, h);
+    return h;
+}
+
+// A field whose font CSS changed (font-size): as high as a browser makes it with that font, its
+// lines (rows=, or one) and its padding and border. LVGL's line of a font is a browser's, but for
+// the 14px that stands for a browser's 13.33px (browserField): a field in it keeps its size
+static void fieldHeightForFont(lv_obj_t* ta, bool multiline, const char* astart, const char* aend) {
+    const lv_font_t* font = lv_obj_get_style_text_font(ta, LV_PART_MAIN);
+    if (!font || font == UI::Font::get(14))
+        return;
+    // the one line of a field gave its 1px above and below to LVGL's taller 14px: in a font of its
+    // own it has them back, unless CSS gave it a padding
+    const bool lent = lv_obj_get_style_pad_top(ta, LV_PART_MAIN) == 0 && lv_obj_get_style_pad_bottom(ta, LV_PART_MAIN) == 0;
+    if (!multiline && lent) {
+        lv_obj_set_style_pad_top(ta, 1, LV_PART_MAIN);
+        lv_obj_set_style_pad_bottom(ta, 1, LV_PART_MAIN);
     }
+    const int32_t lines = multiline ? htmlCount(astart, aend, "rows", 2) : 1;
+    const int32_t border = lv_obj_get_style_border_width(ta, LV_PART_MAIN);
+    lv_obj_set_height(ta, lines * lv_font_get_line_height(font) + lv_obj_get_style_pad_top(ta, LV_PART_MAIN) +
+                              lv_obj_get_style_pad_bottom(ta, LV_PART_MAIN) + 2 * border);
 }
 
 void create_input(const char *astart, const char *aend, const char *content, lv_obj_t *parent) {
@@ -1372,8 +1393,7 @@ void create_input(const char *astart, const char *aend, const char *content, lv_
     // placed by x or y stays as TelaOS draws it
     const bool browser = (HtmlFlow::browserSized() || HtmlFlow::inFlow(parent)) && getAttr(astart, aend, "x").empty() &&
                          getAttr(astart, aend, "y").empty();
-    if (browser)
-        browserField(ta, isMultiline, astart, aend);
+    const int32_t browserHeight = browser ? browserField(ta, isMultiline, astart, aend) : 0;
 
     // CSS first, then inline overrides
     {
@@ -1384,6 +1404,8 @@ void create_input(const char *astart, const char *aend, const char *content, lv_
     if (!browser) {
         set_size(ta, w, h);
     } else {  // the browser's size, or CSS's; w= and h= over them, as inline values
+        if (lv_obj_get_style_height(ta, LV_PART_MAIN) == browserHeight)  // CSS gave no height
+            fieldHeightForFont(ta, isMultiline, astart, aend);
         if (!getAttr(astart, aend, "w").empty())
             lv_obj_set_width(ta, w);
         if (!getAttr(astart, aend, "h").empty())
