@@ -1,5 +1,16 @@
 #include "ui/ui_task.h"
 
+void* ITask::operator new(size_t size) {
+    void* p = heap_caps_malloc(size, MALLOC_CAP_SPIRAM);
+    if (!p)
+        p = heap_caps_malloc(size, MALLOC_CAP_DEFAULT);
+    if (!p)
+        throw std::bad_alloc();
+    return p;
+}
+
+void ITask::operator delete(void* p) noexcept { heap_caps_free(p); }
+
 UpdateLabelTask::UpdateLabelTask(const P::String& labelId, const P::String& value)
     : m_labelId(labelId), m_value(value) {}
 

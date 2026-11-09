@@ -15,6 +15,11 @@ public:
     virtual ~ITask() = default;
     virtual void execute() = 0;
     virtual P::String key() const { return ""; }
+
+    // Tasks live in PSRAM. An app's start queues one for each bound variable (excel: over a
+    // hundred), and plain new is malloc's, which puts what is under 4 KB in DRAM
+    static void* operator new(size_t size);
+    static void operator delete(void* p) noexcept;
 };
 
 /**
