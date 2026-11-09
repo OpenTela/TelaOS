@@ -20,12 +20,13 @@
 #include "hal/display_hal.h"
 #include <lvgl.h>
 #include <LittleFS.h>
+#include "freertos/task.h"
 #include <algorithm>
 #include <string>
 #include <string_view>
 
 // OS version constants
-static constexpr const char* PROTOCOL_VERSION = "2.7";
+static constexpr const char* PROTOCOL_VERSION = "2.8";
 static constexpr const char* OS_VERSION = "0.4.0";
 
 static const char* TAG = "Console";
@@ -314,6 +315,9 @@ static Result execSys(std::string_view cmd, JsonArray args) {
         r.data["chip"] = ESP.getChipModel();
         r.data["freq"] = ESP.getCpuFreqMHz();
         r.data["buf_lines"] = display_get_buffer_lines();
+        // The least stack the loop task had free since boot, bytes (ESP-IDF counts stacks in
+        // bytes): what the deepest page left of it. The console runs in the loop task
+        r.data["stack_free"] = static_cast<uint32_t>(uxTaskGetStackHighWaterMark(nullptr));
         
         auto& mgr = App::Manager::instance();
         if (!mgr.inLauncher() && mgr.currentApp().length() > 0) {

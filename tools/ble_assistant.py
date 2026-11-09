@@ -53,7 +53,7 @@ TX_CHAR_UUID = "12345678-1234-5678-1234-56789abcdef1"  # watch -> PC (notify)
 RX_CHAR_UUID = "12345678-1234-5678-1234-56789abcdef2"  # PC -> watch (write)
 BIN_CHAR_UUID = "12345678-1234-5678-1234-56789abcdef3"  # binary chunks
 
-PROTOCOL_VERSION = "2.7"
+PROTOCOL_VERSION = "2.8"
 DEVICE_NAME = "FutureClock"
 
 # -- Global state -----------------------------------------------
