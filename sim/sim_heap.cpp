@@ -26,6 +26,10 @@ void* __libc_calloc(size_t, size_t);
 void* __libc_realloc(void*, size_t);
 }
 
+// The firmware's loop task (main.cpp; sim_stack.cpp has Arduino's 8 KB). Weak: the heap's own
+// tests link no firmware
+__attribute__((weak)) size_t getArduinoLoopTaskStackSize();
+
 namespace {
 
 using SimHeap::DRAM;
@@ -44,7 +48,6 @@ struct Heap {
 
 Heap g_heap[2];
 size_t g_size[2] = {SimHeap::kDefaultDram, SimHeap::kDefaultPsram};
-bool g_estimated = true;
 bool g_ready = false;
 std::atomic_flag g_lock = ATOMIC_FLAG_INIT;
 __thread int g_firmware = 0;  // initial-exec TLS: no allocation on first use
@@ -204,6 +207,24 @@ size_t largest(Heap& h) {
     return best;
 }
 
+// The sizes, set before the firmware's static constructors allocate: the first allocation makes
+// the heaps, and on the watch those constructors take from the same ones. So --dram-kb and
+// --psram-kb are read here, from the arguments glibc hands the functions of .init_array, not in
+// main. The loop task's stack beyond the 8 KB of the watch the defaults come from is DRAM the
+// watch takes before setup()
+__attribute__((constructor(101))) void sizesFromArgs(int argc, char** argv, char**) {
+    const size_t loop = getArduinoLoopTaskStackSize ? getArduinoLoopTaskStackSize() : SimHeap::kCalibratedLoopStack;
+    if (loop > SimHeap::kCalibratedLoopStack)
+        g_size[SimHeap::DRAM] -= loop - SimHeap::kCalibratedLoopStack;
+    for (int i = 1; i + 1 < argc; ++i) {
+        const size_t kb = std::strtoul(argv[i + 1], nullptr, 10);
+        if (std::strcmp(argv[i], "--dram-kb") == 0 && kb)
+            g_size[SimHeap::DRAM] = kb * 1024;
+        else if (std::strcmp(argv[i], "--psram-kb") == 0 && kb)
+            g_size[SimHeap::PSRAM] = kb * 1024;
+    }
+}
+
 }  // namespace
 
 namespace SimHeap {
@@ -211,12 +232,9 @@ namespace SimHeap {
 void configure(size_t dram_bytes, size_t psram_bytes) {
     Lock lock;
     if (g_ready) return;
-    if (dram_bytes || psram_bytes) g_estimated = false;
     if (dram_bytes) g_size[DRAM] = dram_bytes;
     if (psram_bytes) g_size[PSRAM] = psram_bytes;
 }
-
-bool estimated() { return g_estimated; }
 
 Stats stats(Region r) {
     Lock lock;
@@ -244,7 +262,7 @@ std::string json() {
                       r ? ", " : "", names[r], s.total, s.free, s.min_free, s.largest_free, s.blocks, s.failed);
         out += buf;
     }
-    out += g_estimated ? ", \"estimate\": true}" : ", \"estimate\": false}";
+    out += "}";
     return out;
 }
 

@@ -59,7 +59,6 @@ static int failures = 0;
 int main() {
     configure(64 * 1024, 1024 * 1024);
     const Stats d0 = stats(DRAM), p0 = stats(PSRAM);
-    CHECK(!estimated());
     CHECK(d0.total > 60 * 1024 && d0.total <= 64 * 1024);
 
     // Host code (outside Firmware) does not touch the watch's heaps
@@ -136,6 +135,25 @@ int main() {
 """
 
 
+# The sizes before the firmware's static constructors: they allocate before main, and the
+# first allocation makes the heaps. LOOP_STACK: the firmware's own loop task, if it sets one
+SIZES = r"""
+#include <cstdio>
+#include "sim_heap.h"
+#include "esp_heap_caps.h"
+#ifdef LOOP_STACK
+size_t getArduinoLoopTaskStackSize() { return LOOP_STACK; }
+#endif
+struct Early {
+    Early() { heap_caps_free(heap_caps_malloc(100, MALLOC_CAP_SPIRAM)); }
+} early;
+int main() {
+    std::printf("%zu %zu\n", SimHeap::stats(SimHeap::DRAM).total, SimHeap::stats(SimHeap::PSRAM).total);
+    return 0;
+}
+"""
+
+
 def run(cmd, cwd):
     p = subprocess.run(cmd, cwd=cwd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, timeout=300)
     return p.returncode, p.stdout.decode("utf-8", "replace")
@@ -170,6 +188,33 @@ class SimHeap(unittest.TestCase):
         self.assertEqual(rc, 0, out)
         rc, out = run(["./model"], self.dir)
         self.assertEqual((rc, out.strip()), (0, "ok"), out)
+
+    def sizes(self, args, loop_stack=None):
+        """the heaps' totals, in KB, of a program that allocates in a static constructor"""
+        (self.dir / "sizes.cpp").write_text(SIZES)
+        rc, out = run([CC, "-std=c11", "-O1", "-c", "-I", str(TLSF), str(TLSF / "tlsf.c"), "-o", "tlsf.o"],
+                      self.dir)
+        self.assertEqual(rc, 0, out)
+        defs = [f"-DLOOP_STACK={loop_stack}"] if loop_stack else []
+        rc, out = run([CXX, "-std=c++17", "-O1", *defs, "-I", str(SIM), "-I", str(SIM / "shim"), "-I", str(TLSF),
+                       "sizes.cpp", str(SIM / "sim_heap.cpp"), "tlsf.o", "-o", "sizes"], self.dir)
+        self.assertEqual(rc, 0, out)
+        rc, out = run(["./sizes", *args], self.dir)
+        self.assertEqual(rc, 0, out)
+        dram, psram = (int(n) for n in out.split())
+        return dram / 1024, psram / 1024
+
+    def test_sizes_from_the_command_line_before_static_constructors(self):
+        dram, psram = self.sizes(["--headless", "--dram-kb", "100", "--psram-kb", "2048"])
+        self.assertTrue(96 < dram <= 100 and 2040 < psram <= 2048, (dram, psram))
+
+    def test_default_sizes_are_the_watchs(self):
+        dram, psram = self.sizes([])
+        self.assertTrue(265 < dram <= 269.6 and 7700 < psram <= 7722, (dram, psram))  # sim_heap.h
+
+    def test_a_larger_loop_task_takes_its_dram(self):
+        dram, _ = self.sizes([], loop_stack=16384)
+        self.assertTrue(257 < dram <= 261.6, dram)  # 8 KB more than the watch the defaults come from
 
 
 if __name__ == "__main__":
