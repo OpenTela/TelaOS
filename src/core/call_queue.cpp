@@ -80,6 +80,10 @@ void push(const P::String& funcName) {
 void process() {
     if (!g_mutex || !g_handler) return;
     if (g_processing) return;
+    // Most turns of loop() find nothing queued, and a std::queue allocates even empty: its deque's
+    // map and first block, 536 bytes of DRAM on the watch, taken and given back on every turn
+    if (!hasPending())
+        return;
     g_processing = true;
     
     std::queue<P::String> calls;
