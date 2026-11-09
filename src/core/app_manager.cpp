@@ -928,10 +928,13 @@ bool Manager::loadApp(const P::String& path) {
         int bootLines = display_get_boot_lines();
         
         if (freeDRAM < 40000 && curLines > (int)BufferSmall) {
-            // Low DRAM — shrink
-            LOG_W(Log::APP, "DRAM low (%d bytes), shrinking display buffer %d -> %d lines",
-                  (int)freeDRAM, curLines, (int)BufferSmall);
-            display_set_buffer(BufferSmall);
+            // Low DRAM: smaller a step at a time (1/8 of the screen, 1/16, 1/32) until 40 000 bytes
+            // are free, not 1/16 at once. excel lands 1 KB short of them, and at 1/16 it kept 171 KB
+            // of DRAM free: 1/8 draws a screen in half the passes
+            LOG_W(Log::APP, "DRAM low (%d bytes), shrinking display buffer from %d lines", (int)freeDRAM, curLines);
+            MemoryManager::instance().optimizeDRAM();
+            LOG_I(Log::APP, "Display buffer: %d lines, DRAM free: %d bytes", display_get_buffer_lines(),
+                  (int)heap_caps_get_free_size(MALLOC_CAP_INTERNAL));
             lv_obj_invalidate(lv_screen_active());
         } else if (curLines < bootLines) {
             // Buffer below boot level — try to grow back
