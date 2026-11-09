@@ -708,9 +708,14 @@ bool isIconClass(std::string_view classes) {
 constexpr int kIconPx = 24;  // Google's style sheet sizes the icon classes so
 
 // ============ Registry: containers built by this layer ============
+//
+// The registries of this file are never destroyed, as s_margins and UI::Dom's tree (#67): at the
+// simulator's exit the app's objects go after the statics, and their LV_EVENT_DELETE erases them
+// from here
 
-std::unordered_set<lv_obj_t*> s_flow;                // every flow box
-std::unordered_map<lv_obj_t*, lv_obj_t*> s_rootOf;   // page/TelaOS container → its implicit flow root
+std::unordered_set<lv_obj_t*>& s_flow = *P::create<std::unordered_set<lv_obj_t*>>().release();  // every flow box
+// page/TelaOS container → its implicit flow root
+std::unordered_map<lv_obj_t*, lv_obj_t*>& s_rootOf = *P::create<std::unordered_map<lv_obj_t*, lv_obj_t*>>().release();
 int s_autoId = 0;
 
 // The decimal digits of n: "42", "-7" (std::to_string: the firmware has it already)
@@ -741,7 +746,7 @@ void track(lv_obj_t* box) {
 }
 
 // Element object → the box that holds its content (<li> row → body, <dialog> backdrop → window)
-std::unordered_map<lv_obj_t*, lv_obj_t*> s_contentOf;
+std::unordered_map<lv_obj_t*, lv_obj_t*>& s_contentOf = *P::create<std::unordered_map<lv_obj_t*, lv_obj_t*>>().release();
 
 void onContentOwnerDelete(lv_event_t* e) { s_contentOf.erase(static_cast<lv_obj_t*>(lv_event_get_user_data(e))); }
 
@@ -2502,7 +2507,7 @@ struct Toggle {  // checkbox / radio
     P::String name;  // radio group
     bool radio = false;
 };
-std::unordered_map<lv_obj_t*, Toggle> s_toggles;
+std::unordered_map<lv_obj_t*, Toggle>& s_toggles = *P::create<std::unordered_map<lv_obj_t*, Toggle>>().release();
 
 void onToggleDelete(lv_event_t* e) { s_toggles.erase(static_cast<lv_obj_t*>(lv_event_get_user_data(e))); }
 
@@ -2718,8 +2723,10 @@ void activate(lv_obj_t* target) {
     }
 }
 
-std::unordered_map<lv_obj_t*, P::String> s_labelFor;        // label -> id of its control
-std::unordered_map<lv_obj_t*, lv_obj_t*> s_labelControl;    // label -> the control inside it
+// label -> id of its control
+std::unordered_map<lv_obj_t*, P::String>& s_labelFor = *P::create<std::unordered_map<lv_obj_t*, P::String>>().release();
+// label -> the control inside it
+std::unordered_map<lv_obj_t*, lv_obj_t*>& s_labelControl = *P::create<std::unordered_map<lv_obj_t*, lv_obj_t*>>().release();
 
 void onLabelClick(lv_event_t* e) {
     if (UI::Dom::defaultPrevented(e)) return;  // a listener keeps the tap from its box
