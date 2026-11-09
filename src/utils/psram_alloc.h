@@ -17,6 +17,12 @@ namespace M {
 template <typename T>
 struct Allocator {
     using value_type = T;
+
+    // An allocator of another type converts to this one, as the standard asks of every
+    // allocator: a container rebinds it for its own nodes (libc++'s std::vector<bool>)
+    Allocator() noexcept = default;
+    template<typename U>
+    Allocator(const Allocator<U>&) noexcept {}
     
     T* allocate(size_t n) {
         void* p = malloc(n * sizeof(T));
@@ -93,6 +99,12 @@ namespace P {
 template <typename T>
 struct Allocator {
     using value_type = T;
+
+    // An allocator of another type converts to this one, as the standard asks of every
+    // allocator: a container rebinds it for its own nodes (libc++'s std::vector<bool>)
+    Allocator() noexcept = default;
+    template<typename U>
+    Allocator(const Allocator<U>&) noexcept {}
     
     T* allocate(size_t n) {
         size_t bytes = n * sizeof(T);
