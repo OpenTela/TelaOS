@@ -38,11 +38,16 @@ a {
   color: var(--tela-accent);
 }
 
+/* Buttons a finger hits: blue, rounded, not lower than 44px, text 16px. Nothing a finger presses
+   sticks to what is under it: 4px above and below each (a button is a word of its line, its line
+   as high as it with them), 8px between two lines of buttons */
 button,
 input[type="button"],
 input[type="submit"],
 input[type="reset"] {
   min-height: var(--tela-tap);
+  margin-top: 4px;
+  margin-bottom: 4px;
   padding: 10px 16px;
   border: 0;
   border-radius: var(--tela-radius);
@@ -64,9 +69,8 @@ input:disabled {
 }
 
 /* Fields a finger types in and lists it picks from: across the screen, not lower than a button,
-   the text 16px on the screen's cards, 8px apart one under another (4px above and below each:
-   a field is a word of its line, its line as high as it with them). A textarea is as high as
-   its rows */
+   the text 16px on the screen's cards, 8px apart one under another (4px above and below each, as
+   buttons). A textarea is as high as its rows */
 input[type="text"],
 input[type="password"],
 input[type="email"],

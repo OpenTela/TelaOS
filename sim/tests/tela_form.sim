@@ -1,0 +1,20 @@
+# tela_form.sim — the watch style (/system/tela.css, docs/CSS.md «Стиль часов») on a form, on the
+# real TelaOS engine. Fixture: sim/tests/fixtures/apps/tela_form (with --extra-data sim/tests/fixtures).
+# What a finger presses sticks to nothing next to it: fields and buttons one under another are
+# 8 px apart (4 px above and below each), buttons in a row a space apart.
+
+wait 300
+> app launch tela_form
+wait 800
+
+expect "Sign up" :visible
+# every two controls of the page (the part scrolled away too) at least 4 px apart
+expect apart 4
+expect @name :h 44
+expect @name :w 464
+shot form_01_top
+scroll @k8
+wait 200
+# more buttons than a line holds: the second line of them 8 px under the first
+expect @keys apart 4
+shot form_02_buttons
