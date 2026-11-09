@@ -7,40 +7,50 @@
 namespace UI {
 namespace XmlUtils {
 
+// Tags are compared in place, not against "<tag" and "</tag>" printed with snprintf: its
+// formatter takes a kilobyte of stack and more, and pages are read deep in it (sim/sim_stack.h)
+namespace {
+
+// "<tag" at p
+bool opens(const char* p, const char* tag, size_t tlen) {
+    return p[0] == '<' && std::strncmp(p + 1, tag, tlen) == 0;
+}
+
+// "</tag>" at p
+bool closes(const char* p, const char* tag, size_t tlen) {
+    return p[0] == '<' && p[1] == '/' && std::strncmp(p + 2, tag, tlen) == 0 && p[tlen + 2] == '>';
+}
+
+}  // namespace
+
 const char* findTagOpen(const char* p, const char* tag) {
     if (!p || !tag) return nullptr;
-    
-    char pattern[64];
-    snprintf(pattern, sizeof(pattern), "<%s", tag);
-    size_t tlen = std::strlen(tag);
-    
-    while ((p = std::strstr(p, pattern)) != nullptr) {
-        char c = p[tlen + 1];
+
+    const size_t tlen = std::strlen(tag);
+    for (; (p = std::strchr(p, '<')) != nullptr; ++p) {
+        if (!opens(p, tag, tlen))
+            continue;
+        const char c = p[tlen + 1];
         if (c == '>' || c == ' ' || c == '/' || c == '\0') {
             return p;
         }
-        p++;
     }
     return nullptr;
 }
 
 const char* findTagClose(const char* p, const char* tag) {
     if (!p || !tag) return nullptr;
-    
+
     int depth = 1;
     size_t tlen = std::strlen(tag);
-    
-    char open[64], close[64];
-    snprintf(open, sizeof(open), "<%s", tag);
-    snprintf(close, sizeof(close), "</%s>", tag);
-    
+
     while (*p && depth > 0) {
-        
-        if (std::strncmp(p, close, tlen + 3) == 0) {
+
+        if (closes(p, tag, tlen)) {
             depth--;
             if (depth == 0) return p;
             p += tlen + 3;
-        } else if (std::strncmp(p, open, tlen + 1) == 0) {
+        } else if (opens(p, tag, tlen)) {
             char c = p[tlen + 1];
             if (c == '>' || c == ' ' || c == '/') {
                 depth++;

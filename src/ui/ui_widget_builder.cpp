@@ -69,8 +69,10 @@ P::String resolve_resource_path(const P::String& src) {
     
     // Relative path - prepend app resources folder
     if (!g_core.app().appPath().empty()) {
-        char buf[128]; snprintf(buf, sizeof(buf), "%s/resources/%s", g_core.app().appPath().c_str(), src.c_str());
-        return buf;
+        P::String path = g_core.app().appPath();  // not snprintf: a widget is built deep in the stack
+        path += "/resources/";
+        path += src;
+        return path;
     }
     
     return src;
@@ -192,8 +194,8 @@ static void forget_widget_state(lv_event_t* e) {
 static void ensureId(CommonAttrs& attrs, const char* prefix, bool hasDynamicContent = false) {
     if (attrs.id.empty() && (hasDynamicContent || attrs.hasDynamicClass || attrs.hasDynamicVisible || attrs.hasDynamicDisabled)) {
         static int auto_id = 0;
-        char buf[32]; snprintf(buf, sizeof(buf), "%s%d", prefix, auto_id++);
-        attrs.id = buf;
+        attrs.id = prefix;
+        UI::StringUtils::appendInt(attrs.id, auto_id++);  // not snprintf: a widget is built deep in the stack
     }
 }
 

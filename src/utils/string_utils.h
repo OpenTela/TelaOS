@@ -29,5 +29,9 @@ bool equalsIgnoreCase(std::string_view a, std::string_view b);
 
 P::String decodeEntities(const P::String& s);
 
+// n in decimal at the end of s, without printf: printf's formatter takes a kilobyte of stack and
+// more, and pages are built deep in it (the watch's loop task has 8 KB: sim/sim_stack.h)
+void appendInt(P::String& s, long n);
+
 } // namespace StringUtils
 } // namespace UI

@@ -46,6 +46,20 @@ class MemReport(unittest.TestCase):
         head = {"excel__main": mem(10 * KB, 2 * KB, failed=3)}
         self.assertIn("- ⚠️ Не хватило памяти: **excel** · main (3)", lines({}, head))
 
+    def test_the_deepest_stack(self):
+        def with_stack(m, used):
+            m["stack"] = {"size": 13107, "used": used, "watch": 16384}
+            return m
+        base = {"html_tags__forms": with_stack(mem(90 * KB, 80 * KB), 9 * KB)}
+        head = {"html_tags__forms": with_stack(mem(90 * KB, 80 * KB), 6 * KB),
+                "dice__main": with_stack(mem(120 * KB, 110 * KB), 5 * KB)}
+        self.assertIn("- Глубже всего стек на **html_tags** · forms: 6,0 КБ из 12,8 КБ (до: 9,0 КБ). "
+                      "У часов 16,0 КБ: симулятор даёт прошивке 4/5, на часах кадры LVGL больше", lines(base, head))
+
+    def test_no_stack_line_without_its_model(self):
+        out = lines({}, {"dice__main": mem(120 * KB, 110 * KB)})  # an older simulator, or ASan's
+        self.assertFalse(any("стек" in line for line in out))
+
     def test_calibrated_sizes_are_not_called_an_estimate(self):
         out = lines({}, {"dice__main": mem(120 * KB, 110 * KB, estimate=False)})
         self.assertEqual(out[0], "**Память** (DRAM 320 КБ, PSRAM 8,0 МБ)")

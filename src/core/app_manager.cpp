@@ -401,10 +401,18 @@ void Manager::scanApps() {
         LOG_D(Log::APP, "Native: %s (%s)", app.name.c_str(), app.title.c_str());
     }
     
-    // Sort by name
-    std::sort(m_apps.begin(), m_apps.end(), [](const AppInfo& a, const AppInfo& b) {
-        return a.name < b.name;
-    });
+    // Sort by name. Their places are sorted, not the apps: std::sort moves what it sorts through
+    // frames of its own, and an AppInfo in each of them took kilobytes of the loop task's stack
+    // with many apps (sim/sim_stack.h)
+    P::Array<size_t> order(m_apps.size());
+    for (size_t i = 0; i < order.size(); ++i)
+        order[i] = i;
+    std::sort(order.begin(), order.end(), [this](size_t a, size_t b) { return m_apps[a].name < m_apps[b].name; });
+    decltype(m_apps) sorted;
+    sorted.reserve(m_apps.size());
+    for (const size_t i : order)
+        sorted.push_back(std::move(m_apps[i]));
+    m_apps.swap(sorted);
     
     LOG_I(Log::APP, "Total: %d apps", (int)m_apps.size());
 }

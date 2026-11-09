@@ -404,7 +404,7 @@ const char* impliedClose(const char* p, const char* end, const char* name) {
     return end;
 }
 
-bool readTag(const char* p, const char* end, TagRef& t) {
+[[gnu::noinline]] bool readTag(const char* p, const char* end, TagRef& t) {
     t = TagRef{};
     t.src = p;
     const char* q = p + 1;
@@ -557,6 +557,13 @@ struct Style {  // inline run style
     bool link() const { return !href.empty() || !onclick.empty(); }
 };
 
+// The style of a run that starts plain: one for every walk that starts so, not a temporary in the
+// frame of each function a page goes down through
+const Style& plainStyle() {
+    static const Style plain;
+    return plain;
+}
+
 struct TextLook {  // block text look
     int font = 0;
     bool bold = false;
@@ -609,7 +616,7 @@ int fontForHtmlSize(const P::String& size) {
 
 // blockFont: the font size of the text the run is in (h1: 48), 0 for the default.
 // uaFont: the size the element has when no rule of the page sizes it (an icon: 24), 0 for none.
-Style derive(const Style& base, const TagRef& t, uint8_t look, int blockFont, int uaFont = 0) {
+[[gnu::noinline]] Style derive(const Style& base, const TagRef& t, uint8_t look, int blockFont, int uaFont = 0) {
     Style s = base;
     // em and % in font-size, and <big>: of the font the run is in
     const float parentPx = static_cast<float>(base.font > 0 ? base.font : blockFont > 0 ? blockFont : UI::Font::SMALL);
@@ -800,7 +807,7 @@ lv_obj_t* plainObj(lv_obj_t* parent) {
 }
 
 // A flow box: its children one under another, nothing between them but their margins
-lv_obj_t* newBox(lv_obj_t* parent) {
+[[gnu::noinline]] lv_obj_t* newBox(lv_obj_t* parent) {
     lv_obj_t* b = plainObj(parent);
     lv_obj_set_width(b, lv_pct(100));
     lv_obj_set_height(b, LV_SIZE_CONTENT);
@@ -895,7 +902,7 @@ void onActionClick(lv_event_t* e) {
 
 void onActionDelete(lv_event_t* e) { delete static_cast<Action*>(lv_event_get_user_data(e)); }
 
-void makeClickable(lv_obj_t* o, const P::String& href, const P::String& onclick) {
+[[gnu::noinline]] void makeClickable(lv_obj_t* o, const P::String& href, const P::String& onclick) {
     if (href.empty() && onclick.empty()) return;
     auto* a = new Action{href, onclick};
     lv_obj_add_flag(o, LV_OBJ_FLAG_CLICKABLE);
@@ -913,7 +920,7 @@ bool rtlIn(const TagRef& t, lv_obj_t* parent) {
 }
 
 
-P::String applyGlobal(const TagRef& t, lv_obj_t* o, const char* tplText = nullptr) {
+[[gnu::noinline]] P::String applyGlobal(const TagRef& t, lv_obj_t* o, const char* tplText = nullptr) {
     P::String id = attr(t, "id");
     P::String cls = attr(t, "class");
     P::String style = attr(t, "style");
@@ -980,7 +987,7 @@ void ownMargins(lv_obj_t* o, Margin& m) {
 }
 
 // o, new in box: its margins (under its address: what was there before is gone)
-void noteObj(lv_obj_t* box, lv_obj_t* o, uint8_t above, uint8_t below, float em = 0, bool keep = false) {
+[[gnu::noinline]] void noteObj(lv_obj_t* box, lv_obj_t* o, uint8_t above, uint8_t below, float em = 0, bool keep = false) {
     Margin m;
     m.ua[kAbove] = above;
     m.ua[kBelow] = below;
@@ -992,7 +999,7 @@ void noteObj(lv_obj_t* box, lv_obj_t* o, uint8_t above, uint8_t below, float em 
 
 // The objects an element made in box, from child `from` on: the first takes a browser's margin
 // above, the last the one below. <body>, <html>: their content went into the box itself
-void noteBlock(const TagRef& t, lv_obj_t* box, uint32_t from, const Ctx& ctx) {
+[[gnu::noinline]] void noteBlock(const TagRef& t, lv_obj_t* box, uint32_t from, const Ctx& ctx) {
     if (is(t.name, "body") || is(t.name, "html")) return;
     const uint32_t n = lv_obj_get_child_count(box);
     const uint8_t ua = uaMargin(t.name, ctx.listDepth > 0);
@@ -1083,7 +1090,7 @@ void setPx(lv_obj_t* o, lv_style_prop_t prop, int v) {
 // next one's above, and that sum is the collapsed margin. The body's 8px margin joins its first
 // and last child's: its padding takes them. true: what comes out of the box changed, the box
 // around it needs its margins again
-bool collapse(lv_obj_t* box) {
+[[gnu::noinline]] bool collapse(lv_obj_t* box) {
     BoxMargins& bm = s_margins[box];
     const bool root = isRoot(box);
     const bool block = stacks(box);
@@ -1194,7 +1201,7 @@ public:
     bool empty() const { return items_.empty(); }
     P::Array<Item>& items() { return items_; }
 
-    void text(const char* s, const char* e, const Style& st) {
+    [[gnu::noinline]] void text(const char* s, const char* e, const Style& st) {
         P::String out;
         for (const char* p = s; p < e;) {
             if (*p == '&') {
@@ -1227,18 +1234,18 @@ public:
     // A segment read on behalf of `o` (<bdo>): spaces collapse across the boundary as in `o`
     void continueAfter(const Seg& o) { lastSpace_ = o.lastSpace_; }
 
-    void lineBreak() {
+    [[gnu::noinline]] void lineBreak() {
         trimTail();
         items_.push_back(Item{Item::BREAK, "\n", {}, {}});
         lastSpace_ = true;
     }
 
-    void atom(const TagRef& t) {
+    [[gnu::noinline]] void atom(const TagRef& t) {
         items_.push_back(Item{Item::ATOM, "", {}, t});
         lastSpace_ = false;
     }
 
-    void flush();
+    [[gnu::noinline]] void flush();
 
 private:
     void push(const P::String& out, const Style& st) {
@@ -1399,7 +1406,7 @@ void Seg::asSpans() {
         auto fill = [sg, ctx](const P::String& rendered) {
             UI::Dom::Pause again;  // its <b>, <a>... are recorded once, by the walk that read it first
             Seg tmp(nullptr, ctx);
-            walk(rendered.c_str(), rendered.c_str() + rendered.size(), tmp, Style{}, true);
+            walk(rendered.c_str(), rendered.c_str() + rendered.size(), tmp, plainStyle(), true);
             fillSpans(sg, tmp.items());
         };
         fill(render_template(tpl.c_str()));  // in the page's build: the scopes of the paragraph are open
@@ -1884,7 +1891,7 @@ void Seg::asWords() {
 
 // ============ Walking content ============
 
-bool hasBlockOrAtom(const char* p, const char* end) {
+[[gnu::noinline]] bool hasBlockOrAtom(const char* p, const char* end) {
     while (p < end) {
         p = static_cast<const char*>(memchr(p, '<', end - p));
         if (!p) return false;
@@ -1923,7 +1930,7 @@ P::String reversedText(const P::String& text) {
 }
 
 // <bdo dir="rtl">: its characters go right to left (a bidi override does just that)
-void bdoRtl(const TagRef& t, Seg& seg, const Style& st) {
+[[gnu::noinline]] void bdoRtl(const TagRef& t, Seg& seg, const Style& st) {
     Seg inner(nullptr, seg.ctx());
     inner.continueAfter(seg);
     walk(t.cstart, t.cend, inner, st, true);
@@ -1939,7 +1946,7 @@ void bdoRtl(const TagRef& t, Seg& seg, const Style& st) {
 // <span class="material-symbols-outlined">home</span>, <i class="material-icons">home</i>: in a
 // browser the icon font turns the name into the icon; here the name is looked up. An unknown name
 // stays text, as it does without the font. False: not an icon, t renders as usual.
-bool iconTag(const TagRef& t, Seg& seg, const Style& st) {
+[[gnu::noinline]] bool iconTag(const TagRef& t, Seg& seg, const Style& st) {
     if (!t.cstart || t.cend <= t.cstart) return false;
     std::string_view classes;
     if (!UI::Css::findAttr(rawAttrs(t), "class", classes) || !isIconClass(classes)) return false;
@@ -1978,7 +1985,7 @@ void inlineTag(const TagRef& t, const TagInfo* ti, Seg& seg, const Style& st) {
     if (look == L_QUOTE) seg.text("\xE2\x80\x9D", "\xE2\x80\x9D" + 3, s);  // ”
 }
 
-void parseStyleTag(const TagRef& t) {
+[[gnu::noinline]] void parseStyleTag(const TagRef& t) {
     UI::Css::instance().parse(std::string_view(t.cstart, t.cend - t.cstart));
     LOG_D(Log::UI, "html: <style> in body parsed");
 }
@@ -2005,8 +2012,24 @@ bool linksStylesheet(std::string_view rel) {
 }
 
 // <link> on a page: its stylesheet counts from here on, as a <style> here would. It draws nothing
-void linkTag(const TagRef& t) {
+[[gnu::noinline]] void linkTag(const TagRef& t) {
     linkStylesheet(attr(t, "rel"), attr(t, "href"), attr(t, "media"), has(t, "disabled"));
+}
+
+// An inline element wrapping blocks or widgets (<a><img></a>): a tappable box. A function of its
+// own: its style and segment are on the stack only when there is one
+[[gnu::noinline]] void inlineBox(const TagRef& t, const TagInfo* ti, Seg& seg, const Style& st) {
+    seg.flush();
+    lv_obj_t* b = newBox(seg.box());
+    Style s = derive(st, t, ti->look, seg.look().font);
+    makeClickable(b, s.href, s.onclick);
+    applyGlobal(t, b);
+    Inside in(t);
+    Seg inner(b, seg.ctx());
+    walk(t.cstart, t.cend, inner, s, false);
+    inner.flush();
+    collapse(b);
+    noteObj(seg.box(), b, 0, 0);
 }
 
 void handleTag(const TagRef& t, Seg& seg, const Style& st, bool inlineOnly) {
@@ -2033,17 +2056,7 @@ void handleTag(const TagRef& t, Seg& seg, const Style& st, bool inlineOnly) {
     if (ti && ti->kind == Kind::Inline) {
         // an inline element wrapping blocks or widgets (<a><img></a>) becomes a tappable box
         if (!inlineOnly && hasBlockOrAtom(t.cstart, t.cend)) {
-            seg.flush();
-            lv_obj_t* b = newBox(seg.box());
-            Style s = derive(st, t, ti->look, seg.look().font);
-            makeClickable(b, s.href, s.onclick);
-            applyGlobal(t, b);
-            Inside in(t);
-            Seg inner(b, seg.ctx());
-            walk(t.cstart, t.cend, inner, s, false);
-            inner.flush();
-            collapse(b);
-            noteObj(seg.box(), b, 0, 0);
+            inlineBox(t, ti, seg, st);
             return;
         }
         inlineTag(t, ti, seg, st);
@@ -2096,7 +2109,7 @@ void walk(const char* p, const char* end, Seg& seg, const Style& st, bool inline
 void renderInto(const TagRef& t, lv_obj_t* box, const Ctx& ctx) {
     Inside in(t);
     Seg seg(box, ctx);
-    walk(t.cstart, t.cend, seg, Style{}, false);
+    walk(t.cstart, t.cend, seg, plainStyle(), false);
     seg.flush();
     collapse(box);  // its children are all there: their margins
 }
@@ -2123,7 +2136,7 @@ Fieldset s_fieldset;
 
 void textBlock(const TagRef& t, lv_obj_t* box, const Ctx& ctx);
 
-void textElement(const TagRef& t, lv_obj_t* box, const Ctx& ctx) {
+[[gnu::noinline]] void textElement(const TagRef& t, lv_obj_t* box, const Ctx& ctx) {
     const bool legend = is(t.name, "legend") && box == s_fieldset.box && !s_fieldset.legend;
     const auto before = lv_obj_get_child_count(box);
     textBlock(t, box, ctx);
@@ -2131,12 +2144,12 @@ void textElement(const TagRef& t, lv_obj_t* box, const Ctx& ctx) {
         s_fieldset.legend = lv_obj_get_child(box, -1);
 }
 
-void textBlock(const TagRef& t, lv_obj_t* box, const Ctx& ctx) {
+[[gnu::noinline]] void textBlock(const TagRef& t, lv_obj_t* box, const Ctx& ctx) {
     const TextLook look = lookFor(t.name, UI::Font::sizeOf(lv_obj_get_style_text_font(box, LV_PART_MAIN)));
     if (!hasBlockOrAtom(t.cstart, t.cend)) {
         Inside in(t);  // its runs and widgets are inside it; its own style ignores this (see CssScope)
         Seg seg(box, ctx, &t, look);
-        walk(t.cstart, t.cend, seg, Style{}, true);
+        walk(t.cstart, t.cend, seg, plainStyle(), true);
         if (seg.empty() && !attr(t, "id").empty()) {  // empty but addressable: keep a label for ui.setText
             lv_obj_t* l = newTextLabel(box, "");
             applyLook(l, look);
@@ -2229,7 +2242,7 @@ void legendOnBorder(lv_obj_t* fs, lv_obj_t* legend) {
 #endif
 }
 
-void blockElement(const TagRef& t, lv_obj_t* box, const Ctx& ctx) {
+[[gnu::noinline]] void blockElement(const TagRef& t, lv_obj_t* box, const Ctx& ctx) {
     const char* n = t.name.c_str();
     if (is(n, "body")) {  // the flow root already is the body
         applyDir(box, attr(t, "dir").c_str());
@@ -2310,7 +2323,7 @@ void markerRoom(lv_event_t* e) { lv_event_set_ext_draw_size(e, kListPad + kMarke
 
 // An item: its marker outside it, in the list's padding, as a browser's list-style-position:
 // outside; the item is as wide as the list's content
-void listItem(const TagRef& li, lv_obj_t* parent, const Ctx& ctx, const P::String& marker) {
+[[gnu::noinline]] void listItem(const TagRef& li, lv_obj_t* parent, const Ctx& ctx, const P::String& marker) {
     lv_obj_t* row = plainObj(parent);
     lv_obj_set_width(row, lv_pct(100));
     lv_obj_set_height(row, LV_SIZE_CONTENT);
@@ -2338,13 +2351,25 @@ void listItem(const TagRef& li, lv_obj_t* parent, const Ctx& ctx, const P::Strin
     renderInto(li, body, inner);
 }
 
-void listElement(const TagRef& t, lv_obj_t* box, const Ctx& ctx) {
+// An entry of a list as listElement builds it: the tag and, for an <li>, its marker. Read before any
+// of them is built, so that the strings and tags of the reading are not on the stack while the items
+// build theirs, nested lists among them
+struct ListEntry {
+    TagRef tag;
+    P::String marker;  // empty: not an <li>, a list nested straight in the list or other content
+};
+
+[[gnu::noinline]] lv_obj_t* listBox(const TagRef& t, lv_obj_t* box) {
     lv_obj_t* lb = newBox(box);
     s_margins[lb].list = true;
     // 40px on the side its lines start, every list, nested ones too: the markers sit in it
     if (rtlIn(t, box)) lv_obj_set_style_pad_right(lb, kListPad, LV_PART_MAIN);
     else lv_obj_set_style_pad_left(lb, kListPad, LV_PART_MAIN);
     applyGlobal(t, lb);
+    return lb;
+}
+
+[[gnu::noinline]] P::Array<ListEntry> listEntries(const TagRef& t, const Ctx& ctx) {
     const bool ordered = is(t.name, "ol");
     P::String type = attr(t, "type");
     const char ty = type.empty() ? '1' : type[0];
@@ -2367,27 +2392,41 @@ void listElement(const TagRef& t, lv_obj_t* box, const Ctx& ctx) {
     int n = static_cast<int>(attrNum(t.astart, t.aend, "start", reversed ? count : 1));
     // • – › : glyphs the Ubuntu fonts have (no ◦ or ▪ in flash)
     static const char* const kBullets[] = {"\xE2\x80\xA2", "\xE2\x80\x93", "\xE2\x80\xBA"};
+    P::Array<ListEntry> entries;
+    for (const auto& c : items) {
+        if (!is(c.name, "li")) {
+            entries.push_back(ListEntry{c, {}});
+            continue;
+        }
+        if (!attr(c, "value").empty())
+            n = atoi(attr(c, "value").c_str());
+        entries.push_back(ListEntry{c, ordered ? olMarker(n, ty) : P::String(kBullets[ctx.listDepth % 3])});
+        n += reversed ? -1 : 1;
+    }
+    return entries;
+}
+
+[[gnu::noinline]] void listElement(const TagRef& t, lv_obj_t* box, const Ctx& ctx) {
+    lv_obj_t* lb = listBox(t, box);
+    const P::Array<ListEntry> entries = listEntries(t, ctx);
     Inside in(t);
     Ctx inside = ctx;
     inside.listDepth = ctx.listDepth + 1;
-    for (const auto& c : items) {
-        if (!is(c.name, "li")) {  // a list nested straight in a list, or other content
+    for (const ListEntry& e : entries) {
+        if (e.marker.empty()) {  // a list nested straight in a list, or other content
             const uint32_t from = lv_obj_get_child_count(lb);
-            renderBlock(c, lb, ctx);
-            noteBlock(c, lb, from, inside);
+            renderBlock(e.tag, lb, ctx);
+            noteBlock(e.tag, lb, from, inside);
             continue;
         }
-        if (!attr(c, "value").empty()) n = atoi(attr(c, "value").c_str());
-        const P::String marker = ordered ? olMarker(n, ty) : P::String(kBullets[ctx.listDepth % 3]);
-        listItem(c, lb, ctx, marker);
-        n += reversed ? -1 : 1;
+        listItem(e.tag, lb, ctx, e.marker);
     }
     collapse(lb);
 }
 
 // ---- Rules, images, preformatted ----
 
-void hrElement(const TagRef& t, lv_obj_t* box) {
+[[gnu::noinline]] void hrElement(const TagRef& t, lv_obj_t* box) {
     lv_obj_t* hr = plainObj(box);
     lv_obj_set_size(hr, lv_pct(100), 1);
     lv_obj_set_style_bg_color(hr, lv_color_hex(kRule), LV_PART_MAIN);
@@ -2395,7 +2434,7 @@ void hrElement(const TagRef& t, lv_obj_t* box) {
     applyGlobal(t, hr);
 }
 
-void imgElement(const TagRef& t, lv_obj_t* parent) {
+[[gnu::noinline]] void imgElement(const TagRef& t, lv_obj_t* parent) {
     P::String src = attr(t, "src");
     if (src.empty()) {
         P::String alt = attr(t, "alt");
@@ -2421,7 +2460,7 @@ void imgElement(const TagRef& t, lv_obj_t* parent) {
     create_image(a.c_str(), a.c_str() + a.size(), parent);
 }
 
-void preElement(const TagRef& t, lv_obj_t* box, const Ctx& ctx) {
+[[gnu::noinline]] void preElement(const TagRef& t, lv_obj_t* box, const Ctx& ctx) {
     const char* s = t.cstart;
     if (s < t.cend && *s == '\r') ++s;
     if (s < t.cend && *s == '\n') ++s;  // a newline right after <pre> is not content
@@ -2430,7 +2469,7 @@ void preElement(const TagRef& t, lv_obj_t* box, const Ctx& ctx) {
         pre.pre = true;
         Inside in(t);
         Seg seg(box, pre, &t, TextLook{});
-        walk(s, t.cend, seg, Style{}, true);
+        walk(s, t.cend, seg, plainStyle(), true);
         seg.flush();
         return;
     }
@@ -2440,11 +2479,11 @@ void preElement(const TagRef& t, lv_obj_t* box, const Ctx& ctx) {
     applyGlobal(t, l);
 }
 
-void marqueeElement(const TagRef& t, lv_obj_t* box) {
+[[gnu::noinline]] void marqueeElement(const TagRef& t, lv_obj_t* box) {
     Seg tmp(nullptr, Ctx{});
     {
         Inside in(t);
-        walk(t.cstart, t.cend, tmp, Style{}, true);
+        walk(t.cstart, t.cend, tmp, plainStyle(), true);
     }
     P::String text;
     for (const auto& it : tmp.items()) text += it.text;
@@ -2898,7 +2937,7 @@ void summaryMarker(lv_obj_t* marker, lv_obj_t* text, bool rtl) {
                  lv_obj_get_style_pad_top(text, LV_PART_MAIN));
 }
 
-void detailsElement(const TagRef& t, lv_obj_t* box, const Ctx& ctx) {
+[[gnu::noinline]] void detailsElement(const TagRef& t, lv_obj_t* box, const Ctx& ctx) {
     lv_obj_t* d = newBox(box);
     applyGlobal(t, d);
     const bool open = has(t, "open");
@@ -2923,7 +2962,7 @@ void detailsElement(const TagRef& t, lv_obj_t* box, const Ctx& ctx) {
     if (hasSummary) {
         Inside inSummary(sum);
         Seg seg(title, ctx, &sum, TextLook{});
-        walk(sum.cstart, sum.cend, seg, Style{}, true);
+        walk(sum.cstart, sum.cend, seg, plainStyle(), true);
         seg.flush();
     } else {
         newTextLabel(title, "Details");
@@ -2934,10 +2973,10 @@ void detailsElement(const TagRef& t, lv_obj_t* box, const Ctx& ctx) {
     if (!open) lv_obj_add_flag(body, LV_OBJ_FLAG_HIDDEN);
     Seg seg(body, ctx);
     if (hasSummary) {
-        walk(t.cstart, sum.src, seg, Style{}, false);
-        walk(sum.next, t.cend, seg, Style{}, false);
+        walk(t.cstart, sum.src, seg, plainStyle(), false);
+        walk(sum.next, t.cend, seg, plainStyle(), false);
     } else {
-        walk(t.cstart, t.cend, seg, Style{}, false);
+        walk(t.cstart, t.cend, seg, plainStyle(), false);
     }
     seg.flush();
     collapse(title);
@@ -2968,7 +3007,7 @@ void closeButtons(lv_obj_t* o, lv_obj_t* back) {  // <form method="dialog">: any
 #endif
 }
 
-void dialogElement(const TagRef& t, lv_obj_t* box, const Ctx& ctx) {
+[[gnu::noinline]] void dialogElement(const TagRef& t, lv_obj_t* box, const Ctx& ctx) {
     lv_obj_t* host = hostOf(box);
     lv_obj_t* back = plainObj(host);
     lv_obj_set_size(back, lv_pct(100), lv_pct(100));
@@ -3019,13 +3058,13 @@ void placeholder(const TagRef& t, lv_obj_t* box) {
     applyGlobal(t, p);
 }
 
-void fallbackElement(const TagRef& t, lv_obj_t* box, const Ctx& ctx) {
+[[gnu::noinline]] void fallbackElement(const TagRef& t, lv_obj_t* box, const Ctx& ctx) {
     if (!is(t.name, "svg") && !is(t.name, "math")) {
         // fallback content = what a browser without the feature shows (sources/tracks excluded)
         Seg probe(nullptr, ctx);
         {
             UI::Dom::Pause dry;  // its elements are recorded when it is built, below
-            walk(t.cstart, t.cend, probe, Style{}, true);
+            walk(t.cstart, t.cend, probe, plainStyle(), true);
         }
         bool text = false;
         for (const auto& it : probe.items()) {
@@ -3089,6 +3128,26 @@ void renderAtom(const TagRef& t, lv_obj_t* parent) {
     else delegate(t, parent);
 }
 
+// The cases of renderBlock with a segment or a tag of their own: functions of their own, so that
+// renderBlock, which every block of a page goes through, has none of them in its frame
+[[gnu::noinline]] void inlineAlone(const TagRef& t, const TagInfo* ti, lv_obj_t* box, const Ctx& ctx) {
+    Seg seg(box, ctx);
+    inlineTag(t, ti, seg, plainStyle());
+    seg.flush();
+}
+
+[[gnu::noinline]] void atomAlone(const TagRef& t, lv_obj_t* box, const Ctx& ctx) {
+    Seg seg(box, ctx);
+    seg.atom(t);
+    seg.flush();
+}
+
+[[gnu::noinline]] void pictureElement(const TagRef& t, lv_obj_t* box) {
+    TagRef img;
+    if (findChild(t, "img", img))
+        imgElement(img, box);
+}
+
 void renderBlock(const TagRef& t, lv_obj_t* box, const Ctx& ctx) {
     const char* n = t.name.c_str();
     const TagInfo* ti = info(n);
@@ -3106,26 +3165,20 @@ void renderBlock(const TagRef& t, lv_obj_t* box, const Ctx& ctx) {
             if (is(n, "link"))
                 linkTag(t);
             return;
-        case Kind::Inline: {
-            Seg seg(box, ctx);
-            inlineTag(t, ti, seg, Style{});
-            seg.flush();
+        case Kind::Inline:
+            inlineAlone(t, ti, box, ctx);
             return;
-        }
         case Kind::Special: break;
     }
     if (is(n, "hr")) hrElement(t, box);
     else if (is(n, "img") || is(n, "input") || is(n, "textarea") || is(n, "progress") || is(n, "meter")) {
-        Seg seg(box, ctx);
-        seg.atom(t);
-        seg.flush();
+        atomAlone(t, box, ctx);
     } else if (is(n, "pre") || is(n, "xmp") || is(n, "listing") || is(n, "plaintext")) preElement(t, box, ctx);
     else if (is(n, "details")) detailsElement(t, box, ctx);
     else if (is(n, "dialog")) dialogElement(t, box, ctx);
     else if (is(n, "marquee")) marqueeElement(t, box);
     else if (is(n, "picture")) {
-        TagRef img;
-        if (findChild(t, "img", img)) imgElement(img, box);
+        pictureElement(t, box);
     } else if (is(n, "html")) {
         applyDir(box, attr(t, "dir").c_str());  // <html dir="rtl">: the whole document
         renderInto(t, box, ctx);
@@ -3216,7 +3269,7 @@ void create(const char* tag, const char* astart, const char* aend, const char* c
     }
     lv_obj_t* box = flowParent(parent);
     Seg seg(box, Ctx{});
-    handleTag(t, seg, Style{}, false);
+    handleTag(t, seg, plainStyle(), false);
     seg.flush();
     collapseOut(box);  // the page's elements come one by one; or a script's, into a block
     LOG_D(Log::UI, "html: <%s>", tag);
@@ -3478,7 +3531,7 @@ lv_obj_t* richText(lv_obj_t* parent, const char* s, const char* e, bool fit) {
     owner.cend = e;
     const uint32_t before = lv_obj_get_child_count(parent);
     Seg seg(parent, Ctx{}, &owner, TextLook{});
-    walk(s, e, seg, Style{}, true);
+    walk(s, e, seg, plainStyle(), true);
     seg.flush();
     if (lv_obj_get_child_count(parent) == before) return nullptr;  // nothing to show
     lv_obj_t* o = lv_obj_get_child(parent, -1);
@@ -3507,7 +3560,7 @@ const char* inlineRun(const char* p, const char* end, lv_obj_t* parent) {
     if (!any) return p;
     LOG_D(Log::UI, "html: inline run, %d bytes", static_cast<int>(e - p));
     Seg seg(flowParent(parent), Ctx{});
-    walk(p, e, seg, Style{}, false);
+    walk(p, e, seg, plainStyle(), false);
     seg.flush();
     return e;
 }
@@ -3538,7 +3591,7 @@ void renderContent(const char* html, size_t len, lv_obj_t* container) {
     textDefaults(container);
     if (!s_flow.count(container)) track(container);
     Seg seg(container, Ctx{});
-    walk(html, html + len, seg, Style{}, false);
+    walk(html, html + len, seg, plainStyle(), false);
     seg.flush();
     collapseOut(container);
 }

@@ -80,7 +80,7 @@ find_package(PNG REQUIRED)
 set(SIM_SRC
   sim_tela_main.cpp sim_tela_device.cpp sim_tela_shim.cpp sim_tela_fs.cpp
   sim_panel.cpp sim_window.cpp sim_robot.cpp sim_png.cpp
-  sim_heap.cpp sim_timers.cpp)
+  sim_heap.cpp sim_stack.cpp sim_timers.cpp)
 # The simulator's own code: the body of `if` goes on its own line, braces optional (CONTRIBUTING
 # «Код»), so a line indented as if `if` guarded it stops the build. TelaCI does the same for src/
 set_source_files_properties(${SIM_SRC} PROPERTIES COMPILE_OPTIONS "-Werror=misleading-indentation")
@@ -104,3 +104,7 @@ target_compile_definitions(telaos_sim PRIVATE TELAOS_DATA_DIR="${TELAOS_DIR}/dat
 target_compile_definitions(telaos_sim PRIVATE SIM_FREERTOS_TIMERS=1)
 target_link_libraries(telaos_sim PRIVATE tela_lvgl tela_lua SDL2::SDL2 PNG::PNG mbedcrypto m)
 target_link_options(telaos_sim PRIVATE -Wl,--wrap=time)  # wall clock = virtual clock (sim_tela_shim.cpp)
+# Functions bound at start, not on their first call: the lazy binding of the dynamic linker saves
+# the CPU's whole register state on the stack it runs on (2.5 KB), the firmware's (sim_stack.h).
+# The C++ library is linked in for that too: its own calls into the C library would bind lazily
+target_link_options(telaos_sim PRIVATE -Wl,-z,now -static-libstdc++ -static-libgcc)

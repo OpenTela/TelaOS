@@ -60,6 +60,7 @@ BOOT_MS = 500     # virtual ms before the first command: the launcher is up
 LAUNCH_MS = 1000  # after "app launch": the app's default page is drawn
 NAV_MS = 400      # after "ui nav": the page is drawn
 IDLE_MS = 2000    # after each screen's picture: at rest, what it redraws by itself (idle_report.py)
+BASE_STACK = 1 << 20  # the base's simulator: a stack of a megabyte (roomy())
 MAX_ROWS = 30     # screens with pictures in the comment; the rest by name
 JUDGED = "html_tags"  # the fixture app whose pages Chromium judges (judge.py)
 STYLED = judge.STYLED  # JUDGED with the watch style: a <link> to /system/tela.css in its <app>
@@ -106,6 +107,16 @@ def build(sim_dir, telaos_dir, build_dir, log, options=()):
                 return None
     binary = Path(build_dir) / "telaos_sim"
     return binary if binary.exists() else None
+
+
+def roomy(binary):
+    """The base's simulator on a stack of a megabyte, not on 4/5 of its watch's: the base is drawn to
+    be compared with, and it may need more stack than its watch has (the PR that fixes that, say).
+    Its trees still say how much it used (sim/sim_stack.h)."""
+    wrapper = Path(binary).with_name("telaos_sim_roomy")
+    wrapper.write_text(f'#!/bin/sh\nexec "{binary}" --stack {BASE_STACK} "$@"\n')
+    wrapper.chmod(0o755)
+    return wrapper
 
 
 def run_sim(binary, out_dir, script=None, run=None, extra_data=None, timeout=300):
@@ -512,6 +523,8 @@ def main():
         base_bin = build(sim_dir, base, out / "build-base", out / "build-base.log")
         if not base_bin:
             print("[screens] base does not build: showing head screens only", flush=True)
+        else:
+            base_bin = roomy(base_bin)
 
     print("[screens] shooting every screen ...", flush=True)
     styled = styled_fixtures(fixtures, out)

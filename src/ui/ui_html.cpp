@@ -858,8 +858,9 @@ static P::String expand_all_templates(const P::String& html) {
     return result;
 }
 
-// Full pre-expansion: @for first, then templates, repeat until stable
-static P::String preprocess_html(const char* html, int len) {
+// Full pre-expansion: @for first, then templates, repeat until stable. Not inlined into
+// parse_children: its strings would be on the stack at every level of a page (sim_stack.h)
+__attribute__((noinline)) static P::String preprocess_html(const char* html, int len) {
     P::String current(html, len);
     
     // Max iterations to prevent infinite loops
@@ -1659,12 +1660,22 @@ bool needsExpansion(std::string_view html) {
 // Id for an element the author left without one, when the engine must find it later
 P::String autoId(std::string_view prefix, int n) {
     P::String id(prefix);
-    id += P::String(std::to_string(n));
+    UI::StringUtils::appendInt(id, n);  // std::to_string of the watch's GCC 8 is vsnprintf
     return id;
 }
 
-// <div>: a general container; flex= lays its children out in a row or a column
-void build_div(const UI::StartTag& tag, const P::String& content, lv_obj_t* host, lv_obj_t* parent) {
+// What build_div keeps for the content of a <div>: the rest is done before the content is built
+struct DivBox {
+    lv_obj_t* container = nullptr;
+    bool flex = false;             // flex= given: the content is not an HTML flow of its own
+    bool stretchChildren = false;  // align="stretch"
+    bool stretchIsWidth = false;
+};
+
+// A <div> without its content: the container, its attributes, CSS and element. Not inlined into
+// build_div: its strings are gone before the content builds, as the content's own will be. A page
+// nests, and every level of it would hold them on the stack (sim_stack.h)
+__attribute__((noinline)) DivBox make_div(const UI::StartTag& tag, lv_obj_t* host, lv_obj_t* parent) {
     const UI::Attrs& a = tag.attrs;
     lv_obj_t *container = lv_obj_create(host);
     lv_obj_remove_style_all(container);
@@ -1801,11 +1812,23 @@ void build_div(const UI::StartTag& tag, const P::String& content, lv_obj_t* host
     LOG_I(Log::UI, "<div> id=%s flex=%s", idAttr.empty() ? "-" : idAttr.c_str(),
              flexAttr.empty() ? "-" : flexAttr.c_str());
 
+    return DivBox{container, !flexAttr.empty(), stretchChildren, stretchIsWidth};
+}
+
+// <div>: a general container; flex= lays its children out in a row or a column
+void build_div(const UI::StartTag& tag, const P::String& content, lv_obj_t* host, lv_obj_t* parent) {
+    const UI::Attrs& a = tag.attrs;
+    const DivBox box = make_div(tag, host, parent);
+    lv_obj_t* const container = box.container;
+    const bool stretchChildren = box.stretchChildren;
+    const bool stretchIsWidth = box.stretchIsWidth;
+
     if (!content.empty()) {
         UI::CssScope inside("div", a.text(), std::string_view(content.c_str(), content.length()));  // .card label {}
         // Direct text (<div>Hello</div>) used to be dropped; render it as HTML flow
         if (HtmlFlow::hasFlowContent(content.c_str(), content.length())) {
-            if (flexAttr.empty()) HtmlFlow::makeFlow(container);
+            if (!box.flex)
+                HtmlFlow::makeFlow(container);
             HtmlFlow::renderContent(content.c_str(), content.length(), container);
         } else {
             parse_children(content.c_str(), content.length(), container);
@@ -1827,8 +1850,9 @@ void build_div(const UI::StartTag& tag, const P::String& content, lv_obj_t* host
     }
 }
 
-// <table>, <tr>, <td>: a table is a column of rows, a row is a row of cells
-void build_table_part(const UI::StartTag& tag, const P::String& content, lv_obj_t* host, lv_obj_t* parent) {
+// <table>, <tr>, <td> without their content: the container, its size, CSS and element. Not inlined
+// into build_table_part, for the reason of make_div
+__attribute__((noinline)) lv_obj_t* make_table_part(const UI::StartTag& tag, lv_obj_t* host, lv_obj_t* parent) {
     using UI::TagId;
     const UI::Attrs& a = tag.attrs;
     lv_obj_t *container = lv_obj_create(host);
@@ -1953,6 +1977,15 @@ void build_table_part(const UI::StartTag& tag, const P::String& content, lv_obj_
              idAttr.empty() ? "-" : idAttr.c_str(),
              classAttr.empty() ? "-" : classAttr.c_str(),
              visAttr.empty() ? "-" : visAttr.c_str());
+
+    return container;
+}
+
+// <table>, <tr>, <td>: a table is a column of rows, a row is a row of cells
+void build_table_part(const UI::StartTag& tag, const P::String& content, lv_obj_t* host, lv_obj_t* parent) {
+    using UI::TagId;
+    const UI::Attrs& a = tag.attrs;
+    lv_obj_t* const container = make_table_part(tag, host, parent);
 
     // Recursive parse children; direct cell text (<td>Moscow</td>) renders as HTML flow
     if (!content.empty()) {
