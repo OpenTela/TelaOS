@@ -425,7 +425,7 @@ static void parse_system(const UI::ParsedElement& root) {
     
     // Check for <display buffer="..."/>
     auto display = system->find("display");
-    DisplayBuffer targetBuffer = BufferOptimal;  // default: 1/8 screen, above LVGL recommendation
+    DisplayBuffer targetBuffer = BufferOptimal;  // default of <display buffer="auto">
     bool hasDisplayTag = false;
     
     if (display) {
