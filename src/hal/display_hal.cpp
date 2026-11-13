@@ -75,6 +75,8 @@ bool display_init() {
 
     for (int i = 0; i < 4 && !s_buf; i++) {
         s_bufLines = static_cast<int>(fallback[i]);
+        // sizeof(lv_color_t) is 3 bytes in LVGL 9 and the display's pixel 2: the buffer holds 1.5x the
+        // lines it is named for, and LVGL draws that many (BufferMax: 180). On purpose: decision 24
         s_bufSize  = SCREEN_WIDTH * s_bufLines * sizeof(lv_color_t);
         s_buf = (lv_color_t*)heap_caps_malloc(s_bufSize, MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT);
         if (!s_buf) {
@@ -172,7 +174,7 @@ bool display_set_buffer(DisplayBuffer size) {
         return true;
     }
 
-    size_t newSize = SCREEN_WIDTH * targetLines * sizeof(lv_color_t);
+    size_t newSize = SCREEN_WIDTH * targetLines * sizeof(lv_color_t);  // 1.5x the lines: decision 24
     size_t oldSize = s_bufSize;
 
     Serial.printf("[Display] Resize: %d -> %d lines (need %u bytes)\n",
