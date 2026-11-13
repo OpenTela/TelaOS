@@ -1973,7 +1973,7 @@ __attribute__((noinline)) lv_obj_t* make_table_part(const UI::StartTag& tag, lv_
         g_core.app().addElement(ed);
     }
 
-    LOG_I(Log::UI, "<%s> id=%s class=%s vis=%s", tag.name.c_str(),
+    LOG_D(Log::UI, "<%s> id=%s class=%s vis=%s", tag.name.c_str(),  // a line a tag: parse_children
              idAttr.empty() ? "-" : idAttr.c_str(),
              classAttr.empty() ? "-" : classAttr.c_str(),
              visAttr.empty() ? "-" : visAttr.c_str());
@@ -2075,7 +2075,9 @@ void parse_children(const char *html, int len, lv_obj_t *parent) {
         if (step == TagReader::Step::End) break;
         if (step == TagReader::Step::Skip) continue;
 
-        LOG_I(Log::UI, "parse_tag: [%s]", tag.name.c_str());
+        // A line a tag: Debug ("log ui debug"). On the watch log_printf waits until the UART has sent
+        // the line, about 4 ms at 115 200 baud, and excel's page writes 419 such lines: 1.6 s
+        LOG_D(Log::UI, "parse_tag: [%s]", tag.name.c_str());
 
         // Nested pages and tabs: the engine builds pages, <tabs> builds its tabs
         if (tag.id == TagId::Page || tag.id == TagId::Tab) continue;
