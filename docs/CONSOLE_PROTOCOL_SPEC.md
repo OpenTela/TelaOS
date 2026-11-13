@@ -1,4 +1,4 @@
-# Console Protocol v2.7 — Справка для эмулятора
+# Console Protocol v2.8 — Справка для эмулятора
 
 Единый набор команд, два транспорта. Эмулятор должен реализовать оба.
 
@@ -8,6 +8,8 @@
 
 ## Changelog
 
+- **v2.8**: `sys info` отдаёт `stack_free` — сколько стека главного цикла оставалось свободным в
+  самой глубокой точке с загрузки, в байтах: столько из 16 КБ оставила самая глубокая страница.
 - **v2.7**: С этой версией протокол пришёл в репозиторий (2026-02-19); история до неё — вне
   репозитория. Правки текста при v2.7: категорий логов семь, как в `src/utils/log_config.h`, —
   `crypto` и `sd` консоль понимала и раньше, а в списке их не было.
@@ -164,7 +166,7 @@ clicker
 | Команда | Аргументы | Ответ data | Описание |
 |---|---|---|---|
 | `ping` | — | `{}` | Проверка связи |
-| `info` | — | heap, psram, chip, freq, buf_lines, ble, app | Системная информация |
+| `info` | — | heap, psram, chip, freq, buf_lines, stack_free, ble, app | Системная информация |
 | `reboot` | — | — | Перезагрузка |
 | `screen` | [color], [scale], [mode] | `{w, h, color, format, raw_size}` + BIN | Скриншот |
 | `time` | [epoch_seconds] | `{time}` | Получить/установить время |
@@ -277,7 +279,7 @@ app pull weather *
 ← BIN: [0x00,0x00, "anki\0calculator\0clicker\0..."]
 
 → [3, "sys", "info", []]
-← [3, "ok", {"heap_free":207904, "heap_min":70232, "psram_free":7845855, "psram_total":8375831, "chip":"ESP32-S3", "freq":240, "buf_lines":120, "ble":"on", "app":"pomodoro"}]
+← [3, "ok", {"heap_free":207904, "heap_min":70232, "psram_free":7845855, "psram_total":8375831, "chip":"ESP32-S3", "freq":240, "buf_lines":120, "stack_free":7208, "ble":"on", "app":"pomodoro"}]
 
 → [4, "app", "run", ["pomodoro"]]
 ← [4, "ok", {}]

@@ -6,6 +6,8 @@
 // and the handler, on a stack of its own, prints the frames that went so deep and stops.
 #include "sim_stack.h"
 
+#include "freertos/task.h"
+
 #include <alloca.h>
 #include <dlfcn.h>
 #include <signal.h>
@@ -309,3 +311,8 @@ std::string json() {
 }
 
 }  // namespace SimStack
+
+// `sys info` on the watch: the loop task's least free stack since boot (freertos/task.h)
+UBaseType_t uxTaskGetStackHighWaterMark(TaskHandle_t) {
+    return static_cast<UBaseType_t>(SimStack::size() - SimStack::used());
+}
