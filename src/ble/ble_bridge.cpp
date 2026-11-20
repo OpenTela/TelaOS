@@ -226,6 +226,13 @@ int sendFetchRequest(const char* method, const char* url, const char* body,
     return id;
 }
 
+void dropFetchCallbacks() {
+    if (!g_pendingRequests.empty()) {
+        LOG_I(Log::BLE, "fetch: %d replies on their way will find no callback", (int)g_pendingRequests.size());
+    }
+    g_pendingRequests.clear();
+}
+
 void init(const char* deviceName) {
     LOG_I(Log::BLE, "Initializing NimBLE...");
     

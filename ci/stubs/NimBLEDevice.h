@@ -57,8 +57,9 @@ public:
         static NimBLEService s;
         return &s;
     }
-    void setCallbacks(NimBLEServerCallbacks*) {}
+    void setCallbacks(NimBLEServerCallbacks* c) { callbacks = c; }
     NimBLEAdvertising* getAdvertising();
+    NimBLEServerCallbacks* callbacks = nullptr;  // tests connect a client: callbacks->onConnect()
 };
 
 class NimBLEDevice {
