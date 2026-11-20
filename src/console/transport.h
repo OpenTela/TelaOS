@@ -19,7 +19,8 @@ public:
     /**
      * Send command result
      * @param requestId  request ID for response correlation
-     * @param result     execution result (may contain binary)
+     * @param result     execution result (may contain binary). The transport takes its payload
+     *                   and frees it once sent: the caller does not touch it after
      */
     virtual void sendResult(int requestId, const Result& result) = 0;
     

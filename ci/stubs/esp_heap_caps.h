@@ -8,5 +8,10 @@ inline void* heap_caps_realloc(void* p, size_t sz, int) { return realloc(p, sz);
 inline size_t heap_caps_get_free_size(int) { return 1000000; }
 inline size_t heap_caps_get_total_size(int) { return 8000000; }
 inline void* ps_malloc(size_t sz) { return malloc(sz); }
-inline void heap_caps_free(void* p) { free(p); }
+inline int g_heap_caps_freed = 0;  // tests: how many blocks were freed
+inline void heap_caps_free(void* p) {
+    if (p)
+        g_heap_caps_freed++;
+    free(p);
+}
 #define MALLOC_CAP_8BIT 4
