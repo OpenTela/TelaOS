@@ -1,0 +1,46 @@
+# tela_weather.sim — data/apps/weather: a real app on HTML, CSS and the DOM.
+# Fixture: sim/tests/fixtures/apps/weather/last.yml, the weather last received. The simulator
+# has no phone (net.connected() is false), so the app shows that and says why.
+
+wait 300
+> app launch weather
+wait 800
+
+# What last.yml holds, on the page: the script wrote it with textContent, state bindings
+# and setAttribute (hidden, data-tone)
+expect @city "Moscow"
+expect @now contains "4°"
+expect @what "Overcast"
+expect @feels "Feels like 1°"
+expect @details contains "81%"
+expect @details contains "4 m/s"
+expect @updated "13:00"
+expect @day1 contains "Fri"
+expect @day3 contains "Sun"
+expect @day3 contains "6° / 1°"
+expect @status contains "No phone"
+shot weather_01_saved
+tree weather_01_tree
+
+# Refresh without the phone: the weather stays, the line says why
+scroll @refresh
+tap @refresh
+wait 200
+expect @now contains "4°"
+expect @status contains "No phone"
+
+# Another city: the page of cities, then back, nothing to show for it yet
+scroll @toCities
+tap @toCities
+wait 300
+expect "Saint Petersburg" :visible
+shot weather_02_cities
+tap "Tokyo"
+wait 300
+expect @city "Tokyo"
+expect @status contains "connect it"
+expect @day1 :hidden
+shot weather_03_tokyo
+
+expect mem.dram_failed 0
+expect mem.psram_failed 0

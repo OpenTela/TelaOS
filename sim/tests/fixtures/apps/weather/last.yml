@@ -1,0 +1,23 @@
+city: Moscow
+lat: 55.7558
+lon: 37.6173
+time: 2026-10-30T13:00
+temp: 4.2
+feels: 0.6
+humidity: 81
+wind: 4.3
+code: 3
+day: 1
+days:
+  - date: 2026-10-30
+    code: 3
+    max: 5.1
+    min: -0.4
+  - date: 2026-10-31
+    code: 61
+    max: 4
+    min: 1.2
+  - date: 2026-11-01
+    code: 2
+    max: 6.3
+    min: 0.8
